@@ -1,0 +1,23 @@
+# Runtime state: the live process table and control queue (see kernel/store.py)
+.agentos/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Generated knowledge graph (rebuild with /graphify)
+graphify-out/
+
+# Machine-local tooling config
+.claude/settings.local.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
