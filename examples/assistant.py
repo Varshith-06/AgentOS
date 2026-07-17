@@ -23,41 +23,9 @@ import json
 from pathlib import Path
 
 from agentos import Agent, Kernel
+from agentos.kernel.models import DEFAULT_MODELS_CONFIG as DEFAULT_CONFIG
 
 MODELS = Path(".agentos/models.json")
-
-#: Candidates in preference order; unavailable ones are skipped, failing ones
-#: fall through. Prices are USD per million tokens (input, output).
-DEFAULT_CONFIG = {
-    "classes": {
-        "fast": [
-            {
-                "provider": "anthropic",
-                "model": "claude-haiku-4-5",
-                "cost_per_mtok": [1.00, 5.00],
-                "context_window": 200000,
-            },
-            {
-                "provider": "openai",
-                "base_url": "http://localhost:11434/v1",
-                "model": "llama3.2",
-                "api_key_env": None,
-                "cost_per_mtok": [0, 0],
-            },
-            {"provider": "mock", "model": "mock-fast"},
-        ],
-        "reasoning": [
-            {
-                "provider": "anthropic",
-                "model": "claude-opus-4-8",
-                "cost_per_mtok": [5.00, 25.00],
-                "context_window": 1000000,
-                "params": {"thinking": {"type": "adaptive"}},
-            },
-            {"provider": "mock", "model": "mock-reasoning"},
-        ],
-    }
-}
 
 
 class Assistant(Agent):

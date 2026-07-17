@@ -143,6 +143,29 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
         self.assertEqual(k.table.get(pid).result, "buffered: vectors")
 
+    async def test_each_publish_is_delivered_exactly_once(self):
+        """A subscriber alternating between waiting (dependency path) and
+        busy (buffer path) must see every event exactly once — a publish that
+        resolves a wait must also consume the buffered copy it just made."""
+
+        class Stream(Agent):
+            async def run(self, ctx):
+                await ctx.sleep(0.05)  # the counter is already waiting on #0
+                for n in range(3):
+                    await ctx.publish("Tick", n=n)
+                return "streamed"
+
+        class TickCounter(Agent):
+            async def run(self, ctx):
+                await ctx.subscribe("Tick")
+                return [(await ctx.wait_event("Tick"))["n"] for _ in range(3)]
+
+        k = self.kernel()
+        counter = k.spawn(TickCounter())
+        k.spawn(Stream())
+        await asyncio.wait_for(k.run(), timeout=5)
+        self.assertEqual(k.table.get(counter).result, [0, 1, 2])
+
     async def test_kernel_publishes_agent_lifecycle_events(self):
         k = self.kernel()
         await asyncio.wait_for(k.run_until_done(Publisher()), timeout=5)

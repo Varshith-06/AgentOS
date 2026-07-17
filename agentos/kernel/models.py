@@ -42,6 +42,40 @@ ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_MAX_TOKENS = 1024
 DEFAULT_TIMEOUT = 120.0
 
+#: The seeded routing table (examples, daemon first boot). Candidates in
+#: preference order; unavailable ones are skipped, failing ones fall through.
+#: Prices are USD per million tokens (input, output).
+DEFAULT_MODELS_CONFIG: dict[str, Any] = {
+    "classes": {
+        "fast": [
+            {
+                "provider": "anthropic",
+                "model": "claude-haiku-4-5",
+                "cost_per_mtok": [1.00, 5.00],
+                "context_window": 200000,
+            },
+            {
+                "provider": "openai",
+                "base_url": "http://localhost:11434/v1",
+                "model": "llama3.2",
+                "api_key_env": None,
+                "cost_per_mtok": [0, 0],
+            },
+            {"provider": "mock", "model": "mock-fast"},
+        ],
+        "reasoning": [
+            {
+                "provider": "anthropic",
+                "model": "claude-opus-4-8",
+                "cost_per_mtok": [5.00, 25.00],
+                "context_window": 1000000,
+                "params": {"thinking": {"type": "adaptive"}},
+            },
+            {"provider": "mock", "model": "mock-reasoning"},
+        ],
+    }
+}
+
 
 class ModelError(Exception):
     """No candidate could serve the request. Agents see this message."""

@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import functools
+import hashlib
+import importlib
+import importlib.util
+import sys
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Any
 
 from ..kernel.messages import assert_serializable
@@ -66,12 +71,63 @@ class Agent:
 
 
 def spec_of(agent: Agent) -> dict[str, Any]:
-    """The data needed to re-create this agent from scratch."""
+    """The data needed to re-create this agent from scratch.
+
+    `file` is the recovery fallback: after a crash, `agent recover` runs in a
+    fresh interpreter where the example module may not be importable by name
+    (it may even have been `__main__`), but its source file still is.
+    """
     cls = type(agent)
+    module = sys.modules.get(cls.__module__)
     return {
         "module": cls.__module__,
         "qualname": cls.__qualname__,
+        "file": getattr(module, "__file__", None),
         "name": agent.name,
         "priority": getattr(agent, "priority", "Normal"),
         "params": getattr(agent, "params", {}),
     }
+
+
+_MODULE_CACHE: dict[str, Any] = {}
+
+
+def agent_from_spec(spec: dict[str, Any]) -> Agent:
+    """Re-create an agent from its spec — the Phase 1 discipline paying off.
+
+    Used by the kernel (spawn, crash recovery), by the daemon (thin clients
+    submit specs over HTTP), and by the child process runner (an agent's own
+    subprocess rebuilds it here). Prefers a normal import; falls back to the
+    recorded source file, because the importing interpreter may not have the
+    application's module on its path — it may even have been __main__.
+    """
+    # The cache key includes the file: two different applications are both
+    # "__main__" to themselves, and the daemon must never hand one the other.
+    cache_key = (spec["module"], spec.get("file"))
+    module = _MODULE_CACHE.get(cache_key)
+    if module is None:
+        try:
+            module = importlib.import_module(spec["module"])
+            if not hasattr(module, spec["qualname"].split(".")[0]):
+                raise ImportError(spec["qualname"])  # wrong module (e.g. __main__)
+        except ImportError:
+            file = spec.get("file")
+            if not file or not Path(file).exists():
+                raise
+            digest = hashlib.md5(str(Path(file).resolve()).encode()).hexdigest()[:8]
+            loader = importlib.util.spec_from_file_location(
+                f"agentos_loaded_{Path(file).stem}_{digest}", file
+            )
+            module = importlib.util.module_from_spec(loader)
+            # Register before exec so classes defined inside get a __module__
+            # that resolves — an agent loaded this way must itself be able to
+            # spawn siblings, which means spec_of() must find its module.
+            sys.modules[module.__name__] = module
+            loader.loader.exec_module(module)
+            _MODULE_CACHE[(module.__name__, file)] = module
+        _MODULE_CACHE[cache_key] = module
+    cls = getattr(module, spec["qualname"])
+    agent = cls(**spec.get("params", {}))
+    if "priority" in spec:
+        agent.priority = spec["priority"]
+    return agent

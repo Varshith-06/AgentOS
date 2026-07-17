@@ -50,7 +50,7 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
     costs = store.model_costs() if store else {}
     cols = [
         "PID", "NAME", "PARENT", "CHILDREN", "STATUS", "PRIORITY",
-        "WAITING ON", "MEM", "COST", "TIME",
+        "WAITING ON", "MEM", "COST", "CKPT", "TIME",
     ]
     data = [
         [
@@ -64,6 +64,7 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
             # private memory follows the pid; longterm/semantic follow the name
             _bytes_str(mem.get(str(r["pid"]), 0) + mem.get(r["name"], 0)),
             f"${costs[r['pid']]['cost']:.4f}" if r["pid"] in costs else "-",
+            f"#{r['checkpoint']}" if r.get("checkpoint") else "-",
             _elapsed(r),
         ]
         for r in rows
@@ -219,6 +220,69 @@ def cmd_tools(args, store: Store) -> int:
     return 0
 
 
+def cmd_daemon(args, store: Store) -> int:
+    """Run the shared runtime that outlives any application (Phase 7, p.8)."""
+    info = store.runtime_info()
+    if info and time.time() - info["heartbeat"] < STALE_AFTER:
+        print("a runtime is already running here", file=sys.stderr)
+        return 1
+
+    from .runtime.daemon import Daemon
+
+    rows = store.processes()
+    recover = args.recover and any(
+        r["status"] not in ("Finished", "Failed") for r in rows
+    )
+    daemon = Daemon(
+        store=store,
+        host=args.host,
+        port=args.port,
+        policy=args.policy,
+        slots=args.slots,
+        isolation=args.isolation,
+        recover=recover,
+    )
+    print(f"agentos daemon at {daemon.url}  "
+          f"(policy={args.policy}, slots={args.slots}, isolation={args.isolation})")
+    print(f"dashboard: {daemon.url}/")
+    if recover:
+        print("recovering the previous run's agents from their journals")
+    print("applications connect with agentos.client.RuntimeClient; Ctrl-C stops it")
+    try:
+        asyncio.run(daemon.start())
+    except KeyboardInterrupt:
+        print("\ndaemon stopped")
+    return 0
+
+
+def cmd_recover(args, store: Store) -> int:
+    """Resume agents from their journals after a crash (Phase 6, p.7-8)."""
+    info = store.runtime_info()
+    if info and time.time() - info["heartbeat"] < STALE_AFTER:
+        print("a runtime is still running; refusing to recover over it", file=sys.stderr)
+        return 1
+    rows = store.processes()
+    alive = [r for r in rows if r["status"] not in ("Finished", "Failed")]
+    if not alive:
+        print("nothing to recover" + (" - every agent already terminal" if rows else ""))
+        return 0
+
+    policy = args.policy or (info["policy"] if info else "fifo")
+    slots = args.slots or (info["slots"] if info else 4)
+    names = ", ".join(f"pid {r['pid']} ({r['name']})" for r in alive)
+    print(f"recovering {len(alive)} agent(s): {names}")
+
+    from .kernel.kernel import Kernel
+
+    kernel = Kernel(policy=policy, slots=slots, store=store, recover=True)
+    asyncio.run(kernel.run())
+
+    print()
+    for row in store.processes():
+        print(f"  pid {row['pid']:>2}  {row['name']:<16} {row['status']:<9} {row['exit_reason'] or ''}")
+    return 0
+
+
 def cmd_run(args, store: Store) -> int:
     """Run a module that exposes `main(kernel)` or an `App` agent."""
     path = Path(args.target)
@@ -288,6 +352,28 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--slots", type=int, default=4)
     run.add_argument("--policy", default="fifo")
 
+    recover = sub.add_parser(
+        "recover", help="resume agents from their journals after a crash (p.7-8)"
+    )
+    recover.add_argument("--slots", type=int, default=None)
+    recover.add_argument("--policy", default=None)
+
+    daemon = sub.add_parser(
+        "daemon", help="run the shared runtime that outlives applications (p.8)"
+    )
+    daemon.add_argument("--host", default="127.0.0.1")
+    daemon.add_argument("--port", type=int, default=7070)
+    daemon.add_argument("--slots", type=int, default=4)
+    daemon.add_argument("--policy", default="fifo")
+    daemon.add_argument(
+        "--isolation", choices=["process", "task"], default="process",
+        help="agents as real OS subprocesses (default) or asyncio tasks",
+    )
+    daemon.add_argument(
+        "--recover", action="store_true",
+        help="resume the previous run's agents from their journals first",
+    )
+
     return p
 
 
@@ -308,6 +394,8 @@ def main(argv: list[str] | None = None) -> int:
         "grant": cmd_grant,
         "revoke": cmd_revoke,
         "tools": cmd_tools,
+        "recover": cmd_recover,
+        "daemon": cmd_daemon,
     }
     try:
         return handlers[args.command](args, store)

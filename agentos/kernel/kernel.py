@@ -25,21 +25,36 @@ service (six kinds behind store/retrieve/share/delete, backend invisible), and
 models are routed: an agent asks for a capability class ("Need: fast"), never
 a model name, and the kernel picks by availability, records tokens and cost
 per agent, and publishes ModelFinished.
+
+Phase 6 makes a hard kill survivable. Every syscall reply is journaled — the
+Phase 1 rule that everything crossing the boundary must survive json.dumps is
+exactly what makes the journal possible. On recovery the kernel re-creates
+each agent from its spec and re-runs it; journaled syscalls return their
+recorded replies instantly instead of re-executing (a tool does not run
+twice, a model is not billed twice, a child is not spawned twice), so the
+agent fast-forwards to where it died and goes live from there. A crash costs
+the work since the last completed syscall and nothing more.
+
+Phase 7 cashes in the boundary: agents can run as real OS subprocesses
+(isolation="process"), with Syscall and Reply crossing an actual pipe instead
+of an asyncio queue — the kernel cannot tell the difference. In daemon mode
+the runtime outlives any application; thin clients submit agents as specs
+over HTTP and one process table shows everyone's work.
 """
 
 from __future__ import annotations
 
 import asyncio
-import importlib
 from collections import deque
 from typing import Any
 
-from ..agents.base import Agent, spec_of
+from ..agents.base import Agent, agent_from_spec, spec_of
 from ..drivers import REGISTRY, ToolError
 from ..runtime.executor import Executor
+from ..runtime.subproc import ProcessExecutor
 from . import depgraph as dg
 from .depgraph import DependencyGraph
-from .events import EventBus
+from .events import Event, EventBus
 from .memory import MemoryManager
 from .messages import NotSerializable, Reply, Syscall, assert_serializable
 from .models import ModelError, ModelManager
@@ -75,6 +90,9 @@ class Kernel:
         permissions: Any = None,
         tools: dict[str, dict[str, Any]] | None = None,
         models: Any = None,
+        recover: bool = False,
+        isolation: str = "task",
+        daemon: bool = False,
     ) -> None:
         self.table = ProcessTable()
         self.policy = get_policy(policy)
@@ -106,12 +124,107 @@ class Kernel:
         self.bus = EventBus()
         self.deps = DependencyGraph()
 
-        self.executor = Executor(self.mailbox, self._on_finish, self._on_fail)
+        # Phase 7: agents as asyncio tasks or as real OS subprocesses. The
+        # kernel cannot tell the difference — that is the message boundary.
+        if isolation not in ("task", "process"):
+            raise ValueError(f"isolation must be 'task' or 'process', not {isolation!r}")
+        self.isolation = isolation
+        executor_cls = ProcessExecutor if isolation == "process" else Executor
+        self.executor = executor_cls(self.mailbox, self._on_finish, self._on_fail)
+        #: Daemon mode: the runtime outlives its work. Never exit on quiescence,
+        #: and never declare a stall a deadlock — new work can always arrive.
+        self.daemon_mode = daemon
         self.table.on_transition = self._publish_row
         self._shutdown = False
         self._timers = 0  # outstanding timer dependencies
 
-        self.store.register_runtime(self.policy.name, slots)
+        # Phase 6: the journal is the checkpoint. On a fresh boot it is
+        # cleared; on recovery it is the script the agents replay from.
+        self._recovered = recover
+        if recover:
+            self.store.resume_runtime(self.policy.name, slots)
+            self._journals = self.store.load_journals()
+            self._restore()
+        else:
+            self.store.register_runtime(self.policy.name, slots)
+            self._journals = {}
+
+    # -- crash recovery (Phase 6, p.7-8) -----------------------------------
+    def _restore(self) -> None:
+        """Rebuild the world from the store after a hard kill.
+
+        Terminal processes come back with their results, so anything that was
+        waiting on them still resolves. Live processes come back READY with a
+        fresh task; their journal replays them forward to where they died.
+        """
+        for row in sorted(self.store.processes(), key=lambda r: r["pid"]):
+            proc = self.table.restore(
+                pid=row["pid"],
+                name=row["name"],
+                parent=row["parent"],
+                spec=row.get("spec") or {},
+                priority=row.get("priority", "Normal"),
+                state=AgentState(row["status"]),
+                started_at=row["started_at"],
+            )
+            proc.result = row.get("result")
+            proc.exit_reason = row.get("exit_reason")
+            proc.ended_at = row.get("ended_at")
+            proc.checkpoint = len(self._journals.get(proc.pid, []))
+            if not proc.alive:
+                continue
+            # Alive at the crash: re-create from spec, replay from journal.
+            proc.state = AgentState.READY
+            proc.waiting_on = None
+            self.agents[proc.pid] = self._create_agent(proc.spec)
+            self.ready.append(proc)
+            self._publish_row(proc)
+            self._log(
+                proc.pid,
+                "recover",
+                f"{proc.name} restored; replaying {proc.checkpoint} journaled syscall(s)",
+            )
+
+        # The event bus continues, it does not start over: history and the
+        # sequence counter pick up where the dead runtime left them.
+        for row in self.store.events():
+            self.bus.history.append(
+                Event(row["type"], row["payload"], row["source_pid"], row["seq"])
+            )
+            self.bus._seq = max(self.bus._seq, row["seq"])
+
+    def _create_agent(self, spec: dict[str, Any]) -> Agent:
+        return agent_from_spec(spec)
+
+    def _journal(self, proc: AgentProcess, req_id: int, op: str, value: Any,
+                 error: str | None) -> None:
+        """A delivered reply is a checkpoint: everything up to here is safe."""
+        self.store.append_journal(proc.pid, req_id, op, value, error)
+        proc.checkpoint += 1
+        self.store.publish(proc.row())
+
+    def _replay_entry(self, proc: AgentProcess, call: Syscall) -> dict[str, Any] | None:
+        """The journaled reply for this syscall, if we are replaying one."""
+        entries = self._journals.get(proc.pid)
+        if not entries:
+            return None
+        entry = entries[0]
+        if entry["req_id"] != call.req_id or entry["op"] != call.op:
+            # The agent did not make the same syscalls it made last time —
+            # nondeterminism outside the boundary. Stop replaying, go live.
+            self._log(
+                proc.pid,
+                "recover",
+                f"replay diverged at #{call.req_id}: journal has "
+                f"{entry['op']!r}#{entry['req_id']}, agent asked {call.op!r}; going live",
+            )
+            del self._journals[proc.pid]
+            return None
+        entries.pop(0)
+        if not entries:
+            del self._journals[proc.pid]
+            self._log(proc.pid, "recover", f"{proc.name} caught up; live from here")
+        return entry
 
     # -- public API (AgentOS.pdf p.9) ------------------------------------
     def spawn(self, agent: Agent, parent: int | None = None) -> int:
@@ -201,6 +314,11 @@ class Kernel:
 
     def publish(self, event_type: str, source_pid: int | None = None, **payload: Any):
         """Announce an event. The bus decides who hears it (p.5)."""
+        # Who is mid-wait on this event type? They receive THIS publish through
+        # dependency resolution, so the copy the bus is about to buffer for
+        # them must be consumed too — one publish, one delivery, never two.
+        waiting_pids = set(self.deps.dependents(dg.key(dg.EVENT, event_type)))
+
         event = self.bus.publish(event_type, payload, source_pid)
         subscribers = self.bus.subscribers(event_type)
         self.store.append_event(
@@ -212,6 +330,10 @@ class Kernel:
             f"{event_type} published"
             + (f" -> woke {len(subscribers)} subscriber(s)" if subscribers else " (no subscribers)"),
         )
+        for pid in waiting_pids:
+            consumed = self.bus.consume(pid, event_type)
+            if consumed is not None:
+                self.store.record_consumption(pid, consumed.seq)
         # Anyone whose dependency this satisfies becomes runnable.
         for w in self.deps.resolve(dg.key(dg.EVENT, event_type), payload):
             self._wake_waiter(w)
@@ -226,7 +348,7 @@ class Kernel:
             await self._drain_mailbox()
             self._admit()
             self.store.heartbeat()
-            if self._quiescent():
+            if self._quiescent() and not self.daemon_mode:
                 break
             self._detect_deadlock()
             await asyncio.sleep(self.tick)
@@ -239,6 +361,27 @@ class Kernel:
         pid = self.spawn(agent)
         await self.run()
         return self.table.get(pid).result
+
+    def submit_spec(self, spec: dict[str, Any]) -> int:
+        """Spawn from a serialized spec — how a thin client hands the daemon
+        an agent it has never imported (p.8)."""
+        return self.spawn(self._create_agent(spec))
+
+    def snapshot(self) -> dict[str, Any]:
+        """One consistent view of the scheduler for the dashboard (p.8):
+        who is running, who waits on whom, and what the policy is doing."""
+        return {
+            "policy": self.policy.name,
+            "slots": self.slots,
+            "isolation": self.isolation,
+            "running": sorted(self.running),
+            "ready": [p.pid for p in self.ready],
+            "processes": [p.row() for p in self.table.all()],
+            "deps": [
+                {"pid": pid, "waits_on": sorted(w.remaining)}
+                for pid, w in self.deps.waiting.items()
+            ],
+        }
 
     # -- scheduling ------------------------------------------------------
     def _view(self) -> SchedulerView:
@@ -273,9 +416,15 @@ class Kernel:
         self.table.transition(proc, state, waiting_on=waiting_on)
 
     def _requeue(self, proc: AgentProcess, reply: Reply) -> None:
-        """Owe `proc` a reply and put it back in line for a slot."""
+        """Owe `proc` a reply and put it back in line for a slot.
+
+        The reply is journaled here — the moment it is committed to the
+        process — not at delivery. If we die between the two, recovery replays
+        it, which is exactly what "owed" means.
+        """
         if not proc.alive:
             return
+        self._journal(proc, reply.req_id, proc.current_op or "?", reply.value, reply.error)
         proc.pending = reply
         if proc.state is AgentState.SUSPENDED:
             return  # stashed; delivered when a human resumes it
@@ -298,19 +447,31 @@ class Kernel:
                 if proc.state is AgentState.WAITING:  # it already gave up its slot
                     self._requeue(proc, Reply(req_id=call.req_id, error=str(exc)))
                 else:
+                    self._journal(proc, call.req_id, call.op, None, str(exc))
                     proc.inbox.put_nowait(Reply(req_id=call.req_id, error=str(exc)))
 
     def _handle(self, proc: AgentProcess, call: Syscall) -> None:
+        entry = self._replay_entry(proc, call)
+        if entry is not None:
+            # Replaying: the world already changed once; do not change it
+            # again. Subscribe is the exception — it rebuilds kernel state
+            # that died with the old runtime, so it re-executes.
+            if call.op == "subscribe":
+                self._sys_subscribe(proc, **call.args)
+            proc.inbox.put_nowait(
+                Reply(req_id=call.req_id, value=entry["value"], error=entry["error"])
+            )
+            return
         if call.op in NONBLOCKING:
             value = getattr(self, f"_sys_{call.op}")(proc, **call.args)
+            self._journal(proc, call.req_id, call.op, value, None)
             proc.inbox.put_nowait(Reply(req_id=call.req_id, value=value))
             return
+        proc.current_op = call.op
         getattr(self, f"_sys_{call.op}")(proc, call, **call.args)
 
     def _sys_spawn(self, proc: AgentProcess, spec: dict[str, Any]) -> int:
-        module = importlib.import_module(spec["module"])
-        cls = getattr(module, spec["qualname"])
-        child = cls(**spec.get("params", {}))
+        child = self._create_agent(spec)
         return self.spawn(child, parent=proc.pid)
 
     def _sys_log(self, proc: AgentProcess, message: str) -> None:
@@ -327,7 +488,27 @@ class Kernel:
         for event_type in event_types:
             self.bus.subscribe(proc.pid, event_type)
             self._log(proc.pid, "sub", f"{proc.name} subscribed to {event_type}")
+            if self._recovered:
+                self._backfill(proc.pid, event_type)
         return None
+
+    def _backfill(self, pid: int, event_type: str) -> None:
+        """Redeliver pre-crash events this subscriber was owed but never took.
+
+        An event's subscriber list was recorded when it was published, so only
+        agents that were genuinely subscribed back then qualify — and anything
+        already consumed (per the consumptions table) stays consumed.
+        """
+        consumed = self.store.consumptions()
+        queue = self.bus.inboxes[pid][event_type]
+        buffered = {e.seq for e in queue}
+        for row in self.store.events():
+            if row["type"] != event_type or pid not in row["subscribers"]:
+                continue
+            if (pid, row["seq"]) in consumed or row["seq"] in buffered:
+                continue
+            queue.append(Event(row["type"], row["payload"], row["source_pid"], row["seq"]))
+            self._log(pid, "recover", f"re-buffered pre-crash event {row['type']}")
 
     def _sys_sleep(self, proc: AgentProcess, call: Syscall, seconds: float) -> None:
         self._yield_slot(proc, AgentState.SLEEPING, f"timer {seconds}s")
@@ -381,6 +562,7 @@ class Kernel:
             self.bus.subscribe(proc.pid, event_type)  # idempotent
             buffered = self.bus.consume(proc.pid, event_type)
             if buffered is not None:  # it already fired while we were busy
+                self.store.record_consumption(proc.pid, buffered.seq)
                 resolved[dg.key(dg.EVENT, event_type)] = buffered.payload
             else:
                 deps.add(dg.key(dg.EVENT, event_type))
@@ -699,6 +881,13 @@ class Kernel:
 
     # -- process exit ----------------------------------------------------
     def _on_finish(self, proc: AgentProcess, result: Any) -> None:
+        try:
+            # A result crosses the boundary too: parents receive it via
+            # wait(), and recovery re-serves it after a crash.
+            assert_serializable(f"{proc.name} result", result)
+        except NotSerializable as exc:
+            self._on_fail(proc, exc)
+            return
         proc.result = result
         proc.exit_reason = "completed"
         self.running.discard(proc.pid)
@@ -743,6 +932,8 @@ class Kernel:
     def _detect_deadlock(self) -> None:
         """Nobody can run, nobody is asleep, no timer is pending: nothing will
         ever happen again. Say so, instead of hanging forever."""
+        if self.daemon_mode:
+            return  # a daemon can always receive new work that publishes the event
         alive = [p for p in self.table.all() if p.alive]
         if not alive or self._timers > 0 or self._io_calls > 0:
             return  # a pending timer, tool, or model call can still wake someone

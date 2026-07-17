@@ -80,6 +80,20 @@ CREATE TABLE IF NOT EXISTS memory (
     updated_at  REAL    NOT NULL,
     PRIMARY KEY (mtype, owner, key)
 );
+CREATE TABLE IF NOT EXISTS journal (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts     REAL    NOT NULL,
+    pid    INTEGER NOT NULL,
+    req_id INTEGER NOT NULL,
+    op     TEXT    NOT NULL,
+    value  TEXT    NOT NULL,
+    error  TEXT
+);
+CREATE TABLE IF NOT EXISTS consumptions (
+    pid    INTEGER NOT NULL,
+    seq    INTEGER NOT NULL,
+    PRIMARY KEY (pid, seq)
+);
 CREATE TABLE IF NOT EXISTS model_calls (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     ts            REAL    NOT NULL,
@@ -114,6 +128,8 @@ class Store:
         self.db.execute("DELETE FROM commands")
         self.db.execute("DELETE FROM events")
         self.db.execute("DELETE FROM log")
+        self.db.execute("DELETE FROM journal")
+        self.db.execute("DELETE FROM consumptions")
         # Approvals deliberately survive a restart — a human dependency that
         # evaporates on restart is not a kernel object. Only the pid is
         # meaningless in the new runtime; a re-run agent re-attaches by identity.
@@ -124,6 +140,16 @@ class Store:
             "DELETE FROM memory WHERE mtype IN ('working', 'scratchpad', 'shared')"
         )
         self.db.execute("DELETE FROM model_calls")
+        self.db.execute(
+            "INSERT OR REPLACE INTO runtime VALUES (1, ?, ?, ?, ?, ?)",
+            (os.getpid(), policy, slots, now, now),
+        )
+
+    def resume_runtime(self, policy: str, slots: int) -> None:
+        """Take over after a crash. Nothing is wiped: the process table, the
+        journals, the events, and the memory are exactly what recovery needs."""
+        now = time.time()
+        self.db.execute("DELETE FROM commands")  # stale control commands only
         self.db.execute(
             "INSERT OR REPLACE INTO runtime VALUES (1, ?, ?, ?, ?, ?)",
             (os.getpid(), policy, slots, now, now),
@@ -192,14 +218,16 @@ class Store:
         """Find or create the approval object this request refers to.
 
         Identity is (agent, role, reason). A grant issued while the runtime was
-        down is honored here, and a pending request orphaned by a restart is
-        adopted by the re-run agent instead of asking the human twice.
+        down is honored here, and a pending request orphaned by a restart —
+        pid nulled by a fresh boot, or still carrying this same pid after a
+        crash recovery — is adopted instead of asking the human twice.
         """
         row = self.db.execute(
             "SELECT * FROM approvals WHERE agent = ? AND role = ? AND reason = ?"
-            " AND (status = 'granted' OR (status = 'pending' AND pid IS NULL))"
+            " AND (status = 'granted'"
+            "      OR (status = 'pending' AND (pid IS NULL OR pid = ?)))"
             " ORDER BY id LIMIT 1",
-            (agent, role, reason),
+            (agent, role, reason, pid),
         ).fetchone()
         if row is not None:
             self.db.execute(
@@ -266,6 +294,42 @@ class Store:
             query += " WHERE status IN ('pending', 'granted')"
         rows = self.db.execute(query + " ORDER BY id").fetchall()
         return [dict(r) for r in rows]
+
+    # -- the journal (Phase 6): every completed syscall is a checkpoint ------
+    def append_journal(
+        self, pid: int, req_id: int, op: str, value: Any, error: str | None
+    ) -> None:
+        self.db.execute(
+            "INSERT INTO journal (ts, pid, req_id, op, value, error)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (time.time(), pid, req_id, op, json.dumps(value), error),
+        )
+
+    def load_journals(self) -> dict[int, list[dict[str, Any]]]:
+        """pid -> its syscall replies, in order. The replay script."""
+        out: dict[int, list[dict[str, Any]]] = {}
+        for r in self.db.execute("SELECT * FROM journal ORDER BY pid, id").fetchall():
+            out.setdefault(r["pid"], []).append(
+                {
+                    "req_id": r["req_id"],
+                    "op": r["op"],
+                    "value": json.loads(r["value"]),
+                    "error": r["error"],
+                }
+            )
+        return out
+
+    def record_consumption(self, pid: int, seq: int) -> None:
+        """This subscriber took this event off its buffer — never redeliver."""
+        self.db.execute(
+            "INSERT OR IGNORE INTO consumptions VALUES (?, ?)", (pid, seq)
+        )
+
+    def consumptions(self) -> set[tuple[int, int]]:
+        return {
+            (r["pid"], r["seq"])
+            for r in self.db.execute("SELECT * FROM consumptions").fetchall()
+        }
 
     # -- memory + model accounting (Phase 5): what the CLI reads -----------
     def memory_usage(self) -> dict[str, int]:

@@ -1,6 +1,7 @@
 """AgentOS - an operating system-inspired runtime for autonomous AI agents."""
 
 from .agents.base import Agent, DirectInvocationError
+from .client import DaemonUnavailable, RemoteAgentFailed, RuntimeClient
 from .drivers import ToolDriver, ToolError, Transient
 from .kernel.depgraph import Deadlock
 from .kernel.events import KERNEL_EVENTS
@@ -14,6 +15,7 @@ __all__ = [
     "Agent",
     "AgentState",
     "Context",
+    "DaemonUnavailable",
     "Deadlock",
     "DirectInvocationError",
     "InvalidTransition",
@@ -25,8 +27,10 @@ __all__ = [
     "ModelManager",
     "PermissionDenied",
     "Permissions",
+    "RemoteAgentFailed",
+    "RuntimeClient",
     "ToolDriver",
     "ToolError",
     "Transient",
 ]
-__version__ = "0.5.0"  # Phase 5: memory manager and model routing
+__version__ = "1.0.0"  # Phase 8: all eight phases of the design doc implemented

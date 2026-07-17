@@ -219,12 +219,17 @@ class Context:
         again. Returns {"agents": {pid: result}, "events": {type: payload},
         "timer": True}.
         """
-        return await self._syscall(
+        result = await self._syscall(
             "wait_all",
             agents=list(agents or []),
             events=list(events or []),
             timer=timer,
         )
+        # JSON object keys are strings, so pids arrive as "2" when the reply
+        # crossed a real pipe (process isolation). Normalize: agents always
+        # see int pids, whichever transport carried the reply.
+        result["agents"] = {int(pid): r for pid, r in result["agents"].items()}
+        return result
 
 
 class Executor:

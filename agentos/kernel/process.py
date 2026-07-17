@@ -26,6 +26,8 @@ class AgentProcess:
     exit_reason: str | None = None
     started_at: float = field(default_factory=time.time)
     ended_at: float | None = None
+    #: Completed (journaled) syscalls — the p.3 card's "Checkpoint: #31".
+    checkpoint: int = 0
 
     # Runtime-only handles. Never cross the message boundary, never persisted.
     task: asyncio.Task | None = field(default=None, repr=False, compare=False)
@@ -36,6 +38,9 @@ class AgentProcess:
     pending: Any = field(default=None, repr=False, compare=False)
     #: A pause lands at the next syscall boundary, like a preemption point.
     pause_requested: bool = field(default=False, repr=False, compare=False)
+    #: The op of the blocking syscall currently holding this agent, so the
+    #: kernel can journal its eventual reply under the right name.
+    current_op: str | None = field(default=None, repr=False, compare=False)
     timer: asyncio.TimerHandle | None = field(
         default=None, repr=False, compare=False
     )
@@ -49,7 +54,10 @@ class AgentProcess:
         return (self.ended_at or time.time()) - self.started_at
 
     def row(self) -> dict[str, Any]:
-        """The serializable view — what `agent ps` reads.
+        """The serializable view — what `agent ps` reads, and since Phase 6
+        also everything recovery needs to resurrect this process: the spec
+        re-creates the agent, the journal replays it forward, and the result
+        satisfies anyone who was waiting on it.
 
         Publishes the raw timestamps, not an elapsed time: a row is a snapshot
         written at the last transition, and a Sleeping agent makes no
@@ -66,6 +74,9 @@ class AgentProcess:
             "started_at": self.started_at,
             "ended_at": self.ended_at,
             "exit_reason": self.exit_reason,
+            "spec": self.spec,
+            "result": self.result,
+            "checkpoint": self.checkpoint,
         }
 
 
@@ -91,6 +102,33 @@ class ProcessTable:
         )
         self._procs[pid] = proc
         if parent is not None:
+            self._procs[parent].children.append(pid)
+        return proc
+
+    def restore(
+        self,
+        pid: int,
+        name: str,
+        parent: int | None,
+        spec: dict[str, Any],
+        priority: str,
+        state: AgentState,
+        started_at: float,
+    ) -> AgentProcess:
+        """Re-insert a process from persisted state (crash recovery).
+
+        This sets the state directly rather than transitioning into it:
+        deserialization is not a lifecycle event, and the legal-transition
+        table has no edge for "came back from the dead".
+        """
+        proc = AgentProcess(
+            pid=pid, name=name, parent=parent, spec=spec, priority=priority
+        )
+        proc.state = state
+        proc.started_at = started_at
+        self._procs[pid] = proc
+        self._next_pid = max(self._next_pid, pid + 1)
+        if parent is not None and parent in self._procs:
             self._procs[parent].children.append(pid)
         return proc
 
