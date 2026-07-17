@@ -214,6 +214,12 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
                 "pid", "name", "spawn", "sleep", "wait", "log",
                 # Phase 2: events and the dependency graph
                 "publish", "subscribe", "wait_event", "wait_all",
+                # Phase 3: a human is a dependency like any other
+                "request_approval",
+                # Phase 4: capabilities, never libraries
+                "request_tool",
+                # Phase 5: memory as a kernel service; models by class, not name
+                "memory", "request_model",
             },
         )
 

@@ -21,6 +21,48 @@ class KernelError(Exception):
     """A syscall was rejected by the kernel."""
 
 
+class Memory:
+    """The p.6 memory API: six kinds behind four verbs, backend invisible.
+
+    Kinds: working (private, dies with the process), scratchpad (same, for
+    throwaway notes), shared (cross-agent, through the kernel only), longterm
+    and semantic (keyed by agent name — they survive restarts), episodic
+    (your own history; read-only).
+    """
+
+    def __init__(self, ctx: "Context") -> None:
+        self._ctx = ctx
+
+    async def store(self, key: str, value: Any, kind: str = "working") -> None:
+        """Store a JSON-serializable value. Storing to `shared` publishes a
+        MemoryUpdated event; `semantic` values must be text."""
+        await self._ctx._syscall("memory", op="store", key=key, value=value, kind=kind)
+
+    async def retrieve(
+        self,
+        key: str | None = None,
+        kind: str = "working",
+        query: str | None = None,
+        top: int = 3,
+        limit: int = 20,
+    ) -> Any:
+        """Fetch a value (None if absent or not yours to read). With no key:
+        every key you can read, as a dict. kind="semantic" with query=... does
+        similarity search; kind="episodic" returns your own recent history."""
+        return await self._ctx._syscall(
+            "memory", op="retrieve", key=key, kind=kind, query=query, top=top, limit=limit
+        )
+
+    async def share(self, key: str, with_agent: Any = "*") -> None:
+        """Promote one of your working keys into shared memory (or widen the
+        access list of a shared key you created). `with_agent` is a pid, an
+        agent name, or "*" for everyone."""
+        await self._ctx._syscall("memory", op="share", key=key, with_agent=with_agent)
+
+    async def delete(self, key: str, kind: str = "working") -> bool:
+        return await self._ctx._syscall("memory", op="delete", key=key, kind=kind)
+
+
 class Context:
     """The only handle an agent has on the world.
 
@@ -33,6 +75,7 @@ class Context:
         self._proc = proc
         self._mailbox = mailbox
         self._req_id = 0
+        self._memory = Memory(self)
 
     @property
     def pid(self) -> int:
@@ -42,7 +85,9 @@ class Context:
     def name(self) -> str:
         return self._proc.name
 
-    async def _syscall(self, op: str, **args: Any) -> Any:
+    async def _syscall(self, op: str, /, **args: Any) -> Any:
+        # `op` is positional-only so syscall payloads may themselves have an
+        # "op" key (request_tool does) without colliding with this parameter.
         self._req_id += 1
         call = Syscall(pid=self._proc.pid, op=op, req_id=self._req_id, args=args)
         await self._mailbox.put(call)
@@ -88,6 +133,75 @@ class Context:
         """Block until an event of this type arrives. Returns its payload."""
         result = await self.wait_all(events=[event_type])
         return result["events"][event_type]
+
+    # -- memory (Phase 5, p.6) ------------------------------------------------
+    @property
+    def memory(self) -> Memory:
+        """memory.store() / retrieve() / share() / delete(). See Memory."""
+        return self._memory
+
+    # -- models (Phase 5, p.7) --------------------------------------------------
+    async def request_model(
+        self,
+        need: str,
+        prompt: str,
+        system: str | None = None,
+        max_tokens: int = 1024,
+    ) -> dict[str, Any]:
+        """Ask for a capability class ('fast', 'reasoning'), never a model name.
+
+            reply = await ctx.request_model("fast", prompt="Summarize: ...")
+            reply["text"], reply["model"], reply["cost"]
+
+        The kernel routes to the first available candidate in the models
+        config, falls to the next on failure, and records tokens and cost
+        against this agent (see `agent ps`). State: Waiting.
+        """
+        result = await self._syscall(
+            "request_model", need=need, prompt=prompt, system=system, max_tokens=max_tokens
+        )
+        model = result["model"]
+        if model["error"] is not None:
+            raise KernelError(model["error"])
+        return model["value"]
+
+    # -- tools (Phase 4, p.6-7) ---------------------------------------------
+    async def request_tool(self, capability: str, op: str, **params: Any) -> Any:
+        """Ask the kernel to run a tool operation. State becomes Waiting.
+
+        Agents never import tool libraries. They request a capability by name
+        ('Need: sql') and the kernel dispatches to the driver that owns the
+        authentication, rate limiting, retries, and error handling:
+
+            rows = await ctx.request_tool("sql", "query", query="SELECT ...")
+
+        The call is refused before dispatch unless this agent's name holds the
+        capability in the permission matrix — and the denial is audit-logged.
+        Tool failures arrive as KernelError, never as a raw stack trace.
+        """
+        result = await self._syscall(
+            "request_tool", capability=capability, op=op, params=params
+        )
+        tool = result["tool"]
+        if tool["error"] is not None:
+            raise KernelError(tool["error"])
+        return tool["value"]
+
+    # -- human approval (Phase 3, p.5-6) -----------------------------------
+    async def request_approval(self, role: str, reason: str) -> dict[str, Any]:
+        """Block until a human with `role` approves. State becomes Blocked.
+
+        The human is a node in the dependency graph — identical in kind to an
+        agent, an event, or a timer. Someone grants it from another terminal:
+
+            agent approve <pid> --as "<role>"
+
+        Returns {"role": ..., "reason": ..., "by": ...}. The approval is a
+        durable kernel object: it survives a runtime restart, and a grant
+        issued while the runtime is down is honored when it comes back.
+        """
+        result = await self._syscall("request_approval", role=role, reason=reason)
+        return result["approval"]
 
     # -- the dependency graph (Phase 2, p.5) ------------------------------
     async def wait_all(

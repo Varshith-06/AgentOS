@@ -9,6 +9,22 @@ Phase 2 adds the two things that make the order emergent rather than written
 down: agents publish events instead of calling each other, and they wait on a
 dependency graph instead of a sequence. Nothing in here knows what a workflow
 is.
+
+Phase 3 makes a human a dependency like any other: request_approval blocks the
+process and registers the named role as a node in the dependency graph. The
+grant lives in the store, not in memory, so a pending approval survives a
+runtime restart — the difference between a kernel object and a callback.
+
+Phase 4 does the same for tools: an agent requests a capability by name, the
+kernel validates it against the permission matrix before dispatch, and the
+running call is a dependency-graph node the scheduler waits on like any other.
+Agents never import a tool library; drivers own that.
+
+Phase 5 adds what agents remember and what they think with. Memory is a kernel
+service (six kinds behind store/retrieve/share/delete, backend invisible), and
+models are routed: an agent asks for a capability class ("Need: fast"), never
+a model name, and the kernel picks by availability, records tokens and cost
+per agent, and publishes ModelFinished.
 """
 
 from __future__ import annotations
@@ -19,18 +35,22 @@ from collections import deque
 from typing import Any
 
 from ..agents.base import Agent, spec_of
+from ..drivers import REGISTRY, ToolError
 from ..runtime.executor import Executor
 from . import depgraph as dg
 from .depgraph import DependencyGraph
 from .events import EventBus
-from .messages import Reply, Syscall
+from .memory import MemoryManager
+from .messages import NotSerializable, Reply, Syscall, assert_serializable
+from .models import ModelError, ModelManager
+from .permissions import PermissionDenied, Permissions
 from .process import AgentProcess, ProcessTable
 from .scheduler import SchedulerView, get_policy
 from .states import TERMINAL, AgentState
 from .store import Store
 
 #: Syscalls that keep the agent's slot (it never stops running).
-NONBLOCKING = {"spawn", "log", "publish", "subscribe"}
+NONBLOCKING = {"spawn", "log", "publish", "subscribe", "memory"}
 
 #: States from which the system can still make progress on its own.
 LIVE = frozenset(
@@ -39,7 +59,7 @@ LIVE = frozenset(
         AgentState.READY,
         AgentState.SLEEPING,
         AgentState.SUSPENDED,  # a human can resume it
-        AgentState.BLOCKED,  # a human can approve it (Phase 3)
+        AgentState.BLOCKED,  # a human can approve it
         AgentState.CHECKPOINTING,
     }
 )
@@ -52,12 +72,31 @@ class Kernel:
         slots: int = 4,
         store: Store | None = None,
         tick: float = 0.05,
+        permissions: Any = None,
+        tools: dict[str, dict[str, Any]] | None = None,
+        models: Any = None,
     ) -> None:
         self.table = ProcessTable()
         self.policy = get_policy(policy)
         self.slots = slots
         self.tick = tick
         self.store = store if store is not None else Store()
+
+        # The p.7 permission matrix. None means: watch the standard file next
+        # to the runtime state, so grants and revocations are config edits.
+        self.perms = Permissions.of(permissions, self.store.dir / "permissions.json")
+        self.tools_config = tools or {}
+        self._drivers: dict[str, Any] = {}
+        self._io_tasks: set[asyncio.Task] = set()
+        self._io_calls = 0  # running tool/model calls: pending I/O is not a deadlock
+
+        # Phase 5: memory as a kernel service, model choice as runtime config.
+        self.memory = MemoryManager(self.store)
+        self.models = ModelManager.of(
+            models,
+            self.store.dir / "models.json",
+            log=lambda message: self._log(None, "model", message),
+        )
 
         self.mailbox: asyncio.Queue[Syscall] = asyncio.Queue()
         self.ready: deque[AgentProcess] = deque()
@@ -122,7 +161,8 @@ class Kernel:
         proc.pause_requested = True
         if proc.state is not AgentState.RUNNING:
             self._discard_ready(proc)
-            self._cancel_timer(proc)
+            # The timer keeps running: if it fires while suspended, the wake is
+            # stashed on the process (see _requeue) and delivered at resume.
             self.table.transition(proc, AgentState.SUSPENDED, waiting_on="resume")
             proc.pause_requested = False
             self._log(pid, "pause", f"{proc.name} suspended")
@@ -132,9 +172,32 @@ class Kernel:
         proc.pause_requested = False
         if proc.state is not AgentState.SUSPENDED:
             return
+        if (
+            proc.task is not None
+            and proc.pending is None
+            and (self.deps.is_waiting(pid) or proc.timer is not None)
+        ):
+            # Suspended mid-wait, and the wait has not resolved yet. Waking it
+            # now would hand it nothing. It stays suspended; the resolution is
+            # stashed when it arrives, and a later resume delivers it.
+            self._log(
+                pid,
+                "resume",
+                f"{proc.name} is still mid-wait; resume again once it resolves",
+            )
+            return
         self.table.transition(proc, AgentState.READY)
         self.ready.append(proc)
         self._log(pid, "resume", f"{proc.name} resumed")
+
+    def approve(self, pid: int, role: str) -> None:
+        """Satisfy a pending approval (p.6). Refused unless `role` matches.
+
+        The CLI writes grants to the store directly (so a human can approve a
+        runtime that is not running); this is the in-process equivalent.
+        """
+        self.store.approve(pid, role)
+        self._drain_approvals()
 
     def publish(self, event_type: str, source_pid: int | None = None, **payload: Any):
         """Announce an event. The bus decides who hears it (p.5)."""
@@ -157,7 +220,9 @@ class Kernel:
     async def run(self) -> None:
         """Run until every process is terminal — or until nothing can progress."""
         while not self._shutdown:
+            self.perms.refresh()  # a revoked capability applies to a running system
             self._drain_commands()
+            self._drain_approvals()
             await self._drain_mailbox()
             self._admit()
             self.store.heartbeat()
@@ -165,6 +230,10 @@ class Kernel:
                 break
             self._detect_deadlock()
             await asyncio.sleep(self.tick)
+        for task in list(self._io_tasks):  # no owners remain for these
+            task.cancel()
+        if self._io_tasks:
+            await asyncio.gather(*self._io_tasks, return_exceptions=True)
 
     async def run_until_done(self, agent: Agent) -> Any:
         pid = self.spawn(agent)
@@ -205,9 +274,11 @@ class Kernel:
 
     def _requeue(self, proc: AgentProcess, reply: Reply) -> None:
         """Owe `proc` a reply and put it back in line for a slot."""
-        if not proc.alive or proc.state is AgentState.SUSPENDED:
+        if not proc.alive:
             return
         proc.pending = reply
+        if proc.state is AgentState.SUSPENDED:
+            return  # stashed; delivered when a human resumes it
         self.table.transition(proc, AgentState.READY, waiting_on=None)
         self.ready.append(proc)
 
@@ -332,6 +403,292 @@ class Kernel:
             self.deps.waiting.pop(proc.pid, None)
             self._wake_waiter(w)
 
+    def _sys_request_tool(
+        self,
+        proc: AgentProcess,
+        call: Syscall,
+        capability: str,
+        op: str,
+        params: dict[str, Any],
+    ) -> None:
+        """Dispatch a tool call through its driver (p.6-7).
+
+        The kernel validates the capability before dispatch — the application
+        does not get a vote — and the running call becomes a dependency-graph
+        node, so the agent waits for it the way it waits for anything else.
+        """
+        if not isinstance(capability, str) or not capability.strip():
+            raise ValueError("request_tool() needs a capability name")
+        if not self.perms.allowed(proc.name, capability):
+            self._log(
+                proc.pid,
+                "denied",
+                f"{proc.name} requested {capability!r}: permission denied",
+            )
+            raise PermissionDenied(
+                f"{proc.name} does not hold capability {capability!r}. "
+                f"Grant it in {self.perms.path or 'the permissions config'} "
+                "(agent grant / agent revoke)."
+            )
+        driver = self._driver(capability)
+
+        self._yield_slot(proc, AgentState.WAITING, waiting_on=f"tool {capability}")
+        key = dg.key(dg.TOOL, f"{proc.pid}.{call.req_id}")
+        self.deps.add(proc.pid, call.req_id, {key})
+        self._io_calls += 1
+        task = asyncio.create_task(
+            self._run_tool(proc, key, driver, capability, op, params)
+        )
+        self._io_tasks.add(task)
+        task.add_done_callback(self._io_tasks.discard)
+
+    async def _run_tool(
+        self,
+        proc: AgentProcess,
+        key: str,
+        driver: Any,
+        capability: str,
+        op: str,
+        params: dict[str, Any],
+    ) -> None:
+        started = asyncio.get_running_loop().time()
+        try:
+            value = await driver.execute(op, params)
+            try:
+                assert_serializable(f"{capability}.{op} result", value)
+                result = {"value": value, "error": None}
+            except NotSerializable as exc:
+                result = {"value": None, "error": str(exc)}
+        except ToolError as exc:
+            result = {"value": None, "error": str(exc)}
+        except Exception as exc:  # a driver bug must not take the kernel down
+            result = {"value": None, "error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            self._io_calls -= 1
+
+        elapsed = asyncio.get_running_loop().time() - started
+        ok = result["error"] is None
+        self._log(
+            proc.pid,
+            "tool",
+            f"{capability}.{op} {'completed' if ok else 'failed'} in {elapsed:.2f}s"
+            + ("" if ok else f": {result['error']}"),
+        )
+        self.publish(
+            "ToolCompleted",
+            source_pid=proc.pid,
+            pid=proc.pid,
+            capability=capability,
+            op=op,
+            ok=ok,
+        )
+        for w in self.deps.resolve(key, result):
+            self._wake_waiter(w)
+
+    def _driver(self, capability: str) -> Any:
+        """One driver instance per capability, created on first use."""
+        if capability not in self._drivers:
+            cls = REGISTRY.get(capability)
+            if cls is None:
+                raise ValueError(
+                    f"no driver for capability {capability!r} "
+                    f"(have: {', '.join(sorted(REGISTRY))})"
+                )
+            self._drivers[capability] = cls(
+                log=lambda message: self._log(None, "driver", message),
+                publish=lambda event_type, **payload: self.publish(
+                    event_type, **payload
+                ),
+                **self.tools_config.get(capability, {}),
+            )
+        return self._drivers[capability]
+
+    def _sys_memory(
+        self,
+        proc: AgentProcess,
+        op: str,
+        kind: str = "working",
+        key: str | None = None,
+        value: Any = None,
+        with_agent: Any = "*",
+        query: str | None = None,
+        top: int = 3,
+        limit: int = 20,
+    ) -> Any:
+        """The p.6 memory API. Fast, local, nonblocking: the agent keeps its
+        slot. Shared-memory changes are announced as MemoryUpdated events."""
+        if op == "store":
+            self.memory.store_value(proc, key, value, kind)
+            if kind == "shared":
+                self.publish(
+                    "MemoryUpdated", source_pid=proc.pid,
+                    key=key, kind=kind, by=proc.name,
+                )
+            return None
+        if op == "retrieve":
+            return self.memory.retrieve(
+                proc, key=key, kind=kind, query=query, top=top, limit=limit
+            )
+        if op == "share":
+            self.memory.share(proc, key, with_agent)
+            self.publish(
+                "MemoryUpdated", source_pid=proc.pid,
+                key=key, kind="shared", by=proc.name,
+            )
+            return None
+        if op == "delete":
+            deleted = self.memory.delete(proc, key, kind)
+            if deleted and kind == "shared":
+                self.publish(
+                    "MemoryUpdated", source_pid=proc.pid,
+                    key=key, kind=kind, by=proc.name, deleted=True,
+                )
+            return deleted
+        raise ValueError(f"unknown memory op {op!r}")
+
+    def _sys_request_model(
+        self,
+        proc: AgentProcess,
+        call: Syscall,
+        need: str,
+        prompt: str,
+        system: str | None,
+        max_tokens: int,
+    ) -> None:
+        """Route a model request by capability class (p.7). The agent never
+        names a model; the manager selects by availability, and the kernel
+        records tokens and cost against this agent."""
+        if not isinstance(need, str) or not need.strip():
+            raise ValueError("request_model() needs a capability class, e.g. 'fast'")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("request_model() needs a non-empty prompt")
+
+        self._yield_slot(proc, AgentState.WAITING, waiting_on=f"model {need}")
+        key = dg.key(dg.MODEL, f"{proc.pid}.{call.req_id}")
+        self.deps.add(proc.pid, call.req_id, {key})
+        self._io_calls += 1
+        task = asyncio.create_task(
+            self._run_model(proc, key, need, prompt, system, max_tokens)
+        )
+        self._io_tasks.add(task)
+        task.add_done_callback(self._io_tasks.discard)
+
+    async def _run_model(
+        self,
+        proc: AgentProcess,
+        key: str,
+        need: str,
+        prompt: str,
+        system: str | None,
+        max_tokens: int,
+    ) -> None:
+        started = asyncio.get_running_loop().time()
+        try:
+            value = await self.models.request(need, prompt, system, max_tokens)
+            result = {"value": value, "error": None}
+        except ModelError as exc:
+            result = {"value": None, "error": str(exc)}
+        except Exception as exc:  # a provider bug must not take the kernel down
+            result = {"value": None, "error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            self._io_calls -= 1
+
+        elapsed = asyncio.get_running_loop().time() - started
+        ok = result["error"] is None
+        value = result["value"] or {}
+        self.store.record_model_call(
+            pid=proc.pid,
+            agent=proc.name,
+            need=need,
+            model=value.get("model", "-"),
+            input_tokens=value.get("input_tokens", 0),
+            output_tokens=value.get("output_tokens", 0),
+            cost=value.get("cost", 0.0),
+            latency=elapsed,
+            ok=ok,
+            error=result["error"],
+        )
+        self._log(
+            proc.pid,
+            "model",
+            f"need {need!r} served by {value['model']} "
+            f"({value['input_tokens']}+{value['output_tokens']} tokens, "
+            f"${value['cost']:.4f}, {elapsed:.2f}s)"
+            if ok
+            else f"need {need!r} failed in {elapsed:.2f}s: {result['error']}",
+        )
+        self.publish(
+            "ModelFinished",
+            source_pid=proc.pid,
+            pid=proc.pid,
+            need=need,
+            model=value.get("model"),
+            cost=value.get("cost", 0.0),
+            ok=ok,
+        )
+        for w in self.deps.resolve(key, result):
+            self._wake_waiter(w)
+
+    def _sys_request_approval(
+        self, proc: AgentProcess, call: Syscall, role: str, reason: str
+    ) -> None:
+        """Block until a human with `role` approves (p.5-6).
+
+        The human is registered as a dependency-graph node, identical in kind
+        to an agent, an event, or a timer. The approval object itself lives in
+        the store, so it outlives this runtime.
+        """
+        if not isinstance(role, str) or not role.strip():
+            raise ValueError("request_approval() needs a non-empty role")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("request_approval() needs a non-empty reason")
+
+        row = self.store.request_approval(proc.name, role, reason, proc.pid)
+        self._yield_slot(proc, AgentState.BLOCKED, waiting_on=role)
+        key = dg.key(dg.APPROVAL, row["id"])
+
+        if row["status"] == "granted":
+            # Granted before we asked — e.g. while the runtime was down. It is
+            # honored and consumed, and still costs a queue trip: an approval
+            # is scheduling, not a shortcut.
+            self.store.consume_approval(row["id"])
+            self._log(proc.pid, "approval", f"{role} had already approved: {reason}")
+            self._requeue(
+                proc,
+                Reply(req_id=call.req_id, value=_shape({key: _approval_value(row)})),
+            )
+            return
+
+        self._log(
+            proc.pid,
+            "approval",
+            f"{proc.name} blocked: needs {role} to approve ({reason})",
+        )
+        self.deps.add(proc.pid, call.req_id, {key})
+
+    def _drain_approvals(self) -> None:
+        """Wake whoever a granted approval unblocks.
+
+        Grants arrive through the store — `agent approve` writes them there
+        directly, possibly while we were not even running — so the kernel polls
+        for them the same way it polls for control commands.
+        """
+        for row in self.store.granted_approvals():
+            key = dg.key(dg.APPROVAL, row["id"])
+            freed = self.deps.resolve(key, _approval_value(row))
+            if not freed:
+                continue  # a pre-grant: nobody in this runtime is blocked on it
+            self.store.consume_approval(row["id"])
+            self._log(row["pid"], "approval", f"{row['role']} approved: {row['reason']}")
+            self.publish(
+                "HumanApproved",
+                pid=row["pid"],
+                role=row["role"],
+                reason=row["reason"],
+            )
+            for w in freed:
+                self._wake_waiter(w)
+
     def _on_dep_timer(self, proc: AgentProcess, timer_key: str) -> None:
         # Clear the handle on the owner even if other dependencies are still
         # outstanding, so a later _cancel_timer cannot decrement _timers twice.
@@ -370,6 +727,7 @@ class Kernel:
     def _announce_exit(self, proc: AgentProcess) -> None:
         """A terminated agent is an event and a resolved dependency (p.5)."""
         self.bus.forget(proc.pid)
+        self.memory.forget_process(proc.pid)  # private memory dies with the pid
         finished = proc.state is AgentState.FINISHED
         self.publish(
             "AgentFinished" if finished else "AgentFailed",
@@ -386,8 +744,8 @@ class Kernel:
         """Nobody can run, nobody is asleep, no timer is pending: nothing will
         ever happen again. Say so, instead of hanging forever."""
         alive = [p for p in self.table.all() if p.alive]
-        if not alive or self._timers > 0:
-            return
+        if not alive or self._timers > 0 or self._io_calls > 0:
+            return  # a pending timer, tool, or model call can still wake someone
         if any(p.state in LIVE for p in alive):
             return
 
@@ -440,7 +798,14 @@ class Kernel:
 
 def _shape(results: dict[str, Any]) -> dict[str, Any]:
     """Turn flat dependency keys back into the shape the agent asked for."""
-    out: dict[str, Any] = {"agents": {}, "events": {}, "timer": False}
+    out: dict[str, Any] = {
+        "agents": {},
+        "events": {},
+        "timer": False,
+        "approval": None,
+        "tool": None,
+        "model": None,
+    }
     for k, v in results.items():
         kind, _, name = k.partition(":")
         if kind == dg.AGENT:
@@ -449,7 +814,22 @@ def _shape(results: dict[str, Any]) -> dict[str, Any]:
             out["events"][name] = v
         elif kind == dg.TIMER:
             out["timer"] = True
+        elif kind == dg.APPROVAL:
+            out["approval"] = v
+        elif kind == dg.TOOL:
+            out["tool"] = v
+        elif kind == dg.MODEL:
+            out["model"] = v
     return out
+
+
+def _approval_value(row: dict[str, Any]) -> dict[str, Any]:
+    """What the blocked agent receives once its approval is granted."""
+    return {
+        "role": row["role"],
+        "reason": row["reason"],
+        "by": row["resolved_by"] or row["role"],
+    }
 
 
 def _describe(deps: set[str], table: ProcessTable) -> str:

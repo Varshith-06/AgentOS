@@ -58,6 +58,42 @@ CREATE TABLE IF NOT EXISTS events (
     payload     TEXT    NOT NULL,
     subscribers TEXT    NOT NULL
 );
+CREATE TABLE IF NOT EXISTS approvals (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent        TEXT    NOT NULL,
+    role         TEXT    NOT NULL,
+    reason       TEXT    NOT NULL,
+    pid          INTEGER,
+    status       TEXT    NOT NULL DEFAULT 'pending',
+    requested_at REAL    NOT NULL,
+    resolved_at  REAL,
+    resolved_by  TEXT
+);
+CREATE TABLE IF NOT EXISTS memory (
+    mtype       TEXT    NOT NULL,
+    owner       TEXT    NOT NULL,
+    key         TEXT    NOT NULL,
+    value       TEXT    NOT NULL,
+    vector      TEXT,
+    shared_with TEXT,
+    created_by  TEXT,
+    updated_at  REAL    NOT NULL,
+    PRIMARY KEY (mtype, owner, key)
+);
+CREATE TABLE IF NOT EXISTS model_calls (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts            REAL    NOT NULL,
+    pid           INTEGER,
+    agent         TEXT,
+    need          TEXT    NOT NULL,
+    model         TEXT    NOT NULL,
+    input_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost          REAL    NOT NULL DEFAULT 0,
+    latency       REAL    NOT NULL DEFAULT 0,
+    ok            INTEGER NOT NULL DEFAULT 1,
+    error         TEXT
+);
 """
 
 
@@ -78,6 +114,16 @@ class Store:
         self.db.execute("DELETE FROM commands")
         self.db.execute("DELETE FROM events")
         self.db.execute("DELETE FROM log")
+        # Approvals deliberately survive a restart — a human dependency that
+        # evaporates on restart is not a kernel object. Only the pid is
+        # meaningless in the new runtime; a re-run agent re-attaches by identity.
+        self.db.execute("UPDATE approvals SET pid = NULL WHERE status = 'pending'")
+        # Ephemeral memory belongs to the run; longterm and semantic memory
+        # are keyed by agent name and deliberately survive (p.6).
+        self.db.execute(
+            "DELETE FROM memory WHERE mtype IN ('working', 'scratchpad', 'shared')"
+        )
+        self.db.execute("DELETE FROM model_calls")
         self.db.execute(
             "INSERT OR REPLACE INTO runtime VALUES (1, ?, ?, ?, ?, ?)",
             (os.getpid(), policy, slots, now, now),
@@ -137,6 +183,143 @@ class Store:
             rows = self.db.execute(
                 "SELECT * FROM log WHERE pid = ? ORDER BY id DESC LIMIT ?", (pid, limit)
             ).fetchall()
+        return [dict(r) for r in reversed(rows)]
+
+    # -- human approvals (Phase 3, p.5-6) ----------------------------------
+    def request_approval(
+        self, agent: str, role: str, reason: str, pid: int
+    ) -> dict[str, Any]:
+        """Find or create the approval object this request refers to.
+
+        Identity is (agent, role, reason). A grant issued while the runtime was
+        down is honored here, and a pending request orphaned by a restart is
+        adopted by the re-run agent instead of asking the human twice.
+        """
+        row = self.db.execute(
+            "SELECT * FROM approvals WHERE agent = ? AND role = ? AND reason = ?"
+            " AND (status = 'granted' OR (status = 'pending' AND pid IS NULL))"
+            " ORDER BY id LIMIT 1",
+            (agent, role, reason),
+        ).fetchone()
+        if row is not None:
+            self.db.execute(
+                "UPDATE approvals SET pid = ? WHERE id = ?", (pid, row["id"])
+            )
+            return {**dict(row), "pid": pid}
+        cur = self.db.execute(
+            "INSERT INTO approvals (agent, role, reason, pid, status, requested_at)"
+            " VALUES (?, ?, ?, ?, 'pending', ?)",
+            (agent, role, reason, pid, time.time()),
+        )
+        return self.approval(int(cur.lastrowid))
+
+    def approve(self, pid: int, role: str) -> dict[str, Any]:
+        """Grant the pending approval for `pid`, validating the role.
+
+        This writes the grant to the store directly rather than queueing a
+        command: a grant is durable state, which is what lets a human approve
+        while the runtime is down and have the restarted run honor it.
+        """
+        row = self.pending_approval_for(pid)
+        if row is None:
+            raise ValueError(f"pid {pid} has no pending approval")
+        if row["role"] != role:
+            raise ValueError(
+                f"pid {pid} needs approval from {row['role']!r}; {role!r} cannot grant it"
+            )
+        self.db.execute(
+            "UPDATE approvals SET status = 'granted', resolved_at = ?, resolved_by = ?"
+            " WHERE id = ?",
+            (time.time(), role, row["id"]),
+        )
+        return self.approval(row["id"])
+
+    def consume_approval(self, approval_id: int) -> None:
+        """The blocked agent has been woken: this grant is spent."""
+        self.db.execute(
+            "UPDATE approvals SET status = 'consumed' WHERE id = ?", (approval_id,)
+        )
+
+    def approval(self, approval_id: int) -> dict[str, Any] | None:
+        row = self.db.execute(
+            "SELECT * FROM approvals WHERE id = ?", (approval_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def pending_approval_for(self, pid: int) -> dict[str, Any] | None:
+        row = self.db.execute(
+            "SELECT * FROM approvals WHERE pid = ? AND status = 'pending'"
+            " ORDER BY id LIMIT 1",
+            (pid,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def granted_approvals(self) -> list[dict[str, Any]]:
+        rows = self.db.execute(
+            "SELECT * FROM approvals WHERE status = 'granted' ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def approvals(self, include_consumed: bool = False) -> list[dict[str, Any]]:
+        query = "SELECT * FROM approvals"
+        if not include_consumed:
+            query += " WHERE status IN ('pending', 'granted')"
+        rows = self.db.execute(query + " ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+    # -- memory + model accounting (Phase 5): what the CLI reads -----------
+    def memory_usage(self) -> dict[str, int]:
+        """owner -> bytes of stored values. The p.3 process card's MEM figure."""
+        rows = self.db.execute(
+            "SELECT owner, SUM(LENGTH(value)) AS bytes FROM memory GROUP BY owner"
+        ).fetchall()
+        return {r["owner"]: int(r["bytes"] or 0) for r in rows}
+
+    def record_model_call(
+        self,
+        pid: int | None,
+        agent: str | None,
+        need: str,
+        model: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cost: float = 0.0,
+        latency: float = 0.0,
+        ok: bool = True,
+        error: str | None = None,
+    ) -> None:
+        self.db.execute(
+            "INSERT INTO model_calls (ts, pid, agent, need, model, input_tokens,"
+            " output_tokens, cost, latency, ok, error)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                time.time(), pid, agent, need, model,
+                input_tokens, output_tokens, cost, latency, int(ok), error,
+            ),
+        )
+
+    def model_costs(self) -> dict[int, dict[str, Any]]:
+        """pid -> accumulated calls, tokens, and dollars this run."""
+        rows = self.db.execute(
+            "SELECT pid, COUNT(*) AS calls, SUM(input_tokens) AS input_tokens,"
+            " SUM(output_tokens) AS output_tokens, SUM(cost) AS cost"
+            " FROM model_calls GROUP BY pid"
+        ).fetchall()
+        return {
+            r["pid"]: {
+                "calls": r["calls"],
+                "input_tokens": int(r["input_tokens"] or 0),
+                "output_tokens": int(r["output_tokens"] or 0),
+                "cost": float(r["cost"] or 0.0),
+            }
+            for r in rows
+            if r["pid"] is not None
+        }
+
+    def model_calls(self, limit: int = 200) -> list[dict[str, Any]]:
+        rows = self.db.execute(
+            "SELECT * FROM model_calls ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
         return [dict(r) for r in reversed(rows)]
 
     # -- events ----------------------------------------------------------

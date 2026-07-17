@@ -1,9 +1,9 @@
 """The dependency graph (AgentOS.pdf p.5).
 
 Instead of static workflows, a waiting agent declares what it is waiting *for* —
-other agents, events, timers (and, from Phase 3, human approvals). When the last
-dependency resolves, the scheduler wakes it automatically. Nobody wrote a
-sequence; the graph decided the order.
+other agents, events, timers, human approvals. When the last dependency
+resolves, the scheduler wakes it automatically. Nobody wrote a sequence; the
+graph decided the order.
 
 The graph is also where deadlock is caught. A cycle of waiters is detected the
 moment it would be created and reported to the agent that closed it, rather than
@@ -18,7 +18,9 @@ from typing import Any
 AGENT = "agent"
 EVENT = "event"
 TIMER = "timer"
-APPROVAL = "approval"  # Phase 3
+APPROVAL = "approval"  # a human, keyed by the durable approval id in the store
+TOOL = "tool"  # a running tool call, keyed per request
+MODEL = "model"  # a running model call, keyed per request
 
 
 def key(kind: str, name: Any) -> str:
