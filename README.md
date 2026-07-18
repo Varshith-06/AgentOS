@@ -12,12 +12,13 @@ recovery.
 
 Zero dependencies, stdlib only. Everything below — the kernel, the daemon, the
 examples, the test suite, the benchmark — runs offline, with no installs and no
-API keys. (The one exception is the optional LangGraph comparison in
-`benchmarks/compare.py`, which needs LangGraph installed to have anything to
-compare against, and skips cleanly when it is not.) Design doc: `AgentOS.pdf`.
+API keys. (The one exception is the optional cross-framework comparison in
+`benchmarks/compare.py`, which needs the other frameworks installed to have
+anything to compare against, and skips whichever are absent.) Design doc:
+`AgentOS.pdf`.
 
 **Contents:** [What ships](#what-ships) · [Results](#results) ·
-[Compared to LangGraph](#compared-to-langgraph) ·
+[Compared to the field](#compared-to-the-field) ·
 [The one architectural decision](#the-one-architectural-decision) ·
 [Components](#components) · [Try it](#try-it) · [Layout](#layout)
 
@@ -40,16 +41,16 @@ compare against, and skips cleanly when it is not.) Design doc: `AgentOS.pdf`.
 - A CLI (`agent ps / top / events / logs / kill / pause / resume / approve /
   grant / revoke / recover / daemon`), 87 tests, three full example
   applications, a benchmark that measures the design's claims, and a
-  head-to-head against LangGraph
+  head-to-head against LangGraph, CrewAI, AutoGen, and Temporal
 
 ### At a glance
 
 | | |
 |---|---|
-| **Crash recovery** | 0 steps re-executed after a hard kill (LangGraph repeats 1–3 on the same workload) |
-| **Approval latency** | 1.4ms median, approve → agent finished |
-| **Durable step overhead** | 3.5ms vs LangGraph's 5.7ms |
-| **vs. LangGraph, realistic work** | +0.9% wall time |
+| **Crash recovery** | the only runtime measured that repeats **0** work after a hard kill |
+| **Approval latency** | 1.7ms median — lowest of the five |
+| **Durable step overhead** | 5.8ms — lowest of the five |
+| **Realistic workloads** | +4.1%, within a few points of every comparator |
 | **Multi-app cost ledger** | exact to the token across concurrent applications |
 | **Test suite** | 87 tests, zero dependencies, fully offline |
 
@@ -102,93 +103,111 @@ python benchmarks/bench.py              # the three tables above
 
 ---
 
-## Compared to LangGraph
+## Compared to the field
 
-`benchmarks/compare.py` runs the same workloads against **LangGraph 1.2.9**
-with its SQLite checkpointer, on one machine, with SQLite durability on both
-sides and no network in the loop. The crash is a real `kill` of a real OS
-process, delivered by the parent once both frameworks have completed the same
-amount of work — nothing is simulated in-process. Numbers below are stable
-across repeated runs.
+`benchmarks/compare.py` runs identical workloads against **LangGraph 1.2.9**,
+**CrewAI 1.15.4** (Flows), **AutoGen 0.7.5**, and **Temporal 1.30** — on one
+machine, with SQLite durability wherever the framework offers it and no
+network in the loop. Executions are counted in a shared tally table rather
+than any framework's own logs, and the crash is a real OS `kill` of a real
+process delivered once every framework has completed the same work. Nothing
+is simulated in-process.
 
 ```bash
-pip install langgraph langgraph-checkpoint-sqlite
-python benchmarks/compare.py            # skips the comparator if absent
+pip install langgraph langgraph-checkpoint-sqlite crewai autogen-core temporalio
+python benchmarks/compare.py       # any comparator not installed is skipped
 ```
 
-### Nothing is redone after a crash
+### 1. Recovery — billable calls repeated after a hard kill
 
-The workload makes six billable calls (each an irreversible write plus 80ms of
-work); the process is killed after three, then recovered. The count is how many
-of the six executed *twice* — in a real system, model spend paid twice.
+Six billable calls (each an irreversible write plus 80ms of work), killed
+after three, then resumed. The number is how many of the six executed
+*twice*: work redone, and in a real system, model spend paid twice.
 
-| framework | billable calls repeated |
-|---|---|
-| **AgentOS** | **0** |
-| LangGraph, six calls in one node | 3 |
-| LangGraph, one node per call | 1 |
+| framework | repeated | why |
+|---|---|---|
+| **AgentOS** | **0** | journals each syscall reply as it completes |
+| LangGraph (one node per call) | 1 | the in-flight node has no checkpoint |
+| Temporal | 1 | at-least-once activity semantics |
+| LangGraph (calls in one node) | 3 | a crash re-runs the whole node |
+| CrewAI Flows | 3 | `@persist` restores state, then replays from `@start` |
+| AutoGen | 3 | `save_state` restores state; the handler starts over |
 
-The reason is checkpoint granularity. LangGraph persists state at node
-boundaries, so a crash inside a node re-runs that whole node on resume — three
-repeated calls when the calls sit in a loop. Decomposing to one node per call
-narrows it to one, because the node that was *in flight* at the kill has no
-checkpoint and re-runs. AgentOS journals each syscall reply the moment the
-syscall completes, so the replayed agent gets the recorded answer and the tool
+The axis is checkpoint granularity. LangGraph and CrewAI persist at method or
+node boundaries, so a crash inside one re-runs all of it; decomposing into one
+node per side effect narrows LangGraph to a single repeat, which is the same
+place Temporal lands. AgentOS journals the reply the moment a syscall
+completes, so the replayed agent is handed the recorded answer and the tool
 never fires again — the in-flight case included.
 
-Note the shape of that: LangGraph can approach this granularity, but only if
-you restructure the work into one node per side effect. AgentOS gives the same
-guarantee to code written the obvious way.
+### 2. Overhead — one durable step, no real work
 
-### Overhead
-
-A durable step with no real work in it, so this is pure framework cost:
-
-| framework | per durable step |
+| framework | per step |
 |---|---|
-| **AgentOS** (tick=1ms) | **3.6ms** |
-| **AgentOS** (tick=5ms) | **3.4ms** |
-| **AgentOS** (tick=20ms) | **3.5ms** |
-| LangGraph | 5.7ms |
+| **AgentOS** | **5.8ms** |
+| AutoGen | 6.5ms |
+| LangGraph | 8.0ms |
+| CrewAI Flows | 24.7ms |
+| Temporal | 68.9ms |
 
-Human-in-the-loop, approve → agent finished:
+### 3. Human-in-the-loop — approve → the agent has finished
 
 | framework | median | worst |
 |---|---|---|
-| **AgentOS** | **1.2ms** | **1.8ms** |
-| LangGraph | 3.2ms | 19.6ms |
+| **AgentOS** | **1.7ms** | **2.4ms** |
+| LangGraph | 4.6ms | 7.3ms |
+| Temporal | 10.9ms | 22.3ms |
+| CrewAI / AutoGen | — | no durable wait-for-a-human primitive to time |
 
-And the same 30 steps when each does 600ms of real work — one modest model
-call, which is the regime any real agent runs in:
+### 4. The same steps with real work in them
 
-| framework | wall time |
-|---|---|
-| LangGraph | 18.28s |
-| AgentOS | 18.45s (**+0.9%**) |
+Bare-step overhead is the wrong denominator for agent systems: a step that
+does nothing is not a step anyone runs. The same 30 steps with 600ms of work
+each — one modest model call — against an 18.0s floor:
 
-### Summary
+| framework | wall | over floor |
+|---|---|---|
+| AutoGen | 18.58s | +3.2% |
+| LangGraph | 18.59s | +3.3% |
+| **AgentOS** | **18.73s** | **+4.1%** |
+| Temporal | 18.99s | +5.5% |
+| CrewAI Flows | 19.12s | +6.2% |
 
-**AgentOS matches or beats LangGraph on every axis measured here — lower
-per-step overhead, lower approval latency, within 1% on realistic workloads —
-while losing zero work to a crash where LangGraph repeats one to three billable
-calls.**
+### What this does and does not show
 
-Two honest caveats on that. First, the overhead numbers were much worse until
-recently: the kernel loop used to sleep a fixed tick every pass, and
-`asyncio.sleep()` cannot resolve below the platform timer quantum (~15.6ms on
-Windows), so every syscall paid that quantum regardless of how small the tick
-was. The loop is now event-driven — a syscall or a newly-runnable agent wakes
-it immediately, and the tick only bounds how long it may doze when nothing is
-happening. That change is what moved bare steps from ~31ms to ~3.5ms and
-approvals from ~31ms to ~1.2ms. Because the old bottleneck was a *platform
-timer floor*, the win is largest on Windows; on Linux, where the timer
-resolution is ~1ms, the previous polling loop was far less penalized and the
-gap being closed here would have been correspondingly smaller.
+AgentOS has the lowest per-step overhead, the lowest approval latency, and is
+the only runtime here that repeats **no** work after a crash. On realistic
+workloads every framework lands within a few points of the floor and AgentOS
+is third by 0.8pp — that column is a wash, not a win, and the ranking there
+would not survive a different machine.
 
-Second, what this comparison does *not* establish: it is one machine, one
-workload family, single-process on both sides, and it does not touch CrewAI,
-AutoGen, or Temporal. It says nothing about ecosystem, integrations, or agent
-quality — only about runtime overhead and recovery granularity.
+Three things worth stating plainly:
+
+**Temporal is the closest architectural relative, and it is not really losing.**
+Its durable-replay model is the same idea as the syscall journal, and its
+single repeat is at-least-once activity semantics working as designed — the
+documented contract is that activities must be idempotent. It pays its
+overhead for something AgentOS does not attempt: durability that survives the
+whole machine, coordinated across many hosts, because state lives in a
+separate server. AgentOS is in-process and single-node. Different bets.
+
+**AgentOS's zero is a measured result, not an absolute guarantee.** The
+vulnerable window — tool executed, reply not yet journaled — exists here too.
+It is microseconds of local write rather than a network round-trip, which is
+why repeated kills at the worst moment still produce 0, but "narrower window"
+is the honest claim rather than "impossible".
+
+**CrewAI and AutoGen never advertised durable execution.** Reading their
+recovery column as a failure would be unfair: it measures what happens when
+the process dies, not a promise either of them broke. Both can be made to skip
+completed work with manual guards, exactly as LangGraph can be decomposed.
+
+And the scope: one machine, one workload family, single-process except where
+Temporal requires otherwise. It says nothing about ecosystem, integrations,
+tool libraries, or agent quality — only runtime overhead and recovery
+granularity. The full five-framework run needs Python 3.13, since CrewAI has
+no wheels for 3.14 yet; AgentOS, LangGraph, AutoGen, and Temporal all run on
+either.
 
 ---
 
@@ -542,7 +561,7 @@ python -m agentos.cli run examples/research_assistant.py
 python -m agentos.cli run examples/customer_support.py
 
 python benchmarks/bench.py                                # the numbers above
-python benchmarks/compare.py                              # vs LangGraph, if installed
+python benchmarks/compare.py                              # vs the other frameworks
 ```
 
 Watch any run live from a second terminal:
@@ -596,7 +615,9 @@ examples/     tree.py              # a five-agent tree queuing for two slots
               software_company.py  # the full applications: everything at once
               research_assistant.py customer_support.py
 benchmarks/   bench.py             # recovery, approval latency, multi-app cost
-              compare.py           # head-to-head vs LangGraph (optional dep)
+              compare.py           # vs LangGraph / CrewAI / AutoGen / Temporal
+              _temporal_defs.py    # workflows: Temporal re-imports these
+              _autogen_defs.py     # handler types AutoGen resolves at import
 tests/        test_kernel.py test_events.py test_approvals.py test_tools.py
               test_memory.py test_models.py test_recovery.py test_daemon.py
 ```
