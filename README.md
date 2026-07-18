@@ -173,7 +173,7 @@ each — one modest model call — against an 18.0s floor:
 | Temporal | 18.99s | +5.5% |
 | CrewAI Flows | 19.12s | +6.2% |
 
-### What this does and does not show
+### What this shows
 
 AgentOS has the lowest per-step overhead, the lowest approval latency, and is
 the only runtime here that repeats **no** work after a crash. On realistic
