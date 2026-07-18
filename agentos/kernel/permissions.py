@@ -42,10 +42,23 @@ class Permissions:
         self.grants: dict[str, set[str]] = {
             agent: set(caps) for agent, caps in (grants or {}).items()
         }
+        #: Per-PID grants, for agents created at runtime rather than named in
+        #: the matrix. A dynamically spawned agent has no useful name — every
+        #: one of them may be an LLMAgent — so its capabilities travel with
+        #: its process instead of its class.
+        self.pid_grants: dict[int, set[str]] = {}
         self.path = Path(path) if path is not None else None
         self._sig: tuple[int, int] | None = None
         if self.path is not None:
             self.refresh(force=True)
+
+    # -- per-process capabilities (delegation) -----------------------------
+    def assign(self, pid: int, capabilities: set[str] | list[str]) -> None:
+        """Pin an exact capability set to one process."""
+        self.pid_grants[pid] = set(capabilities)
+
+    def forget_process(self, pid: int) -> None:
+        self.pid_grants.pop(pid, None)
 
     @classmethod
     def of(cls, source: Any, default_path: Path) -> "Permissions":
@@ -59,15 +72,25 @@ class Permissions:
         return cls(path=default_path)  # None: watch the standard location
 
     # -- the check the kernel makes ---------------------------------------
-    def capabilities(self, agent: str) -> set[str]:
-        """Everything this agent name holds, its own grants plus "*"'s.
+    def capabilities(self, agent: str, pid: int | None = None) -> set[str]:
+        """Everything this process may reach.
 
-        The p.3 process card shows an agent's permissions alongside its PID
-        and status, so the kernel needs the whole set and not just a yes/no.
+        A per-PID grant is the whole answer when one exists: it was delegated
+        deliberately by a parent, and the name matrix must not widen it. That
+        is what makes delegation an *attenuation* — a task's root grant is the
+        ceiling for every agent underneath it, however the tree grows.
+
+        Without a PID grant this falls back to the p.7 matrix: the agent's own
+        name plus whatever "*" grants everyone.
         """
+        if pid is not None and pid in self.pid_grants:
+            return set(self.pid_grants[pid])
         return set(self.grants.get(agent, ())) | set(self.grants.get("*", ()))
 
-    def allowed(self, agent: str, capability: str) -> bool:
+    def allowed(self, agent: str, capability: str, pid: int | None = None) -> bool:
+        if pid is not None and pid in self.pid_grants:
+            caps = self.pid_grants[pid]
+            return capability in caps or "*" in caps
         for scope in (agent, "*"):
             caps = self.grants.get(scope, ())
             if capability in caps or "*" in caps:

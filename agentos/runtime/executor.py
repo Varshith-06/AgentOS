@@ -102,11 +102,19 @@ class Context:
         return reply.value
 
     # -- processes (Phase 1) ---------------------------------------------
-    async def spawn(self, agent: Any) -> int:
-        """Create a child agent. Returns its PID immediately; does not block."""
+    async def spawn(self, agent: Any, grant: list[str] | None = None) -> int:
+        """Create a child agent. Returns its PID immediately; does not block.
+
+        `grant` delegates capabilities to the child, and may only name things
+        this agent already holds — the kernel refuses anything wider. Leaving
+        it None keeps the permission matrix in charge, which is what a named,
+        pre-declared agent wants. Pass it when you are creating an agent whose
+        identity is its parameters rather than its class, so its authority
+        travels with the process instead of the name.
+        """
         from ..agents.base import spec_of
 
-        return await self._syscall("spawn", spec=spec_of(agent))
+        return await self._syscall("spawn", spec=spec_of(agent), grant=grant)
 
     async def sleep(self, seconds: float) -> None:
         """Yield the execution slot for `seconds`. State becomes Sleeping."""

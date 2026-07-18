@@ -1,6 +1,10 @@
 # Runtime state: the live process table and control queue (see kernel/store.py)
 .agentos/
 
+# What the examples write when they run (examples/planner.py sandboxes here)
+examples/_planner_out/
+examples/crash_log.txt
+
 # Python
 __pycache__/
 *.py[cod]

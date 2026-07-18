@@ -2,7 +2,7 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 111 passing](https://img.shields.io/badge/tests-111%20passing-brightgreen)
+![Tests: 130 passing](https://img.shields.io/badge/tests-130%20passing-brightgreen)
 ![Status: all phases complete](https://img.shields.io/badge/status-complete-blue)
 
 An operating system-inspired runtime for autonomous AI agents. Linux abstracts
@@ -39,7 +39,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
   real OS process with syscalls carried over a token-authenticated loopback
   TCP socket (or stdio pipes), and serves a live dashboard
 - A CLI (`agent ps / top / wait / events / logs / kill / pause / resume /
-  approve / grant / revoke / recover / daemon`), 111 tests, three full example
+  approve / grant / revoke / recover / daemon`), 130 tests, three full example
   applications, a benchmark that measures the design's claims, and a
   head-to-head against LangGraph, CrewAI, AutoGen, and Temporal
 
@@ -52,7 +52,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
 | **Durable step overhead** | 3.7ms — lowest of the five |
 | **Realistic workloads** | +2.3%, within a few points of every comparator |
 | **Multi-app cost ledger** | exact to the token across concurrent applications |
-| **Test suite** | 111 tests, zero dependencies, fully offline |
+| **Test suite** | 130 tests, zero dependencies, fully offline |
 
 ---
 
@@ -97,7 +97,7 @@ calls.
 Reproduce all of it:
 
 ```bash
-python -m unittest discover tests -v    # 111 tests
+python -m unittest discover tests -v    # 130 tests
 python benchmarks/bench.py              # the three tables above
 ```
 
@@ -423,6 +423,50 @@ Every dispatch is recorded, so the runtime can answer what tools were used and
 how often they failed — the p.8 "all tool usage" claim, visible in the
 dashboard's Tool usage panel.
 
+### Agents invented at runtime
+
+Everywhere above, an agent is a class someone wrote in advance. That is the
+right shape when the work is known, and the wrong one when a task arrives as a
+sentence and the team that should do it has to be invented on the spot.
+
+`agentos/agents/llm.py` is the other shape: **one agent class whose parameters
+are its identity** — a role, a goal, a set of tools, a model class. Creating an
+agent at runtime means constructing those four values, which are JSON, so a
+runtime-invented agent still satisfies the Phase 1 rule that an agent is
+re-creatable from its spec. It journals, recovers, and runs in a subprocess
+like anything else. The planner is not a special class either; it is the same
+`LLMAgent` with `may_spawn=True`.
+
+```bash
+python -m agentos.cli run examples/planner.py
+```
+
+That example hands the runtime one sentence — *"perform an experiment about
+trees"* — and no workflow graph and no agent definitions. The planner invents a
+Surveyor and an Analyst, grants each of them tools, waits for both, and
+answers. It is fully offline: the model is a scripted mock, so what it
+demonstrates is the runtime rather than a model's cleverness.
+
+**Authority is the interesting part.** An agent may delegate only a subset of
+what it holds:
+
+```python
+await ctx.spawn(LLMAgent(role="Surveyor", goal="...", tools=["filesystem"]),
+                grant=["filesystem"])          # refused if the parent lacks it
+```
+
+The kernel checks that at spawn, which makes the capability set handed to the
+root agent **the ceiling for the entire task tree** — however many layers of
+agents a model invents, and whatever it decides to call them. Start the planner
+with `["filesystem"]` and nothing underneath it can reach a shell. Grants live
+on the process rather than the class (every dynamic agent would otherwise be
+named `LLMAgent`), a narrower grant is never re-widened by the name matrix, and
+authority dies with the process that held it.
+
+That is what makes an unpredictable agent tree bounded: you cannot answer
+"what could this touch?" by reading code that does not exist yet, so the kernel
+answers it instead.
+
 ### Memory
 
 Six kinds of memory behind four verbs, backend invisible to agents
@@ -588,7 +632,7 @@ No installs, no API keys — the kernel is demonstrated with agents that only
 sleep, so scheduling is deterministic and a bug reproduces the same way twice.
 
 ```bash
-python -m unittest discover tests -v          # 111 tests
+python -m unittest discover tests -v          # 130 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
@@ -599,6 +643,9 @@ python -m agentos.cli run examples/memory.py              # six memory kinds
 python -m agentos.cli run examples/assistant.py           # model routing
 python -m agentos.cli run examples/crash.py               # kill -9 it, then:
 python -m agentos.cli recover                             # nothing runs twice
+python -m agentos.cli run examples/planner.py             # no graph, no agent
+#   classes: a sentence goes in, the planner invents the team, and the
+#   operator's tool grant is the ceiling for everything it creates
 
 python -m agentos.cli daemon                              # the shared runtime
 #   agents run as OS processes, syscalls over loopback TCP; opt out with
@@ -651,6 +698,8 @@ agentos/
   api/        server.py            # the daemon's HTTP control plane (stdlib)
               dashboard.py         # the live dashboard served at /
   agents/     base.py              # Agent, the direct-invocation guard, spec loader
+              llm.py               # LLMAgent: params are the identity, so an
+                                   #   agent can be invented at runtime
   client.py                        # RuntimeClient: the thin client applications use
   cli.py                           # agent ps / top / wait / events / logs / approvals /
                                    #   tools / kill / pause / resume / approve / grant /
@@ -663,6 +712,8 @@ examples/     tree.py              # a five-agent tree queuing for two slots
               memory.py            # six memory kinds; longterm survives restarts
               assistant.py         # LLM calls; model choice is runtime config
               crash.py             # kill -9 mid-run; recover; nothing runs twice
+              planner.py           # one sentence in; the team is invented on
+                                   #   the spot, bounded by the operator's grant
               app_research.py      # thin client #1 — owns no runtime
               app_support.py       # thin client #2 — same daemon, same ps
               software_company.py  # the full applications: everything at once
@@ -674,4 +725,5 @@ benchmarks/   bench.py             # recovery, approval latency, multi-app cost
 tests/        test_kernel.py test_events.py test_approvals.py test_tools.py
               test_memory.py test_models.py test_recovery.py test_daemon.py
               test_spec_gaps.py    # the design-doc items an audit found missing
+              test_dynamic_agents.py  # runtime-invented agents; the grant ceiling
 ```

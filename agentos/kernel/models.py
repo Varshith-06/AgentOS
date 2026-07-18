@@ -91,6 +91,8 @@ class ModelManager:
         self.classes = classes or {}
         self.path = Path(path) if path is not None else None
         self._log = log or (lambda message: None)
+        #: How far through each scripted mock candidate we are (see _call_mock).
+        self._script_pos: dict[int, int] = {}
         if self.path is not None and self.path.exists():
             data = json.loads(self.path.read_text(encoding="utf-8"))
             self.classes = data.get("classes", data)
@@ -260,6 +262,19 @@ class ModelManager:
             f"[{cand.get('model', 'mock')}] deterministic offline reply "
             f"to your {words}-word prompt."
         )
+        # A `script` turns the mock into a fake *reasoner*: successive calls
+        # get successive replies. That is what makes a model-driven agent
+        # loop testable with no API key — the p.12 rule that the kernel must
+        # be demonstrable with fake agents, extended to fake reasoning. The
+        # last entry repeats, so a loop that runs long cannot fall off the end.
+        script = cand.get("script")
+        if script:
+            key = id(cand)
+            i = self._script_pos.get(key, 0)
+            text = script[min(i, len(script) - 1)]
+            self._script_pos[key] = i + 1
+            if not isinstance(text, str):
+                text = json.dumps(text)
         return {
             "text": text,
             "input_tokens": words + len((system or "").split()),

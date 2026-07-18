@@ -255,7 +255,7 @@ class Kernel:
             priority=getattr(agent, "priority", "Normal"),
         )
         self.agents[proc.pid] = agent
-        proc.permissions = sorted(self.perms.capabilities(proc.name))
+        proc.permissions = sorted(self.perms.capabilities(proc.name, proc.pid))
         self.ready.append(proc)
         self._publish_row(proc)
         self._log(
@@ -408,10 +408,25 @@ class Kernel:
         await self.run()
         return self.table.get(pid).result
 
-    def submit_spec(self, spec: dict[str, Any]) -> int:
+    def submit_spec(self, spec: dict[str, Any], grant: list[str] | None = None) -> int:
         """Spawn from a serialized spec — how a thin client hands the daemon
-        an agent it has never imported (p.8)."""
-        return self.spawn(self._create_agent(spec))
+        an agent it has never imported (p.8).
+
+        `grant` pins this process's capabilities explicitly, which is how the
+        operator sets the ceiling for a task submitted from outside: whatever
+        the agent goes on to create, no descendant can exceed this set.
+        """
+        pid = self.spawn(self._create_agent(spec))
+        if grant is not None:
+            self.perms.assign(pid, set(grant))
+            proc = self.table.get(pid)
+            proc.permissions = sorted(grant)
+            self._publish_row(proc)
+            self._log(
+                None, "grant",
+                f"pid {pid} admitted with {', '.join(sorted(grant)) or 'nothing'}",
+            )
+        return pid
 
     def snapshot(self) -> dict[str, Any]:
         """One consistent view of the scheduler for the dashboard (p.8):
@@ -552,9 +567,38 @@ class Kernel:
         proc.current_op = call.op
         getattr(self, f"_sys_{call.op}")(proc, call, **call.args)
 
-    def _sys_spawn(self, proc: AgentProcess, spec: dict[str, Any]) -> int:
+    def _sys_spawn(
+        self, proc: AgentProcess, spec: dict[str, Any], grant: list[str] | None = None
+    ) -> int:
+        """Create a child, optionally delegating a subset of my capabilities.
+
+        Attenuation is the rule: a parent may hand a child any part of what it
+        holds and nothing else. That single check is what bounds a task whose
+        shape nobody wrote down — a planner spawned with {http, sql} cannot
+        produce a descendant that reaches the shell, however many layers of
+        agents it invents on the way.
+        """
         child = self._create_agent(spec)
-        return self.spawn(child, parent=proc.pid)
+        if grant is None:
+            return self.spawn(child, parent=proc.pid)
+
+        mine = self.perms.capabilities(proc.name, proc.pid)
+        wanted = set(grant)
+        if "*" not in mine and not wanted <= mine:
+            over = ", ".join(sorted(wanted - mine))
+            raise PermissionDenied(
+                f"{proc.name} (pid {proc.pid}) cannot grant {over}: "
+                f"it holds only {', '.join(sorted(mine)) or 'nothing'}"
+            )
+        pid = self.spawn(child, parent=proc.pid)
+        self.perms.assign(pid, wanted)
+        self.table.get(pid).permissions = sorted(wanted)
+        self._publish_row(self.table.get(pid))
+        self._log(
+            proc.pid, "grant",
+            f"{proc.name} granted pid {pid} {', '.join(sorted(wanted)) or 'nothing'}",
+        )
+        return pid
 
     def _sys_log(self, proc: AgentProcess, message: str) -> None:
         self._log(proc.pid, "agent", message)
@@ -706,16 +750,30 @@ class Kernel:
         """
         if not isinstance(capability, str) or not capability.strip():
             raise ValueError("request_tool() needs a capability name")
-        if not self.perms.allowed(proc.name, capability):
+        if not self.perms.allowed(proc.name, capability, proc.pid):
             self._log(
                 proc.pid,
                 "denied",
                 f"{proc.name} requested {capability!r}: permission denied",
             )
+            # Point at the right lever. An agent whose authority was delegated
+            # cannot be fixed by editing the matrix — its parent decided this,
+            # and widening the file would not (and must not) change it.
+            if proc.pid in self.perms.pid_grants:
+                held = ", ".join(sorted(self.perms.pid_grants[proc.pid])) or "nothing"
+                remedy = (
+                    f"it was delegated only: {held}. Whoever spawned it must "
+                    f"grant {capability!r} at spawn, and can only do so if it "
+                    "holds it too."
+                )
+            else:
+                remedy = (
+                    f"grant it in {self.perms.path or 'the permissions config'} "
+                    "(agent grant / agent revoke)."
+                )
             raise PermissionDenied(
-                f"{proc.name} does not hold capability {capability!r}. "
-                f"Grant it in {self.perms.path or 'the permissions config'} "
-                "(agent grant / agent revoke)."
+                f"permission denied: {proc.name} does not hold capability "
+                f"{capability!r} — {remedy}"
             )
         driver = self._driver(capability)
 
@@ -1071,6 +1129,7 @@ class Kernel:
         self._nudge()  # a process just went terminal: re-evaluate immediately
         self.bus.forget(proc.pid)
         self.memory.forget_process(proc.pid)  # private memory dies with the pid
+        self.perms.forget_process(proc.pid)  # so does anything delegated to it
         finished = proc.state is AgentState.FINISHED
         self.publish(
             "AgentFinished" if finished else "AgentFailed",
