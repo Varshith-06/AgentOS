@@ -2,7 +2,7 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 152 passing](https://img.shields.io/badge/tests-152%20passing-brightgreen)
+![Tests: 167 passing](https://img.shields.io/badge/tests-167%20passing-brightgreen)
 ![Status: all phases complete](https://img.shields.io/badge/status-complete-blue)
 
 An operating system-inspired runtime for autonomous AI agents. Linux abstracts
@@ -39,7 +39,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
   real OS process with syscalls carried over a token-authenticated loopback
   TCP socket (or stdio pipes), and serves a live dashboard
 - A CLI (`agent ps / top / wait / events / logs / kill / pause / resume /
-  approve / grant / revoke / recover / daemon`), 152 tests, three full example
+  approve / grant / revoke / recover / daemon`), 167 tests, three full example
   applications, a benchmark that measures the design's claims, and a
   head-to-head against LangGraph, CrewAI, AutoGen, and Temporal
 
@@ -52,7 +52,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
 | **Durable step overhead** | 3.7ms — lowest of the five |
 | **Realistic workloads** | +2.3%, within a few points of every comparator |
 | **Multi-app cost ledger** | exact to the token across concurrent applications |
-| **Test suite** | 152 tests, zero dependencies, fully offline |
+| **Test suite** | 167 tests, zero dependencies, fully offline |
 
 ---
 
@@ -97,7 +97,7 @@ calls.
 Reproduce all of it:
 
 ```bash
-python -m unittest discover tests -v    # 152 tests
+python -m unittest discover tests -v    # 167 tests
 python benchmarks/bench.py              # the three tables above
 ```
 
@@ -510,6 +510,38 @@ declarations bound nothing — they only turn a silent hang into a loud error.
 A hand-written agent, wired by no one, still decides its own events exactly
 as `examples/pipeline.py` always has.
 
+**Everything a hand-written agent can reach, an invented one can too.** The
+action protocol covers the whole `Context` surface, because a planner that
+cannot use the kernel's services routes around them:
+
+- `remember` / `recall` — the six-kind memory system. `"kind": "shared"` is
+  how teammates hand each other real state (an event payload fits a
+  notification, not a dataset); `"longterm"` survives into future tasks under
+  the role's name; `recall` with `"query"` searches semantically.
+- `ask_human` — blocks on the kernel's durable approval object, the same one
+  `agent approve` grants. An invented agent can stop for a person exactly the
+  way a hand-written one always could.
+- `spawn` takes `"priority"` (the scheduler honours it) and `"retries"` — a
+  restart budget for a flaky child, clamped to 3. On restart the child
+  replays its journal **minus the failed tail**: a failed syscall had no side
+  effect, so it re-executes live instead of replaying its own recorded
+  failure forever. `POST /task` accepts both for the planner itself.
+- Every decision the model makes is written to the kernel log before it runs
+  (`agent logs` shows `decided: spawn: Surveyor …`), and `agent ps` shows
+  each invented agent's wiring in an `EVENTS` column — so the p.3 process
+  card is complete for agents nobody wrote.
+
+Two waits can no longer hang: one that starts unsatisfiable is refused, and
+one whose *last possible publisher exits* mid-wait now fails at that moment,
+naming the dead publisher — rather than surfacing minutes later as a runtime
+stall. (`wait_all`'s `timer` is deliberately not a timeout: it is one more
+dependency in the set, per p.5. The hang risk is closed by proof, not by
+racing a clock.)
+
+The one `Context` call *not* exposed to models is `checkpoint()`: every
+syscall an invented agent makes is already a checkpoint, so a model labelling
+durable points would add protocol surface with nothing to buy.
+
 **Over HTTP**, that is the whole hosted story — a sentence and a tool list in,
 a team out:
 
@@ -704,7 +736,7 @@ No installs, no API keys — the kernel is demonstrated with agents that only
 sleep, so scheduling is deterministic and a bug reproduces the same way twice.
 
 ```bash
-python -m unittest discover tests -v          # 152 tests
+python -m unittest discover tests -v          # 167 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies

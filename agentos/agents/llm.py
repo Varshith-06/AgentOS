@@ -41,10 +41,21 @@ The model is asked to reply with one JSON object per turn:
 
     {"action": "tool",  "capability": "http", "op": "get", "params": {...}}
     {"action": "spawn", "role": "...", "goal": "...", "tools": [...],
-                        "publishes": [...], "subscribes": [...]}
+                        "publishes": [...], "subscribes": [...],
+                        "model": "...", "priority": "High", "retries": 1}
     {"action": "publish", "event": "...", "payload": {...}}
     {"action": "wait",  "events": [...]}      (or bare, for your own agents)
+    {"action": "remember", "key": "...", "value": ..., "kind": "shared"}
+    {"action": "recall", "key": "..."}        (or {"query": "..."} for semantic)
+    {"action": "ask_human", "role": "...", "reason": "..."}
     {"action": "done",  "result": ...}
+
+Memory is how invented agents hand each other real state: an event payload
+fits a notification, not a dataset. `remember` with kind "shared" is readable
+by the whole team; "longterm" survives into future tasks under this role's
+name. `ask_human` blocks on the kernel's durable approval object — the same
+one `agent approve` grants — so an invented agent can stop for a person
+exactly the way a hand-written one always could.
 
 Anything unparseable is handed back to the model as an observation rather than
 raising: a model that returns prose gets a chance to correct itself, and the
@@ -83,13 +94,25 @@ SPAWN_OPTIONS = (
     '- {{"action": "spawn", "role": "<short name>", "goal": "<what they do>",\n'
     '     "tools": [<subset of your tools>],\n'
     '     "publishes": [<event names this agent will announce>],\n'
-    '     "subscribes": [<event names it should wait for first>]}}\n'
+    '     "subscribes": [<event names it should wait for first>],\n'
+    '     "priority": "High|Normal|Low", "retries": <0-3, restarts if it crashes>}}\n'
     '- {{"action": "wait"}}  (block until every agent you spawned has finished)\n'
     '- {{"action": "wait", "events": [<event names>]}}  (block until they fire)'
 )
 PUBLISH_OPTION = (
     '- {{"action": "publish", "event": "<one you may publish>", '
     '"payload": {{...}}}}'
+)
+MEMORY_OPTIONS = (
+    '- {{"action": "remember", "key": "<name>", "value": <any JSON>, '
+    '"kind": "shared|private|longterm"}}  (shared: your whole team can recall it)\n'
+    '- {{"action": "recall", "key": "<name>"}}  '
+    '(or {{"action": "recall", "query": "<text>"}} to search by meaning)'
+)
+HUMAN_OPTION = (
+    '- {{"action": "ask_human", "role": "<who must approve>", '
+    '"reason": "<why>"}}  (blocks until a human approves; use before anything '
+    'irreversible)'
 )
 # Said to a planner. The names are the planner's to invent; what it must not
 # do is invent them twice differently, which is the one failure the runtime
@@ -109,7 +132,15 @@ class ActionError(Exception):
 
 
 class LLMAgent(Agent):
-    """params: role, goal, tools, model, may_spawn, max_steps, max_children."""
+    """params: role, goal, tools, model, may_spawn, max_steps, max_children,
+    publishes, subscribes, retries, context."""
+
+    @property
+    def retries(self) -> int | None:
+        """The kernel reads restart budgets off the agent object (p.4); for a
+        dynamic agent the budget arrives in params like everything else."""
+        value = self.params.get("retries")
+        return value if isinstance(value, int) and value >= 0 else None
 
     @property
     def name(self) -> str:
@@ -135,6 +166,8 @@ class LLMAgent(Agent):
             options.append(PUBLISH_OPTION)
         if may_spawn:
             options.append(SPAWN_OPTIONS)
+        options.append(MEMORY_OPTIONS)
+        options.append(HUMAN_OPTION)
         notes = ""
         if may_spawn:
             notes += WIRING_NOTE
@@ -176,6 +209,10 @@ class LLMAgent(Agent):
                 continue
 
             kind = action.get("action")
+            # The decision itself goes on the record before it runs: the
+            # kernel logs every syscall, but the model's choices between them
+            # are the part an operator reading `agent logs` actually wants.
+            await ctx.log(f"decided: {_describe(action)}")
             if kind == "done":
                 return action.get("result")
 
@@ -189,6 +226,12 @@ class LLMAgent(Agent):
                 )
             elif kind == "wait":
                 observation = await self._do_wait(ctx, action, children, may_spawn)
+            elif kind == "remember":
+                observation = await self._do_remember(ctx, action)
+            elif kind == "recall":
+                observation = await self._do_recall(ctx, action)
+            elif kind == "ask_human":
+                observation = await self._do_ask(ctx, action)
             else:
                 observation = (
                     f"Action {kind!r} is not available to you."
@@ -260,6 +303,12 @@ class LLMAgent(Agent):
             publishes=publishes,
             subscribes=subscribes,
         )
+        priority = action.get("priority")
+        if priority in ("High", "Normal", "Low"):
+            child.priority = priority  # spec_of reads it; the scheduler uses it
+        budget = action.get("retries")
+        if isinstance(budget, int) and budget > 0:
+            child.params["retries"] = min(budget, 3)
         pid = await ctx.spawn(
             child, grant=wanted, publishes=publishes, subscribes=subscribes
         )
@@ -313,6 +362,55 @@ class LLMAgent(Agent):
             parts.append("events arrived: " + _clip(results["events"]))
         return "; ".join(parts) or "The wait resolved."
 
+    async def _do_remember(self, ctx, action: dict) -> str:
+        key = action.get("key")
+        if not isinstance(key, str) or not key.strip():
+            return 'Refused: "remember" needs a non-empty "key".'
+        kinds = {"shared": "shared", "private": "working",
+                 "longterm": "longterm", "semantic": "semantic"}
+        kind = kinds.get(action.get("kind", "shared"))
+        if kind is None:
+            return (
+                f"Refused: unknown memory kind {action.get('kind')!r}. "
+                f"Use one of: {', '.join(kinds)}."
+            )
+        try:
+            await ctx.memory.store(key, action.get("value"), kind=kind)
+        except Exception as exc:
+            return f"remember failed: {exc}"
+        audience = {
+            "shared": "your whole team can recall it",
+            "working": "only you can recall it, and it dies with you",
+            "longterm": f"future agents named {self.name!r} will see it",
+            "semantic": "it is searchable by meaning with recall+query",
+        }[kind]
+        return f"Remembered {key!r} ({audience})."
+
+    async def _do_recall(self, ctx, action: dict) -> str:
+        query = action.get("query")
+        if isinstance(query, str) and query.strip():
+            hits = await ctx.memory.retrieve(kind="semantic", query=query)
+            return f"Search for {query!r} found: " + _clip(hits, 2000)
+        key = action.get("key")
+        if not isinstance(key, str) or not key.strip():
+            return 'Refused: "recall" needs a "key" or a "query".'
+        # Team state first, then my own notes, then what past runs left behind.
+        for kind in ("shared", "working", "longterm", "semantic"):
+            value = await ctx.memory.retrieve(key, kind=kind)
+            if value is not None:
+                return f"{key!r} = " + _clip(value, 2000)
+        return f"Nothing is stored under {key!r} anywhere you can read."
+
+    async def _do_ask(self, ctx, action: dict) -> str:
+        role = str(action.get("role") or "Operator")
+        reason = str(action.get("reason") or self.params.get("goal", ""))[:300]
+        try:
+            approval = await ctx.request_approval(role=role, reason=reason)
+        except Exception as exc:
+            return f"The approval request failed: {exc}"
+        by = approval.get("by") if isinstance(approval, dict) else None
+        return f"A human ({by or role}) approved: {reason!r}. Proceed."
+
     # -- parsing -------------------------------------------------------------
     @staticmethod
     def _prompt(transcript: list[str]) -> str:
@@ -341,6 +439,27 @@ class LLMAgent(Agent):
         if not isinstance(action, dict) or "action" not in action:
             raise ActionError('JSON must be an object with an "action" key')
         return action
+
+
+def _describe(action: dict) -> str:
+    """One log line per decision, so `agent logs` narrates the model's run."""
+    kind = action.get("action")
+    detail = {
+        "tool": lambda: f"{action.get('capability')}.{action.get('op')}",
+        "spawn": lambda: f"{action.get('role')} "
+                         f"(tools={','.join(action.get('tools') or []) or '-'})",
+        "publish": lambda: action.get("event") or action.get("type"),
+        "wait": lambda: ("events " + ",".join(action.get("events") or [])
+                         if action.get("events") else "my agents"),
+        "remember": lambda: f"{action.get('key')} ({action.get('kind', 'shared')})",
+        "recall": lambda: action.get("key") or f"query {action.get('query')!r}",
+        "ask_human": lambda: action.get("role") or "Operator",
+        "done": lambda: "finishing",
+    }.get(kind)
+    try:
+        return f"{kind}: {detail()}" if detail else str(kind)
+    except Exception:
+        return str(kind)
 
 
 def _clip(value: Any, limit: int = 800) -> str:

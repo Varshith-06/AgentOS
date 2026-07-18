@@ -92,6 +92,10 @@ def _task_request(daemon, body: dict) -> tuple[dict, list[str]]:
             raise BadRequest(f'"{key}" must be a positive integer')
         return min(value, cap)
 
+    retries = body.get("retries", 0)
+    if not isinstance(retries, int) or retries < 0:
+        raise BadRequest('"retries" must be a non-negative integer')
+
     planner = LLMAgent(
         role=str(body.get("role") or "Planner"),
         goal=goal,
@@ -101,9 +105,16 @@ def _task_request(daemon, body: dict) -> tuple[dict, list[str]]:
         may_spawn=True,
         max_steps=bounded("max_steps", 12, MAX_STEPS),
         max_children=bounded("max_children", 8, MAX_CHILDREN),
+        retries=min(retries, 5),
         context=body.get("context"),
     )
-    return spec_of(planner), list(tools)
+    priority = body.get("priority")
+    if priority is not None and priority not in ("High", "Normal", "Low"):
+        raise BadRequest('"priority" must be "High", "Normal", or "Low"')
+    spec = spec_of(planner)
+    if priority is not None:
+        spec["priority"] = priority
+    return spec, list(tools)
 
 
 def _task_tree(store, pid: int) -> dict | None:

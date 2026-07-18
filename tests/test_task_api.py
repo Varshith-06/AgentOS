@@ -149,6 +149,21 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
             self.post, "/task", {"goal": "x", "tools": [], "max_steps": -1})
         self.assertEqual(code, 400)
 
+    async def test_priority_and_retries_are_accepted_and_clamped(self):
+        code, body = await asyncio.to_thread(
+            self.post, "/task",
+            {"goal": "x", "tools": [], "priority": "High", "retries": 99})
+        self.assertEqual(code, 200)
+        row = await asyncio.to_thread(self.client.status, body["pid"])
+        self.assertEqual(row["priority"], "High")
+        self.assertEqual(row["spec"]["params"]["retries"], 5)  # clamped
+
+    async def test_a_nonsense_priority_is_refused(self):
+        code, body = await asyncio.to_thread(
+            self.post, "/task", {"goal": "x", "tools": [], "priority": "Urgent"})
+        self.assertEqual(code, 400)
+        self.assertIn("priority", body["error"])
+
     # -- POST /agents now carries a grant too --------------------------------
     async def test_submit_accepts_a_grant(self):
         from agentos.agents.llm import LLMAgent

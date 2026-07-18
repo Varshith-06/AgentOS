@@ -53,7 +53,7 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
     # `agent tools`.
     cols = [
         "PID", "NAME", "PARENT", "CHILDREN", "STATUS", "PRIORITY",
-        "WAITING ON", "MODEL", "PERMS", "MEM", "COST", "CKPT", "TIME",
+        "WAITING ON", "MODEL", "PERMS", "EVENTS", "MEM", "COST", "CKPT", "TIME",
     ]
     data = [
         [
@@ -66,6 +66,14 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
             r["waiting_on"] or "-",
             r.get("model") or "-",
             ",".join(r.get("permissions") or []) or "-",
+            # The wiring a parent gave a runtime-invented agent (p.5): what it
+            # may announce, and what it waits for. "-" for unwired agents.
+            " ".join(
+                part for part in (
+                    "pub:" + ",".join(r["publishes"]) if r.get("publishes") else "",
+                    "sub:" + ",".join(r["subscribes"]) if r.get("subscribes") else "",
+                ) if part
+            ) or "-",
             # private memory follows the pid; longterm/semantic follow the name
             _bytes_str(mem.get(str(r["pid"]), 0) + mem.get(r["name"], 0)),
             f"${costs[r['pid']]['cost']:.4f}" if r["pid"] in costs else "-",

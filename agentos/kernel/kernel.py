@@ -1192,7 +1192,16 @@ class Kernel:
             f"{proc.name} failed ({proc.exit_reason}); "
             f"restart {proc.retries}/{budget}",
         )
-        self._journals[proc.pid] = self.store.load_journals().get(proc.pid, [])
+        journal = self.store.load_journals().get(proc.pid, [])
+        # Drop the failed tail before replaying. A journaled *failure* replays
+        # as the same failure — a retry that replays its own fatal error fails
+        # identically forever, which is a restart in name only. A failed
+        # syscall had no side effect, so re-executing it live is safe, and is
+        # the entire point: replay every success, re-attempt the failure.
+        # Failures the agent caught mid-run stay put — only the tail falls.
+        while journal and self._entry_failed(journal[-1]):
+            journal.pop()
+        self._journals[proc.pid] = journal
         proc.exit_reason = None
         proc.ended_at = None
         proc.pending = None
@@ -1206,6 +1215,23 @@ class Kernel:
         self.ready.append(proc)
         self._nudge()
         return True
+
+    @staticmethod
+    def _entry_failed(entry: dict[str, Any]) -> bool:
+        """Did this journaled syscall end in failure?
+
+        Two shapes: a kernel refusal lands in the entry's own error field; a
+        tool or model that ran and failed lands inside the reply value.
+        """
+        if entry.get("error"):
+            return True
+        value = entry.get("value")
+        if isinstance(value, dict):
+            for kind in ("tool", "model"):
+                inner = value.get(kind)
+                if isinstance(inner, dict) and inner.get("error"):
+                    return True
+        return False
 
     def _announce_exit(self, proc: AgentProcess) -> None:
         """A terminated agent is an event and a resolved dependency (p.5)."""
@@ -1223,6 +1249,40 @@ class Kernel:
         )
         for w in self.deps.resolve(dg.key(dg.AGENT, proc.pid), proc.result):
             self._wake_waiter(w)
+        self._fail_orphaned_event_waits()
+
+    def _fail_orphaned_event_waits(self) -> None:
+        """An exit can make a pending event wait unsatisfiable — the agent
+        that just died may have been the only one wired to publish it.
+
+        The proof at wait time (_unpublishable) covers waits that start
+        doomed; this covers waits that become doomed. Same standard: refused
+        only when every live agent is wired and none names the event. The
+        waiter gets an error naming the real cause, instead of sitting until
+        the stall detector declares the whole runtime stuck.
+        """
+        for pid, w in list(self.deps.waiting.items()):
+            waiter = self.table.get(pid)
+            if not waiter.alive:
+                continue
+            for key in w.remaining:
+                kind, _, name = key.partition(":")
+                if kind != dg.EVENT or not self._unpublishable(name):
+                    continue
+                self.deps.cancel(pid)
+                self._log(
+                    pid, "deadlock",
+                    f"wait on {name!r} orphaned: its last possible publisher exited",
+                )
+                self._requeue(waiter, Reply(
+                    req_id=w.req_id,
+                    error=(
+                        f"nobody can publish {name!r} anymore: the last agent "
+                        "wired for it exited without publishing. Its work may "
+                        "have failed — check on your agents instead of waiting."
+                    ),
+                ))
+                break
 
     # -- deadlock (p.4: the scheduler must not simply hang) ---------------
     def _detect_deadlock(self) -> None:
