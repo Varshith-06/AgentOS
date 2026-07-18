@@ -43,8 +43,16 @@ class Daemon:
         recover: bool = False,
         models: Any = None,
         permissions: Any = None,
+        tools: dict[str, dict[str, Any]] | None = None,
+        task_tools: list[str] | None = None,
     ) -> None:
         self.store = store if store is not None else Store(dirpath)
+        #: What POST /task is allowed to grant. The operator decides this when
+        #: starting the runtime; a caller may request any subset and nothing
+        #: outside it. Empty means submitted tasks get no tools at all, which
+        #: is the right default for an endpoint that accepts a sentence from
+        #: the network and builds a team out of it.
+        self.task_tools: set[str] = set(task_tools or ())
 
         # First boot convenience: a daemon with no routing table would refuse
         # every request_model, so seed the default chain (frontier -> local ->
@@ -66,6 +74,10 @@ class Daemon:
             recover=recover,
             models=models,
             permissions=permissions,
+            # Driver configuration belongs to the operator, not the caller:
+            # the filesystem root a hosted runtime sandboxes agents to is
+            # exactly the sort of thing a submitted task must not choose.
+            tools=tools,
         )
         # Bind synchronously so self.url is real before start() is awaited.
         self.server = make_server(self, host, port)

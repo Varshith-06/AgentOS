@@ -13,11 +13,23 @@ via Daemon.call, so kernel state is only ever touched from its own thread.
     GET  /health                      runtime info
     GET  /ps                          processes + costs + memory usage
     GET  /agents/<pid>                one row (result included when finished)
+    GET  /task/<pid>                  a task's result plus the team it created
     GET  /logs?limit=  /events?limit=
-    POST /agents                      {"spec": ...} -> {"pid": ...}
+    POST /agents                      {"spec":..., "grant":[...]} -> {"pid":...}
+    POST /task                        {"goal":..., "tools":[...]} -> {"pid":...}
     POST /agents/<pid>/kill|pause|resume
     POST /agents/<pid>/approve        {"role": ...}
     POST /shutdown
+
+`grant` is the capability ceiling for everything the submitted agent goes on
+to create (see kernel/permissions.py). It is the security-relevant field on
+this API: without it a submitted agent falls back to the name matrix, and with
+it no descendant can exceed what was granted here.
+
+POST /task is the doorway for work that has no predefined shape — a sentence
+and a tool list in, a planner out. What it may grant is bounded twice: by the
+daemon's own `task_tools` allowlist, which the operator sets when starting the
+runtime, and by the caller's request within it.
 """
 
 from __future__ import annotations
@@ -27,8 +39,94 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .. import __version__
+from ..drivers import REGISTRY
 from ..kernel.store import Store
 from .dashboard import DASHBOARD_HTML
+
+MAX_GOAL_CHARS = 4000
+MAX_STEPS = 50
+MAX_CHILDREN = 20
+
+
+class BadRequest(Exception):
+    """The caller sent something this endpoint will not act on."""
+
+
+def _task_request(daemon, body: dict) -> tuple[dict, list[str]]:
+    """Validate a /task body and return (planner spec, grant).
+
+    Everything here is caller-supplied and arrives over a socket, so nothing
+    is trusted: the goal is bounded, the tool list must name real drivers, and
+    the request can only ask for capabilities the operator already allowed.
+    """
+    from ..agents.base import spec_of
+    from ..agents.llm import LLMAgent
+
+    goal = body.get("goal")
+    if not isinstance(goal, str) or not goal.strip():
+        raise BadRequest('"goal" must be a non-empty string')
+    if len(goal) > MAX_GOAL_CHARS:
+        raise BadRequest(f'"goal" is longer than {MAX_GOAL_CHARS} characters')
+
+    tools = body.get("tools", [])
+    if not isinstance(tools, list) or any(not isinstance(t, str) for t in tools):
+        raise BadRequest('"tools" must be a list of capability names')
+    unknown = [t for t in tools if t not in REGISTRY]
+    if unknown:
+        raise BadRequest(
+            f"unknown capabilit{'y' if len(unknown) == 1 else 'ies'}: "
+            f"{', '.join(unknown)}. Known: {', '.join(sorted(REGISTRY))}"
+        )
+    allowed = daemon.task_tools
+    refused = [t for t in tools if t not in allowed]
+    if refused:
+        raise BadRequest(
+            f"this runtime does not allow {', '.join(refused)} for submitted "
+            f"tasks. It allows: {', '.join(sorted(allowed)) or 'no tools at all'}"
+            " (set --task-tools when starting the daemon)"
+        )
+
+    def bounded(key: str, default: int, cap: int) -> int:
+        value = body.get(key, default)
+        if not isinstance(value, int) or value < 1:
+            raise BadRequest(f'"{key}" must be a positive integer')
+        return min(value, cap)
+
+    planner = LLMAgent(
+        role=str(body.get("role") or "Planner"),
+        goal=goal,
+        tools=list(tools),
+        model=str(body.get("model") or "fast"),
+        child_model=body.get("child_model") or body.get("model") or "fast",
+        may_spawn=True,
+        max_steps=bounded("max_steps", 12, MAX_STEPS),
+        max_children=bounded("max_children", 8, MAX_CHILDREN),
+        context=body.get("context"),
+    )
+    return spec_of(planner), list(tools)
+
+
+def _task_tree(store, pid: int) -> dict | None:
+    """A task's root row plus every agent it created, at any depth."""
+    rows = {r["pid"]: r for r in store.processes()}
+    root = rows.get(pid)
+    if root is None:
+        return None
+    tree, frontier = [], [pid]
+    while frontier:
+        current = frontier.pop()
+        for r in rows.values():
+            if r["parent"] == current:
+                tree.append(r)
+                frontier.append(r["pid"])
+    return {
+        "pid": pid,
+        "status": root["status"],
+        "result": root["result"],
+        "error": root["exit_reason"] if root["status"] == "Failed" else None,
+        "goal": (root.get("spec") or {}).get("params", {}).get("goal"),
+        "agents": sorted(tree, key=lambda r: r["pid"]),
+    }
 
 
 def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
@@ -96,6 +194,12 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
                         self._json(200, rows[0])
                     else:
                         self._json(404, {"error": f"no such agent: pid {parts[1]}"})
+                elif len(parts) == 2 and parts[0] == "task":
+                    tree = _task_tree(store, int(parts[1]))
+                    if tree is None:
+                        self._json(404, {"error": f"no such task: pid {parts[1]}"})
+                    else:
+                        self._json(200, tree)
                 elif parts == ["logs"]:
                     self._json(200, store.logs(limit=self._limit(query)))
                 elif parts == ["events"]:
@@ -114,8 +218,24 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
                 body = self._body()
                 kernel = daemon.kernel
                 if parts == ["agents"]:
-                    pid = daemon.call(lambda: kernel.submit_spec(body["spec"]))
+                    grant = body.get("grant")
+                    if grant is not None and (
+                        not isinstance(grant, list)
+                        or any(not isinstance(g, str) for g in grant)
+                    ):
+                        raise BadRequest('"grant" must be a list of capability names')
+                    pid = daemon.call(
+                        lambda: kernel.submit_spec(body["spec"], grant=grant)
+                    )
                     self._json(200, {"pid": pid})
+                elif parts == ["task"]:
+                    spec, grant = _task_request(daemon, body)
+                    pid = daemon.call(lambda: kernel.submit_spec(spec, grant=grant))
+                    self._json(200, {
+                        "pid": pid,
+                        "granted": grant,
+                        "poll": f"/task/{pid}",
+                    })
                 elif len(parts) == 3 and parts[0] == "agents":
                     pid = int(parts[1])
                     action = parts[2]
@@ -136,6 +256,8 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
                     self._json(200, {"ok": True})
                 else:
                     self._json(404, {"error": f"no such route: POST {self.path}"})
+            except BadRequest as exc:
+                self._json(400, {"error": str(exc)})
             except Exception as exc:
                 self._json(400, {"error": f"{type(exc).__name__}: {exc}"})
 

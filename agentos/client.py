@@ -69,12 +69,51 @@ class RuntimeClient:
             ) from exc
 
     # -- submitting work -----------------------------------------------------
-    def submit(self, agent: Agent, priority: str | None = None) -> int:
-        """Hand the agent to the daemon. Returns its pid in the shared runtime."""
+    def submit(
+        self,
+        agent: Agent,
+        priority: str | None = None,
+        grant: list[str] | None = None,
+    ) -> int:
+        """Hand the agent to the daemon. Returns its pid in the shared runtime.
+
+        `grant` pins this agent's capabilities and becomes the ceiling for
+        anything it goes on to create: no descendant can hold more. Without
+        it the daemon's permission matrix decides by agent name, which is
+        what a named, pre-declared agent wants.
+        """
         spec = spec_of(agent)
         if priority is not None:
             spec["priority"] = priority
-        return self._request("POST", "/agents", {"spec": spec})["pid"]
+        body: dict[str, Any] = {"spec": spec}
+        if grant is not None:
+            body["grant"] = list(grant)
+        return self._request("POST", "/agents", body)["pid"]
+
+    def task(
+        self,
+        goal: str,
+        tools: list[str] | None = None,
+        model: str = "fast",
+        **options: Any,
+    ) -> int:
+        """Submit work that has no predefined shape: a sentence and a tool list.
+
+        The daemon spawns a planner, which invents whatever agents the goal
+        needs — there is no graph and no agent classes to write. `tools` is
+        the ceiling for the whole tree, and must fall within whatever the
+        operator allowed with --task-tools. Returns the planner's pid; use
+        wait(pid) for the result, or task_tree(pid) to see the team too.
+        """
+        body: dict[str, Any] = {
+            "goal": goal, "tools": list(tools or []), "model": model
+        }
+        body.update(options)
+        return self._request("POST", "/task", body)["pid"]
+
+    def task_tree(self, pid: int) -> dict[str, Any]:
+        """A task's status and result, plus every agent the planner created."""
+        return self._request("GET", f"/task/{pid}")
 
     def status(self, pid: int) -> dict[str, Any]:
         return self._request("GET", f"/agents/{pid}")

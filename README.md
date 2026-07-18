@@ -2,7 +2,7 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 130 passing](https://img.shields.io/badge/tests-130%20passing-brightgreen)
+![Tests: 142 passing](https://img.shields.io/badge/tests-142%20passing-brightgreen)
 ![Status: all phases complete](https://img.shields.io/badge/status-complete-blue)
 
 An operating system-inspired runtime for autonomous AI agents. Linux abstracts
@@ -39,7 +39,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
   real OS process with syscalls carried over a token-authenticated loopback
   TCP socket (or stdio pipes), and serves a live dashboard
 - A CLI (`agent ps / top / wait / events / logs / kill / pause / resume /
-  approve / grant / revoke / recover / daemon`), 130 tests, three full example
+  approve / grant / revoke / recover / daemon`), 142 tests, three full example
   applications, a benchmark that measures the design's claims, and a
   head-to-head against LangGraph, CrewAI, AutoGen, and Temporal
 
@@ -52,7 +52,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
 | **Durable step overhead** | 3.7ms — lowest of the five |
 | **Realistic workloads** | +2.3%, within a few points of every comparator |
 | **Multi-app cost ledger** | exact to the token across concurrent applications |
-| **Test suite** | 130 tests, zero dependencies, fully offline |
+| **Test suite** | 142 tests, zero dependencies, fully offline |
 
 ---
 
@@ -97,7 +97,7 @@ calls.
 Reproduce all of it:
 
 ```bash
-python -m unittest discover tests -v    # 130 tests
+python -m unittest discover tests -v    # 142 tests
 python benchmarks/bench.py              # the three tables above
 ```
 
@@ -467,6 +467,35 @@ That is what makes an unpredictable agent tree bounded: you cannot answer
 "what could this touch?" by reading code that does not exist yet, so the kernel
 answers it instead.
 
+**Over HTTP**, that is the whole hosted story — a sentence and a tool list in,
+a team out:
+
+```bash
+python -m agentos.cli daemon --task-tools filesystem,http
+```
+
+```bash
+curl -X POST localhost:7070/task -d '{
+  "goal": "perform an experiment about trees",
+  "tools": ["filesystem"]
+}'
+# -> {"pid": 1, "granted": ["filesystem"], "poll": "/task/1"}
+
+curl localhost:7070/task/1
+# -> status, result, and every agent the planner invented
+```
+
+Authority is bounded twice. `--task-tools` is what the *operator* will ever
+allow a submitted task to hold; the request asks for a subset of that; and
+attenuation carries it down the tree. A request for `shell` on the daemon
+above is refused at the door with a 400, not discovered later in an audit
+log. Everything else arriving over the network is treated the same way: the
+goal is length-bounded, tool names must resolve to real drivers, and step and
+child limits are clamped rather than trusted.
+
+`POST /agents` takes the same `grant`, for when you are submitting an agent
+class you wrote rather than a sentence.
+
 ### Memory
 
 Six kinds of memory behind four verbs, backend invisible to agents
@@ -632,7 +661,7 @@ No installs, no API keys — the kernel is demonstrated with agents that only
 sleep, so scheduling is deterministic and a bug reproduces the same way twice.
 
 ```bash
-python -m unittest discover tests -v          # 130 tests
+python -m unittest discover tests -v          # 142 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
@@ -726,4 +755,5 @@ tests/        test_kernel.py test_events.py test_approvals.py test_tools.py
               test_memory.py test_models.py test_recovery.py test_daemon.py
               test_spec_gaps.py    # the design-doc items an audit found missing
               test_dynamic_agents.py  # runtime-invented agents; the grant ceiling
+              test_task_api.py     # the hosted path, and what it refuses
 ```

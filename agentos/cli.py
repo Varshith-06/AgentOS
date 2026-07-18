@@ -281,6 +281,7 @@ def cmd_daemon(args, store: Store) -> int:
         slots=args.slots,
         isolation=args.isolation,
         transport=args.transport,
+        task_tools=[t.strip() for t in args.task_tools.split(",") if t.strip()],
         recover=recover,
     )
     print(f"agentos daemon at {daemon.url}  "
@@ -418,6 +419,12 @@ def build_parser() -> argparse.ArgumentParser:
     daemon.add_argument(
         "--isolation", choices=["process", "task"], default="process",
         help="agents as real OS subprocesses (default) or asyncio tasks",
+    )
+    daemon.add_argument(
+        "--task-tools", default="",
+        help="comma-separated capabilities POST /task may grant, e.g. "
+             "'filesystem,http'. Empty (the default) means submitted tasks "
+             "get no tools; this is the ceiling for everything they create",
     )
     daemon.add_argument(
         "--transport", choices=["socket", "pipe"], default="socket",
