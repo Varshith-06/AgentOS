@@ -102,7 +102,13 @@ class Context:
         return reply.value
 
     # -- processes (Phase 1) ---------------------------------------------
-    async def spawn(self, agent: Any, grant: list[str] | None = None) -> int:
+    async def spawn(
+        self,
+        agent: Any,
+        grant: list[str] | None = None,
+        publishes: list[str] | None = None,
+        subscribes: list[str] | None = None,
+    ) -> int:
         """Create a child agent. Returns its PID immediately; does not block.
 
         `grant` delegates capabilities to the child, and may only name things
@@ -111,10 +117,21 @@ class Context:
         pre-declared agent wants. Pass it when you are creating an agent whose
         identity is its parameters rather than its class, so its authority
         travels with the process instead of the name.
+
+        `publishes`/`subscribes` wire the child into the event bus: the names
+        it may announce, and the ones it will wait for. Naming both sides here
+        is what stops a publisher and a waiter drifting apart — events match
+        by exact string, and two agents that disagree about one do not fail,
+        they hang. A child that publishes outside what you gave it is refused.
+        Leave them None for an agent that decides its own events, which is
+        what a hand-written one does.
         """
         from ..agents.base import spec_of
 
-        return await self._syscall("spawn", spec=spec_of(agent), grant=grant)
+        return await self._syscall(
+            "spawn", spec=spec_of(agent), grant=grant,
+            publishes=publishes, subscribes=subscribes,
+        )
 
     async def sleep(self, seconds: float) -> None:
         """Yield the execution slot for `seconds`. State becomes Sleeping."""

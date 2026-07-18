@@ -56,7 +56,7 @@ from ..runtime.subproc import ProcessExecutor, SocketExecutor
 from . import depgraph as dg
 from . import gpu
 from .depgraph import DependencyGraph
-from .events import Event, EventBus
+from .events import KERNEL_EVENTS, Event, EventBus, InvalidEvent
 from .memory import MemoryManager
 from .messages import NotSerializable, Reply, Syscall, assert_serializable
 from .models import ModelError, ModelManager
@@ -568,36 +568,76 @@ class Kernel:
         getattr(self, f"_sys_{call.op}")(proc, call, **call.args)
 
     def _sys_spawn(
-        self, proc: AgentProcess, spec: dict[str, Any], grant: list[str] | None = None
+        self,
+        proc: AgentProcess,
+        spec: dict[str, Any],
+        grant: list[str] | None = None,
+        publishes: list[str] | None = None,
+        subscribes: list[str] | None = None,
     ) -> int:
-        """Create a child, optionally delegating a subset of my capabilities.
+        """Create a child: delegate capabilities to it, and wire its events.
 
-        Attenuation is the rule: a parent may hand a child any part of what it
-        holds and nothing else. That single check is what bounds a task whose
-        shape nobody wrote down — a planner spawned with {http, sql} cannot
-        produce a descendant that reaches the shell, however many layers of
-        agents it invents on the way.
+        Two different rules, for two different problems.
+
+        `grant` is *security*. Attenuation applies: a parent may hand a child
+        any part of what it holds and nothing else, so a planner spawned with
+        {http, sql} cannot produce a descendant that reaches the shell,
+        however many layers of agents it invents on the way.
+
+        `publishes`/`subscribes` are *correctness*. Events match by exact
+        string, so a publisher and a waiter who disagree on a name do not
+        error — the waiter simply never wakes. Letting the parent name both
+        sides makes them come from one source, and recording what it named
+        means a child that publishes something else is refused with a message
+        it can act on, instead of hanging. Nothing here is a security
+        boundary: publishing an event harms nobody.
         """
         child = self._create_agent(spec)
-        if grant is None:
+        if grant is None and publishes is None and subscribes is None:
             return self.spawn(child, parent=proc.pid)
 
-        mine = self.perms.capabilities(proc.name, proc.pid)
-        wanted = set(grant)
-        if "*" not in mine and not wanted <= mine:
-            over = ", ".join(sorted(wanted - mine))
-            raise PermissionDenied(
-                f"{proc.name} (pid {proc.pid}) cannot grant {over}: "
-                f"it holds only {', '.join(sorted(mine)) or 'nothing'}"
-            )
+        if grant is not None:
+            mine = self.perms.capabilities(proc.name, proc.pid)
+            wanted = set(grant)
+            if "*" not in mine and not wanted <= mine:
+                over = ", ".join(sorted(wanted - mine))
+                raise PermissionDenied(
+                    f"{proc.name} (pid {proc.pid}) cannot grant {over}: "
+                    f"it holds only {', '.join(sorted(mine)) or 'nothing'}"
+                )
+        for names, what in ((publishes, "publishes"), (subscribes, "subscribes")):
+            if names is not None and (
+                not isinstance(names, list)
+                or any(not isinstance(n, str) or not n.strip() for n in names)
+            ):
+                raise InvalidEvent(f"{what} must be a list of event type names")
+
         pid = self.spawn(child, parent=proc.pid)
-        self.perms.assign(pid, wanted)
-        self.table.get(pid).permissions = sorted(wanted)
-        self._publish_row(self.table.get(pid))
-        self._log(
-            proc.pid, "grant",
-            f"{proc.name} granted pid {pid} {', '.join(sorted(wanted)) or 'nothing'}",
-        )
+        kid = self.table.get(pid)
+        if grant is not None:
+            self.perms.assign(pid, set(grant))
+            kid.permissions = sorted(set(grant))
+            self._log(
+                proc.pid, "grant",
+                f"{proc.name} granted pid {pid} "
+                f"{', '.join(sorted(set(grant))) or 'nothing'}",
+            )
+        if publishes is not None:
+            kid.publishes = list(dict.fromkeys(publishes))
+        if subscribes is not None:
+            kid.subscribes = list(dict.fromkeys(subscribes))
+            # Subscribe on the child's behalf, now: an event fired before it
+            # gets a slot must still be waiting in its inbox when it asks.
+            for event_type in kid.subscribes:
+                self.bus.subscribe(pid, event_type)
+        if publishes or subscribes:
+            self._log(
+                proc.pid, "wire",
+                f"{proc.name} wired pid {pid}: "
+                f"publishes {', '.join(kid.publishes or []) or 'nothing'}; "
+                f"waits for {', '.join(kid.subscribes or []) or 'nothing'}",
+            )
+        self._publish_row(kid)
         return pid
 
     def _sys_log(self, proc: AgentProcess, message: str) -> None:
@@ -630,8 +670,37 @@ class Kernel:
     def _sys_publish(
         self, proc: AgentProcess, event_type: str, payload: dict[str, Any]
     ) -> None:
+        if proc.publishes is not None and event_type not in proc.publishes:
+            # The parent wired this agent for a specific vocabulary. Publishing
+            # outside it is almost always a name the model invented on the
+            # spot, which nobody is waiting for — so say so now, while there
+            # is still something to correct.
+            allowed = ", ".join(proc.publishes) or "nothing"
+            raise InvalidEvent(
+                f"{proc.name} was not wired to publish {event_type!r}; "
+                f"it may publish: {allowed}"
+            )
         self.publish(event_type, source_pid=proc.pid, **payload)
         return None
+
+    def _unpublishable(self, event_type: str) -> bool:
+        """Can we *prove* nobody will ever publish this event type?
+
+        Only then is refusing a wait safe. The kernel publishes its own event
+        types whenever it likes, and any live agent without a declared
+        vocabulary may publish anything — so a wait is refused only when
+        every live agent has a contract and none of them names this.
+        """
+        if event_type in KERNEL_EVENTS:
+            return False
+        for other in self.table.all():
+            if not other.alive:
+                continue
+            if other.publishes is None:  # unrestricted: it might
+                return False
+            if event_type in other.publishes:
+                return False
+        return True
 
     def _sys_subscribe(self, proc: AgentProcess, event_types: list[str]) -> None:
         for event_type in event_types:
@@ -713,8 +782,22 @@ class Kernel:
             if buffered is not None:  # it already fired while we were busy
                 self.store.record_consumption(proc.pid, buffered.seq)
                 resolved[dg.key(dg.EVENT, event_type)] = buffered.payload
-            else:
-                deps.add(dg.key(dg.EVENT, event_type))
+                continue
+            if timer is None and self._unpublishable(event_type):
+                # Nobody alive is wired to publish this and the kernel never
+                # will, so this wait can only end in the deadlock detector.
+                # Failing here names the actual mistake — usually a
+                # misremembered event name — while the waiter can still act.
+                self._log(
+                    proc.pid, "deadlock",
+                    f"refused wait on {event_type!r}: nobody publishes it",
+                )
+                raise dg.Deadlock(
+                    f"no live agent is wired to publish {event_type!r}, so "
+                    "waiting for it would hang. Check the event name against "
+                    "what you wired, or wait for one of your agents instead."
+                )
+            deps.add(dg.key(dg.EVENT, event_type))
 
         timer_key = dg.key(dg.TIMER, call.req_id)
         if timer is not None:

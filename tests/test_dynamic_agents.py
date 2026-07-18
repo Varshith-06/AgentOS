@@ -239,6 +239,188 @@ class LLMAgentTest(Base):
         self.assertEqual(again.params["tools"], ["filesystem"])
 
 
+# -- events the parent wires, not the programmer -----------------------------
+
+class Wirer(Agent):
+    """Spawns one child with a declared event vocabulary."""
+
+    async def run(self, ctx):
+        pid = await ctx.spawn(
+            Announcer(events=self.params["says"]),
+            publishes=self.params["publishes"],
+            subscribes=self.params.get("subscribes"),
+        )
+        return await ctx.wait(pid)
+
+
+class Announcer(Agent):
+    """Tries to publish whatever it was told to say."""
+
+    async def run(self, ctx):
+        said, refused = [], []
+        for event in self.params["events"]:
+            try:
+                await ctx.publish(event, note="hi")
+                said.append(event)
+            except Exception as exc:
+                refused.append(str(exc))
+        return {"said": said, "refused": refused}
+
+
+class EventWiringTest(Base):
+    async def test_a_child_may_publish_what_its_parent_wired(self):
+        result = await asyncio.wait_for(
+            self.kernel().run_until_done(
+                Wirer(publishes=["Ready"], says=["Ready"])),
+            timeout=30)
+        self.assertEqual(result["said"], ["Ready"])
+        self.assertEqual(result["refused"], [])
+
+    async def test_a_child_cannot_publish_a_name_it_was_not_wired_for(self):
+        """The failure this whole mechanism exists to prevent: a model
+        inventing a name nobody is listening for, and nobody noticing."""
+        result = await asyncio.wait_for(
+            self.kernel().run_until_done(
+                Wirer(publishes=["Ready"], says=["Redy"])),
+            timeout=30)
+        self.assertEqual(result["said"], [])
+        self.assertIn("was not wired to publish 'Redy'", result["refused"][0])
+
+    async def test_a_child_wired_for_nothing_publishes_nothing(self):
+        result = await asyncio.wait_for(
+            self.kernel().run_until_done(Wirer(publishes=[], says=["Any"])),
+            timeout=30)
+        self.assertEqual(result["said"], [])
+
+    async def test_a_hand_written_agent_is_unrestricted(self):
+        """Declarations are for agents somebody else wired. An agent that was
+        not wired decides its own events, as every example always has."""
+        k = self.kernel()
+        result = await asyncio.wait_for(
+            k.run_until_done(Announcer(events=["Whatever", "IWant"])), timeout=30)
+        self.assertEqual(result["said"], ["Whatever", "IWant"])
+
+    async def test_the_wiring_shows_up_on_the_process(self):
+        k = self.kernel()
+        pid = k.spawn(Wirer(publishes=["Ready"], says=["Ready"]))
+        await asyncio.wait_for(k.run(), timeout=30)
+        child = [p for p in k.table.all() if p.parent == pid][0]
+        self.assertEqual(child.row()["publishes"], ["Ready"])
+
+
+class Slowpoke(Agent):
+    async def run(self, ctx):
+        await ctx.sleep(0.05)
+        return "done"
+
+
+class LateAnnouncer(Agent):
+    """Publishes after a beat, so a waiter is listening when it does."""
+
+    async def run(self, ctx):
+        await ctx.sleep(0.05)
+        await ctx.publish(self.params["event"], note="hi")
+        return "announced"
+
+
+class Hopeful(Agent):
+    async def run(self, ctx):
+        try:
+            await ctx.wait_all(events=[self.params["event"]])
+        except Exception as exc:
+            return {"refused": str(exc)}
+        return {"refused": None}
+
+
+class UnsatisfiableWaitTest(Base):
+    async def test_waiting_for_what_nobody_publishes_fails_instead_of_hanging(self):
+        """With every live agent wired, an unpublishable name is provably a
+        mistake — so it is refused now rather than found by the deadlock
+        detector after everything has stalled."""
+        k = self.kernel()
+        pid = k.spawn(Wirer(publishes=["Ready"], says=["Ready"]))
+        k.table.get(pid).publishes = ["Ready"]  # wire the root too
+        hopeful = k.spawn(Hopeful(event="NeverComes"))
+        k.table.get(hopeful).publishes = []
+        await asyncio.wait_for(k.run(), timeout=30)
+        self.assertIn("no live agent is wired to publish",
+                      k.table.get(hopeful).result["refused"])
+
+    async def test_a_kernel_event_is_always_waitable(self):
+        """AgentFinished and friends have no declared publisher — the kernel
+        emits them — so they must never be refused."""
+        k = self.kernel()
+        pid = k.spawn(Hopeful(event="AgentFinished"))
+        k.table.get(pid).publishes = []
+        # Sleeps first, so the waiter is certainly subscribed before this
+        # finishes and the kernel fires AgentFinished. Without the sleep the
+        # test races on which of the two reaches its syscall first.
+        k.spawn(Slowpoke())
+        await asyncio.wait_for(k.run(), timeout=30)
+        self.assertIsNone(k.table.get(pid).result["refused"])
+
+    async def test_an_unwired_agent_keeps_the_wait_open(self):
+        """If anything alive could still publish it, the wait must stand."""
+        k = self.kernel()
+        pid = k.spawn(Hopeful(event="Maybe"))
+        k.table.get(pid).publishes = []
+        k.spawn(LateAnnouncer(event="Maybe"))  # unwired: may publish anything
+        await asyncio.wait_for(k.run(), timeout=30)
+        self.assertIsNone(k.table.get(pid).result["refused"])
+
+
+class LLMEventTest(Base):
+    async def test_a_planner_wires_two_agents_that_never_name_each_other(self):
+        k = self.kernel(models={"classes": {
+            "planner": scripted(
+                {"action": "spawn", "role": "Producer", "goal": "make it",
+                 "tools": [], "model": "producer", "publishes": ["DataReady"]},
+                {"action": "spawn", "role": "Consumer", "goal": "use it",
+                 "tools": [], "model": "consumer",
+                 "publishes": ["Done"], "subscribes": ["DataReady"]},
+                {"action": "wait", "events": ["Done"]},
+                {"action": "done", "result": "pipeline finished"},
+            ),
+            "producer": scripted(
+                {"action": "publish", "event": "DataReady", "payload": {"n": 1}},
+                {"action": "done", "result": "produced"},
+            ),
+            "consumer": scripted(
+                {"action": "publish", "event": "Done"},
+                {"action": "done", "result": "consumed"},
+            ),
+        }})
+        pid = k.submit_spec(
+            spec_of(LLMAgent(role="Planner", goal="g", tools=[],
+                             model="planner", may_spawn=True)))
+        await asyncio.wait_for(k.run(), timeout=60)
+        self.assertEqual(k.table.get(pid).result, "pipeline finished")
+        flowed = {e["type"]: e["subscribers"] for e in self.store.events()}
+        self.assertIn("DataReady", flowed)
+        self.assertTrue(flowed["DataReady"], "DataReady woke nobody")
+
+    async def test_a_worker_publishing_an_unwired_name_is_told_so(self):
+        k = self.kernel(models={"classes": {
+            "planner": scripted(
+                {"action": "spawn", "role": "W", "goal": "g", "tools": [],
+                 "model": "worker", "publishes": ["Right"]},
+                {"action": "wait"},
+                {"action": "done", "result": "finished anyway"},
+            ),
+            "worker": scripted(
+                {"action": "publish", "event": "Wrong"},
+                {"action": "done", "result": "corrected"},
+            ),
+        }})
+        pid = k.submit_spec(
+            spec_of(LLMAgent(role="P", goal="g", tools=[], model="planner",
+                             may_spawn=True)))
+        await asyncio.wait_for(k.run(), timeout=60)
+        self.assertEqual(k.table.get(pid).result, "finished anyway")
+        worker = [p for p in k.table.all() if p.name == "W"][0]
+        self.assertEqual(worker.result, "corrected")
+
+
 class ParsingTest(unittest.TestCase):
     def test_it_reads_json_out_of_a_fenced_block(self):
         action = LLMAgent._parse('```json\n{"action": "done", "result": 1}\n```')

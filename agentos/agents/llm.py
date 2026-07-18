@@ -21,13 +21,29 @@ in the kernel). So the capability set handed to the root agent is the ceiling
 for the entire task tree, however many layers of agents it invents. Give the
 planner `["http"]` and nothing it creates, at any depth, can reach the shell.
 
+Coordination
+------------
+Agents never call each other; they publish events and the runtime decides who
+wakes. That rule does not relax just because the agents were invented at
+runtime — but somebody has to choose the event names, and no programmer is
+present to do it. So the **parent chooses**: a spawn carries the events that
+child may publish and the ones it will wait for, and the kernel holds it to
+them. The planner is naming both sides of every match it creates, which is
+what keeps a publisher and a waiter from drifting apart. A child that
+publishes a name it was not given is refused, rather than announcing into a
+void that nobody is listening to.
+
+The root planner is unrestricted: it is where a task's vocabulary comes from.
+
 Protocol
 --------
 The model is asked to reply with one JSON object per turn:
 
     {"action": "tool",  "capability": "http", "op": "get", "params": {...}}
-    {"action": "spawn", "role": "...", "goal": "...", "tools": [...]}
-    {"action": "wait"}
+    {"action": "spawn", "role": "...", "goal": "...", "tools": [...],
+                        "publishes": [...], "subscribes": [...]}
+    {"action": "publish", "event": "...", "payload": {...}}
+    {"action": "wait",  "events": [...]}      (or bare, for your own agents)
     {"action": "done",  "result": ...}
 
 Anything unparseable is handed back to the model as an observation rather than
@@ -56,7 +72,7 @@ Reply with exactly one JSON object and nothing else. Options:
 
 Rules:
 - You may only use these tools: {tools}
-- Do not explain yourself outside the JSON.
+{events}- Do not explain yourself outside the JSON.
 - Prefer finishing over spawning when the goal is within your reach."""
 
 TOOL_OPTION = (
@@ -64,10 +80,28 @@ TOOL_OPTION = (
     '"op": "<operation>", "params": {{...}}}}'
 )
 SPAWN_OPTIONS = (
-    '- {{"action": "spawn", "role": "<short name>", "goal": "<what they do>", '
-    '"tools": [<subset of your tools>]}}\n'
-    '- {{"action": "wait"}}  (block until every agent you spawned has finished)'
+    '- {{"action": "spawn", "role": "<short name>", "goal": "<what they do>",\n'
+    '     "tools": [<subset of your tools>],\n'
+    '     "publishes": [<event names this agent will announce>],\n'
+    '     "subscribes": [<event names it should wait for first>]}}\n'
+    '- {{"action": "wait"}}  (block until every agent you spawned has finished)\n'
+    '- {{"action": "wait", "events": [<event names>]}}  (block until they fire)'
 )
+PUBLISH_OPTION = (
+    '- {{"action": "publish", "event": "<one you may publish>", '
+    '"payload": {{...}}}}'
+)
+# Said to a planner. The names are the planner's to invent; what it must not
+# do is invent them twice differently, which is the one failure the runtime
+# cannot recover from on its own.
+WIRING_NOTE = """- You choose the event names for the agents you create. Pick
+  clear ones (e.g. "MeasurementsReady") and use the SAME name in the
+  publisher's "publishes" and the waiter's "subscribes" — an agent waiting for
+  a name nobody publishes will never wake.
+"""
+PUBLISH_NOTE = """- You may publish only these events: {allowed}. Publish one
+  when the work it names is done, so whoever is waiting on it can continue.
+"""
 
 
 class ActionError(Exception):
@@ -91,14 +125,28 @@ class LLMAgent(Agent):
         max_steps = int(self.params.get("max_steps", MAX_STEPS))
         max_children = int(self.params.get("max_children", MAX_CHILDREN))
         model = self.params.get("model", "fast")
+        # What my parent wired me to announce, and what it wired me to wait
+        # for. Empty for a root planner, which invents the vocabulary instead.
+        publishes: list[str] = list(self.params.get("publishes") or [])
+        awaits: list[str] = list(self.params.get("subscribes") or [])
+
+        options = ([TOOL_OPTION] if tools else [])
+        if publishes:
+            options.append(PUBLISH_OPTION)
+        if may_spawn:
+            options.append(SPAWN_OPTIONS)
+        notes = ""
+        if may_spawn:
+            notes += WIRING_NOTE
+        if publishes:
+            notes += PUBLISH_NOTE.format(allowed=", ".join(publishes))
 
         system = SYSTEM.format(
             role=self.params.get("role", "an agent"),
             goal=self.params.get("goal", "(no goal given)"),
             tools=", ".join(tools) or "none",
-            options="\n".join(
-                ([TOOL_OPTION] if tools else []) + ([SPAWN_OPTIONS] if may_spawn else [])
-            ),
+            events=notes,
+            options="\n".join(options),
         )
 
         transcript: list[str] = []
@@ -106,6 +154,16 @@ class LLMAgent(Agent):
         if context:
             transcript.append(f"Context from whoever created you: {context}")
         children: list[int] = []
+
+        # Wired to wait for something? Then that is the first thing to do, and
+        # it is the kernel's job to wake us — not something to ask a model
+        # about. The scheduler resolves the dependency; we resume after.
+        if awaits:
+            arrived = await ctx.wait_all(events=list(awaits))
+            transcript.append(
+                "The events you were waiting for arrived: "
+                + _clip(arrived.get("events"))
+            )
 
         for step in range(max_steps):
             reply = await ctx.request_model(
@@ -123,12 +181,14 @@ class LLMAgent(Agent):
 
             if kind == "tool":
                 observation = await self._do_tool(ctx, action, tools)
+            elif kind == "publish":
+                observation = await self._do_publish(ctx, action, publishes)
             elif kind == "spawn" and may_spawn:
                 observation = await self._do_spawn(
                     ctx, action, tools, children, max_children
                 )
-            elif kind == "wait" and may_spawn:
-                observation = await self._do_wait(ctx, children)
+            elif kind == "wait":
+                observation = await self._do_wait(ctx, action, children, may_spawn)
             else:
                 observation = (
                     f"Action {kind!r} is not available to you."
@@ -182,28 +242,76 @@ class LLMAgent(Agent):
                 f"Refused: you cannot grant {', '.join(over)} — you do not hold it. "
                 f"You may grant any of: {', '.join(tools) or 'nothing'}."
             )
+        publishes = [e for e in (action.get("publishes") or []) if isinstance(e, str)]
+        subscribes = [e for e in (action.get("subscribes") or []) if isinstance(e, str)]
         child = LLMAgent(
             role=action.get("role", "worker"),
             goal=action.get("goal", ""),
             tools=wanted,
             # Children may be routed to a different capability class than the
-            # planner: reasoning to plan, something cheap to execute.
-            model=self.params.get("child_model", self.params.get("model", "fast")),
+            # planner: reasoning to plan, something cheap to execute. The
+            # planner may name one per child, bounded by the classes the
+            # operator configured — asking for an unknown class fails the
+            # child's first call, not the runtime.
+            model=action.get("model")
+            or self.params.get("child_model", self.params.get("model", "fast")),
             may_spawn=False,  # one level of delegation per spawn, by default
             max_steps=int(self.params.get("child_max_steps", MAX_STEPS)),
+            publishes=publishes,
+            subscribes=subscribes,
         )
-        pid = await ctx.spawn(child, grant=wanted)
+        pid = await ctx.spawn(
+            child, grant=wanted, publishes=publishes, subscribes=subscribes
+        )
         children.append(pid)
+        wiring = ""
+        if publishes:
+            wiring += f" It will publish: {', '.join(publishes)}."
+        if subscribes:
+            wiring += f" It waits for: {', '.join(subscribes)} before starting."
         return (
             f"Created agent pid {pid} ({action.get('role')}) with "
-            f"{', '.join(wanted) or 'no tools'}. It is running."
+            f"{', '.join(wanted) or 'no tools'}.{wiring}"
         )
 
-    async def _do_wait(self, ctx, children: list[int]) -> str:
-        if not children:
-            return "You have not created any agents, so there is nothing to wait for."
-        results = await ctx.wait_all(agents=list(children))
-        return "Your agents finished: " + _clip(results.get("agents"))
+    async def _do_publish(self, ctx, action: dict, publishes: list[str]) -> str:
+        event = action.get("event") or action.get("type")
+        if event not in publishes:
+            # Refused here as well as in the kernel, so the model is told what
+            # it may say rather than just that it said the wrong thing.
+            return (
+                f"Refused: you were not wired to publish {event!r}. "
+                f"You may publish: {', '.join(publishes) or 'nothing'}."
+            )
+        payload = action.get("payload")
+        if not isinstance(payload, dict):
+            payload = {k: v for k, v in action.items()
+                       if k not in ("action", "event", "type", "payload")}
+        await ctx.publish(event, **payload)
+        return f"Published {event}. Anyone waiting on it has been woken."
+
+    async def _do_wait(
+        self, ctx, action: dict, children: list[int], may_spawn: bool
+    ) -> str:
+        events = [e for e in (action.get("events") or []) if isinstance(e, str)]
+        agents = list(children) if (may_spawn and not events) else []
+        if not events and not agents:
+            return (
+                "There is nothing to wait for: you have created no agents and "
+                "named no events."
+            )
+        try:
+            results = await ctx.wait_all(agents=agents, events=events)
+        except Exception as exc:
+            # Waiting on a name nobody publishes is refused by the kernel
+            # rather than hanging. Hand the reason back so it can be fixed.
+            return f"That wait was refused: {exc}"
+        parts = []
+        if results.get("agents"):
+            parts.append("your agents finished: " + _clip(results["agents"]))
+        if results.get("events"):
+            parts.append("events arrived: " + _clip(results["events"]))
+        return "; ".join(parts) or "The wait resolved."
 
     # -- parsing -------------------------------------------------------------
     @staticmethod

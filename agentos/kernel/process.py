@@ -37,6 +37,16 @@ class AgentProcess:
     #: Times this agent has been restarted after a failure (p.4: the
     #: scheduler is responsible for retries).
     retries: int = 0
+    #: Event types this process was told it may publish, assigned by whoever
+    #: spawned it. None means unrestricted — a hand-written agent, or the
+    #: root of a task, which is where a vocabulary comes from in the first
+    #: place. A list (including an empty one) is a contract: publishing
+    #: anything else is refused, so a model's typo is an error rather than a
+    #: subscriber that never wakes.
+    publishes: list[str] | None = None
+    #: Event types this process was wired to wait for. Recorded for the same
+    #: reason: so `agent ps` can show what a runtime-invented agent is for.
+    subscribes: list[str] | None = None
 
     # Runtime-only handles. Never cross the message boundary, never persisted.
     task: asyncio.Task | None = field(default=None, repr=False, compare=False)
@@ -89,6 +99,8 @@ class AgentProcess:
             "model": self.model,
             "permissions": list(self.permissions),
             "retries": self.retries,
+            "publishes": None if self.publishes is None else list(self.publishes),
+            "subscribes": None if self.subscribes is None else list(self.subscribes),
         }
 
 

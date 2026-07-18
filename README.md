@@ -2,7 +2,7 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 142 passing](https://img.shields.io/badge/tests-142%20passing-brightgreen)
+![Tests: 152 passing](https://img.shields.io/badge/tests-152%20passing-brightgreen)
 ![Status: all phases complete](https://img.shields.io/badge/status-complete-blue)
 
 An operating system-inspired runtime for autonomous AI agents. Linux abstracts
@@ -39,7 +39,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
   real OS process with syscalls carried over a token-authenticated loopback
   TCP socket (or stdio pipes), and serves a live dashboard
 - A CLI (`agent ps / top / wait / events / logs / kill / pause / resume /
-  approve / grant / revoke / recover / daemon`), 142 tests, three full example
+  approve / grant / revoke / recover / daemon`), 152 tests, three full example
   applications, a benchmark that measures the design's claims, and a
   head-to-head against LangGraph, CrewAI, AutoGen, and Temporal
 
@@ -52,7 +52,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
 | **Durable step overhead** | 3.7ms — lowest of the five |
 | **Realistic workloads** | +2.3%, within a few points of every comparator |
 | **Multi-app cost ledger** | exact to the token across concurrent applications |
-| **Test suite** | 142 tests, zero dependencies, fully offline |
+| **Test suite** | 152 tests, zero dependencies, fully offline |
 
 ---
 
@@ -97,7 +97,7 @@ calls.
 Reproduce all of it:
 
 ```bash
-python -m unittest discover tests -v    # 142 tests
+python -m unittest discover tests -v    # 152 tests
 python benchmarks/bench.py              # the three tables above
 ```
 
@@ -467,6 +467,49 @@ That is what makes an unpredictable agent tree bounded: you cannot answer
 "what could this touch?" by reading code that does not exist yet, so the kernel
 answers it instead.
 
+**The invented agents coordinate through the event bus, like everything else.**
+Agents never call each other — but somebody has to choose event names, and no
+programmer is present to do it. So the parent chooses: a spawn carries the
+events that child may publish and the ones it will wait for.
+
+```json
+{"action": "spawn", "role": "Surveyor", "tools": ["filesystem"],
+ "publishes": ["MeasurementsReady"], "subscribes": []}
+{"action": "spawn", "role": "Analyst",  "tools": [],
+ "publishes": ["AnalysisReady"], "subscribes": ["MeasurementsReady"]}
+```
+
+Running `examples/planner.py` shows what flows:
+
+```
+pid 2  Surveyor  publishes=MeasurementsReady  waits_for=-
+pid 3  Analyst   publishes=AnalysisReady      waits_for=MeasurementsReady
+
+MeasurementsReady  from pid 2 -> woke pid 3
+AnalysisReady      from pid 3 -> woke pid 1
+```
+
+The Surveyor and the Analyst never name each other; the runtime does the
+waking. No event name appears anywhere in the source — the planner invented
+both, and the only thing it was told is to use the same one on each side.
+
+**Why the kernel records the wiring.** Events match by exact string, so a
+publisher and a waiter who disagree on a name do not fail — the waiter never
+wakes, and it surfaces as a stall. Because the parent named both sides, the
+kernel knows the vocabulary, which buys two things a model cannot get on its
+own: publishing a name it was not wired for is **refused with a message it
+can act on**, and waiting for a name that *provably* nobody will publish
+**fails immediately** instead of hanging. A wait is only refused when every
+live agent has a declared vocabulary and none of them names it — kernel
+events like `AgentFinished` are always waitable, and one unwired agent is
+enough to keep the wait open.
+
+Note the difference from tool grants. Attenuation exists for **security**;
+event wiring exists for **correctness**. Publishing an event harms nobody, so
+declarations bound nothing — they only turn a silent hang into a loud error.
+A hand-written agent, wired by no one, still decides its own events exactly
+as `examples/pipeline.py` always has.
+
 **Over HTTP**, that is the whole hosted story — a sentence and a tool list in,
 a team out:
 
@@ -661,7 +704,7 @@ No installs, no API keys — the kernel is demonstrated with agents that only
 sleep, so scheduling is deterministic and a bug reproduces the same way twice.
 
 ```bash
-python -m unittest discover tests -v          # 142 tests
+python -m unittest discover tests -v          # 152 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
