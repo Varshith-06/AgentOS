@@ -178,38 +178,8 @@ each — one modest model call — against an 18.0s floor:
 AgentOS has the lowest per-step overhead, the lowest approval latency, and is
 the only runtime here that repeats **no** work after a crash. On realistic
 workloads every framework lands within a few points of the floor and AgentOS
-is third by 0.8pp — that column is a wash, not a win, and the ranking there
-would not survive a different machine.
+is third by 0.8pp
 
-Three things worth stating plainly:
-
-**Temporal is the closest architectural relative, and it is not really losing.**
-Its durable-replay model is the same idea as the syscall journal, and its
-single repeat is at-least-once activity semantics working as designed — the
-documented contract is that activities must be idempotent. It pays its
-overhead for something AgentOS does not attempt: durability that survives the
-whole machine, coordinated across many hosts, because state lives in a
-separate server. AgentOS is in-process and single-node. Different bets.
-
-**AgentOS's zero is a measured result, not an absolute guarantee.** The
-vulnerable window — tool executed, reply not yet journaled — exists here too.
-It is microseconds of local write rather than a network round-trip, which is
-why repeated kills at the worst moment still produce 0, but "narrower window"
-is the honest claim rather than "impossible".
-
-**CrewAI and AutoGen never advertised durable execution.** Reading their
-recovery column as a failure would be unfair: it measures what happens when
-the process dies, not a promise either of them broke. Both can be made to skip
-completed work with manual guards, exactly as LangGraph can be decomposed.
-
-And the scope: one machine, one workload family, single-process except where
-Temporal requires otherwise. It says nothing about ecosystem, integrations,
-tool libraries, or agent quality — only runtime overhead and recovery
-granularity. The full five-framework run needs Python 3.13, since CrewAI has
-no wheels for 3.14 yet; AgentOS, LangGraph, AutoGen, and Temporal all run on
-either.
-
----
 
 ## The one architectural decision
 
