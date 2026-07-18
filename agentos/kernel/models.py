@@ -122,6 +122,7 @@ class ModelManager:
             )
 
         estimated = _estimate_tokens(prompt) + _estimate_tokens(system or "")
+        candidates = self._rank(candidates, estimated)
         failures: list[str] = []
         for cand in candidates:
             label = f"{cand.get('provider', '?')}:{cand.get('model', '?')}"
@@ -157,6 +158,56 @@ class ModelManager:
         raise ModelError(
             f"no available model for need {need!r}: " + "; ".join(failures)
         )
+
+    def _rank(self, candidates: list[dict], estimated: int) -> list[dict]:
+        """Order the candidates by the p.7 selection criteria.
+
+        The default stays "the order a human wrote them in", because that is
+        the most honest expression of a preference and the config is where a
+        preference belongs. Setting `prefer` on the class asks the runtime to
+        decide instead:
+
+            "reasoning": {"prefer": "cheapest", "candidates": [...]}
+
+        cheapest  — lowest projected cost for this prompt, using the same
+                    cost_per_mtok rates the ledger bills at
+        fastest   — lowest declared latency
+        best      — highest declared quality
+
+        Candidates that cannot serve the prompt at all sort last rather than
+        being dropped, so the failure message still names them.
+        """
+        if not isinstance(candidates, dict):
+            prefer, items = None, list(candidates)
+        else:
+            prefer = candidates.get("prefer")
+            items = list(candidates.get("candidates", []))
+        if not prefer or prefer == "order":
+            return items
+
+        def projected_cost(c: dict) -> float:
+            rates = c.get("cost_per_mtok") or [0.0, 0.0]
+            # Output length is unknown before the call; assume it mirrors the
+            # prompt. Wrong in detail, right in ordering, which is all rank needs.
+            return (estimated * rates[0] + estimated * rates[1]) / 1e6
+
+        keys = {
+            "cheapest": projected_cost,
+            "fastest": lambda c: c.get("latency", 0.0),
+            "best": lambda c: -float(c.get("quality", 0)),
+        }
+        key = keys.get(prefer)
+        if key is None:
+            self._log(f"unknown prefer={prefer!r}; using config order")
+            return items
+        fits = [c for c in items if self._fits(c, estimated)]
+        rest = [c for c in items if not self._fits(c, estimated)]
+        return sorted(fits, key=key) + rest
+
+    @staticmethod
+    def _fits(cand: dict, estimated: int) -> bool:
+        window = cand.get("context_window")
+        return window is None or estimated <= window
 
     def _unavailable(self, cand: dict[str, Any]) -> str | None:
         provider = cand.get("provider")

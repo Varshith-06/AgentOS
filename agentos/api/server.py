@@ -87,6 +87,8 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
                         "processes": store.processes(),
                         "costs": store.model_costs(),
                         "memory": store.memory_usage(),
+                        "models": store.model_usage(),
+                        "tools": store.tool_usage(),
                     })
                 elif len(parts) == 2 and parts[0] == "agents":
                     rows = [r for r in store.processes() if r["pid"] == int(parts[1])]

@@ -53,7 +53,13 @@ LEGAL_TRANSITIONS: dict[AgentState, frozenset[AgentState]] = {
     AgentState.CHECKPOINTING: frozenset({AgentState.RUNNING, AgentState.FAILED}),
     AgentState.SUSPENDED: frozenset({AgentState.READY, AgentState.FAILED}),
     AgentState.FINISHED: frozenset(),
-    AgentState.FAILED: frozenset(),
+    # Failed ends the agent's run but not necessarily the process: p.4 makes
+    # retries a scheduler responsibility, so a restart is a real edge out of
+    # Failed rather than a state assignment behind the machine's back. Only
+    # Kernel._retry takes it, and only within the configured budget — which
+    # is why Failed still reads as terminal everywhere else (TERMINAL, and
+    # the `alive` property, both still count it as dead).
+    AgentState.FAILED: frozenset({AgentState.READY}),
 }
 
 

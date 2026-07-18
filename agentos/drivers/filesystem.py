@@ -11,6 +11,7 @@ from .base import ToolDriver, ToolError
 class Filesystem(ToolDriver):
     name = "filesystem"
     timeout = 10.0
+    cacheable = ("read", "list", "exists")  # writes are never served stale
 
     def __init__(self, root: str | Path = ".", **kw: Any) -> None:
         super().__init__(**kw)

@@ -49,6 +49,7 @@ class _TextExtractor(HTMLParser):
 
 class Browser(Http):
     name = "browser"
+    cacheable = ("get", "open")  # fetching a page twice should not cost twice
 
     async def op_open(self, url: str) -> dict[str, Any]:
         page = await self.op_get(url)

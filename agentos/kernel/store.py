@@ -108,6 +108,17 @@ CREATE TABLE IF NOT EXISTS model_calls (
     ok            INTEGER NOT NULL DEFAULT 1,
     error         TEXT
 );
+CREATE TABLE IF NOT EXISTS tool_calls (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         REAL    NOT NULL,
+    pid        INTEGER,
+    agent      TEXT,
+    capability TEXT    NOT NULL,
+    op         TEXT    NOT NULL,
+    latency    REAL    NOT NULL DEFAULT 0,
+    ok         INTEGER NOT NULL DEFAULT 1,
+    error      TEXT
+);
 """
 
 
@@ -164,6 +175,17 @@ class Store:
 
     def heartbeat(self) -> None:
         self.db.execute("UPDATE runtime SET heartbeat = ? WHERE id = 1", (time.time(),))
+
+    def flush(self) -> None:
+        """Push the write-ahead log into the database file.
+
+        Autocommit means committed data already survives this process dying;
+        a WAL checkpoint is what makes it survive the machine dying, which is
+        the guarantee an explicit ctx.checkpoint() is asking for."""
+        try:
+            self.db.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        except sqlite3.OperationalError:
+            pass  # another connection holds it; the next flush gets it
 
     def runtime_info(self) -> dict[str, Any] | None:
         row = self.db.execute("SELECT * FROM runtime WHERE id = 1").fetchone()
@@ -392,6 +414,56 @@ class Store:
             "SELECT * FROM model_calls ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in reversed(rows)]
+
+    # -- tool accounting (p.8: the runtime knows all tool usage) -----------
+    def record_tool_call(
+        self, pid: int, agent: str, capability: str, op: str,
+        latency: float, ok: bool, error: str | None,
+    ) -> None:
+        self.db.execute(
+            "INSERT INTO tool_calls (ts, pid, agent, capability, op, latency,"
+            " ok, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (time.time(), pid, agent, capability, op, latency, int(ok), error),
+        )
+
+    def tool_usage(self) -> dict[str, dict[str, Any]]:
+        """capability -> calls, failures, and mean latency this run."""
+        rows = self.db.execute(
+            "SELECT capability, COUNT(*) AS calls,"
+            " SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed,"
+            " AVG(latency) AS mean_latency"
+            " FROM tool_calls GROUP BY capability ORDER BY calls DESC"
+        ).fetchall()
+        return {
+            r["capability"]: {
+                "calls": r["calls"],
+                "failed": int(r["failed"] or 0),
+                "mean_latency": round(float(r["mean_latency"] or 0.0), 3),
+            }
+            for r in rows
+        }
+
+    def model_usage(self) -> dict[str, dict[str, Any]]:
+        """model -> calls, tokens, cost, and mean latency. The p.8 dashboard
+        wants usage per *model*; model_costs() answers per agent."""
+        rows = self.db.execute(
+            "SELECT model, COUNT(*) AS calls, SUM(input_tokens) AS input_tokens,"
+            " SUM(output_tokens) AS output_tokens, SUM(cost) AS cost,"
+            " AVG(latency) AS mean_latency,"
+            " SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed"
+            " FROM model_calls GROUP BY model ORDER BY calls DESC"
+        ).fetchall()
+        return {
+            r["model"]: {
+                "calls": r["calls"],
+                "input_tokens": int(r["input_tokens"] or 0),
+                "output_tokens": int(r["output_tokens"] or 0),
+                "cost": float(r["cost"] or 0.0),
+                "mean_latency": round(float(r["mean_latency"] or 0.0), 3),
+                "failed": int(r["failed"] or 0),
+            }
+            for r in rows
+        }
 
     # -- events ----------------------------------------------------------
     def append_event(

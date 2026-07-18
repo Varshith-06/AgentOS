@@ -220,6 +220,10 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
                 "request_tool",
                 # Phase 5: memory as a kernel service; models by class, not name
                 "memory", "request_model",
+                # Phase 6: the explicit form of the implicit checkpoint (p.9).
+                # Adds no reach — it names a durable point, it does not expose
+                # kernel state.
+                "checkpoint",
             },
         )
 

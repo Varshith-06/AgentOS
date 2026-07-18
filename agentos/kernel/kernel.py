@@ -54,6 +54,7 @@ from ..drivers import REGISTRY, ToolError
 from ..runtime.executor import Executor
 from ..runtime.subproc import ProcessExecutor, SocketExecutor
 from . import depgraph as dg
+from . import gpu
 from .depgraph import DependencyGraph
 from .events import Event, EventBus
 from .memory import MemoryManager
@@ -66,7 +67,7 @@ from .states import TERMINAL, AgentState
 from .store import Store
 
 #: Syscalls that keep the agent's slot (it never stops running).
-NONBLOCKING = {"spawn", "log", "publish", "subscribe", "memory"}
+NONBLOCKING = {"spawn", "log", "publish", "subscribe", "memory", "checkpoint"}
 
 #: States from which the system can still make progress on its own.
 LIVE = frozenset(
@@ -94,12 +95,16 @@ class Kernel:
         recover: bool = False,
         isolation: str = "task",
         transport: str = "socket",
+        retries: int = 0,
         daemon: bool = False,
     ) -> None:
         self.table = ProcessTable()
         self.policy = get_policy(policy)
         self.slots = slots
         self.tick = tick
+        #: Default restart budget for an agent that raises (p.4). An agent
+        #: may override it with its own `retries` attribute.
+        self.retries = retries
         self.store = store if store is not None else Store()
 
         # The p.7 permission matrix. None means: watch the standard file next
@@ -250,6 +255,7 @@ class Kernel:
             priority=getattr(agent, "priority", "Normal"),
         )
         self.agents[proc.pid] = agent
+        proc.permissions = sorted(self.perms.capabilities(proc.name))
         self.ready.append(proc)
         self._publish_row(proc)
         self._log(
@@ -415,6 +421,7 @@ class Kernel:
             "slots": self.slots,
             "isolation": self.isolation,
             "transport": self.transport,
+            "gpu": gpu.summary(),  # None on a machine without one
             "running": sorted(self.running),
             "ready": [p.pid for p in self.ready],
             "processes": [p.row() for p in self.table.all()],
@@ -552,6 +559,29 @@ class Kernel:
     def _sys_log(self, proc: AgentProcess, message: str) -> None:
         self._log(proc.pid, "agent", message)
         return None
+
+    def _sys_checkpoint(self, proc: AgentProcess, label: str | None = None) -> int:
+        """kernel.checkpoint() from p.9 — the explicit form of what every
+        syscall already does implicitly.
+
+        Recovery does not need this call: a journaled syscall is a checkpoint
+        whether or not anyone asked. What it adds is the *observable* one —
+        the agent passes through CHECKPOINTING, so the p.3 state appears in
+        `agent ps` and `agent logs` instead of being a state the design
+        implies but nobody can ever see.
+        """
+        was = proc.state
+        if was is AgentState.RUNNING:
+            self.table.transition(proc, AgentState.CHECKPOINTING, waiting_on="journal")
+        self.store.flush()
+        self._log(
+            proc.pid, "checkpoint",
+            f"{proc.name} checkpoint #{proc.checkpoint + 1}"
+            + (f" ({label})" if label else ""),
+        )
+        if was is AgentState.RUNNING:
+            self.table.transition(proc, AgentState.RUNNING, waiting_on=None)
+        return proc.checkpoint + 1
 
     def _sys_publish(
         self, proc: AgentProcess, event_type: str, payload: dict[str, Any]
@@ -725,6 +755,12 @@ class Kernel:
 
         elapsed = asyncio.get_running_loop().time() - started
         ok = result["error"] is None
+        # p.8: the shared runtime knows all tool usage, the same way it knows
+        # all model usage. One row per dispatch, whoever's application it was.
+        self.store.record_tool_call(
+            pid=proc.pid, agent=proc.name, capability=capability, op=op,
+            latency=elapsed, ok=ok, error=result["error"],
+        )
         self._log(
             proc.pid,
             "tool",
@@ -853,6 +889,8 @@ class Kernel:
         elapsed = asyncio.get_running_loop().time() - started
         ok = result["error"] is None
         value = result["value"] or {}
+        if ok and value.get("model"):
+            proc.model = value["model"]  # the p.3 card's "Model:" line
         self.store.record_model_call(
             pid=proc.pid,
             agent=proc.name,
@@ -985,8 +1023,48 @@ class Kernel:
         self.deps.cancel(proc.pid)
         if proc.state not in TERMINAL:
             self.table.transition(proc, AgentState.FAILED)
+        # The failure is real and recorded before a restart is considered:
+        # what a retry does is come back out of Failed, not skip it.
+        if not killed and self._retry(proc):
+            return
         self._log(proc.pid, "exit", f"{proc.name} {proc.exit_reason}")
         self._announce_exit(proc)
+
+    def _retry(self, proc: AgentProcess) -> bool:
+        """Restart a crashed agent, up to its budget (p.4: retries are a
+        scheduler responsibility).
+
+        The agent is re-created from its spec and replays its journal, so a
+        retry costs only the work after its last completed syscall — the same
+        machinery crash recovery uses, applied to one process instead of the
+        whole runtime. A killed agent is never retried: a human said stop.
+        Off by default; `Kernel(retries=N)` or `Agent.retries` opts in.
+        """
+        budget = getattr(self.agents.get(proc.pid), "retries", None)
+        if budget is None:
+            budget = self.retries
+        if proc.retries >= budget:
+            return False
+        proc.retries += 1
+        self._log(
+            proc.pid, "retry",
+            f"{proc.name} failed ({proc.exit_reason}); "
+            f"restart {proc.retries}/{budget}",
+        )
+        self._journals[proc.pid] = self.store.load_journals().get(proc.pid, [])
+        proc.exit_reason = None
+        proc.ended_at = None
+        proc.pending = None
+        proc.current_op = None
+        # A dead task must not be mistaken for a live one: _admit starts a
+        # fresh task when this is None, and delivers an owed reply when it
+        # is not. A restart needs the former.
+        proc.task = None
+        self.agents[proc.pid] = self._create_agent(proc.spec)
+        self.table.transition(proc, AgentState.READY, waiting_on=None)
+        self.ready.append(proc)
+        self._nudge()
+        return True
 
     def _announce_exit(self, proc: AgentProcess) -> None:
         """A terminated agent is an event and a resolved dependency (p.5)."""

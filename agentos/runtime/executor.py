@@ -120,6 +120,16 @@ class Context:
     async def log(self, message: str) -> None:
         await self._syscall("log", message=message)
 
+    async def checkpoint(self, label: str | None = None) -> int:
+        """Take an explicit checkpoint (p.9's kernel.checkpoint()).
+
+        Every completed syscall is already a checkpoint, so this is never
+        required for recovery. It is here for the agent that wants to mark a
+        durable point by name — the state becomes Checkpointing while it
+        happens, which is what makes that lifecycle state observable.
+        """
+        return await self._syscall("checkpoint", label=label)
+
     # -- events (Phase 2, p.4-5) -----------------------------------------
     async def publish(self, event_type: str, **payload: Any) -> None:
         """Announce that something happened. You do not know who is listening."""

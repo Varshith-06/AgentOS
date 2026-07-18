@@ -59,6 +59,14 @@ class Permissions:
         return cls(path=default_path)  # None: watch the standard location
 
     # -- the check the kernel makes ---------------------------------------
+    def capabilities(self, agent: str) -> set[str]:
+        """Everything this agent name holds, its own grants plus "*"'s.
+
+        The p.3 process card shows an agent's permissions alongside its PID
+        and status, so the kernel needs the whole set and not just a yes/no.
+        """
+        return set(self.grants.get(agent, ())) | set(self.grants.get("*", ()))
+
     def allowed(self, agent: str, capability: str) -> bool:
         for scope in (agent, "*"):
             caps = self.grants.get(scope, ())

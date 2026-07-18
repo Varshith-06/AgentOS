@@ -52,6 +52,12 @@ OP_DELAY = 0.08  # seconds each billable operation takes
 STEPS = 30  # durable steps for the overhead measurement
 REAL_WORK = 0.6  # stand-in for what one real model call costs
 TICK = 0.005  # AgentOS scheduler tick
+APPS = 3  # independent applications, for the multi-app cost axis
+PER_APP = 5  # agents each
+APP_CALLS = 2  # billed model calls per agent
+MOCK = {"classes": {"fast": [
+    {"provider": "mock", "model": "mock-fast", "cost_per_mtok": [1.0, 5.0]},
+]}}
 
 
 def have(mod: str) -> bool:
@@ -147,6 +153,15 @@ class GatedAgent(Agent):
     async def run(self, ctx):
         await ctx.request_approval(role="Operator", reason="comparison")
         return "resumed"
+
+
+class BilledAgent(Agent):
+    """Makes billed model calls, for the multi-application cost ledger."""
+
+    async def run(self, ctx):
+        for _ in range(self.params["calls"]):
+            await ctx.request_model("fast", prompt="six words of benchmark prompt here")
+        return "done"
 
 
 def _kernel(rundir: str, tally: str, recover: bool = False, tick: float = TICK):
@@ -461,6 +476,88 @@ def steps_temporal(delay: float) -> float:
     return asyncio.run(go())
 
 
+# ============ 2c. cost under multi-application load (p.17) ==================
+#
+# The third axis Phase 8 asks for, and the one that is not really a race.
+# AgentOS runs one daemon that every application submits to, so there is a
+# single ledger and the question "what did all of this cost" has an answer.
+# LangGraph and CrewAI are libraries: each application owns its own state, so
+# the same question can only be answered by whoever remembered to add the
+# numbers up. Both columns are measured the same way — count what the shared
+# tally saw, and check the framework's own accounting against it.
+
+def load_agentos() -> tuple[float, int, bool]:
+    """Every app submits to one daemon; the kernel's ledger is the answer."""
+    from agentos.runtime.daemon import Daemon
+    from agentos import RuntimeClient
+
+    async def go() -> tuple[float, int, bool]:
+        tmp = tempfile.mkdtemp()
+        tally = os.path.join(tmp, "tally.db")
+        tally_init(tally)
+        store = Store(os.path.join(tmp, "run"))
+        daemon = Daemon(store=store, port=0, tick=TICK, isolation="task",
+                        models=MOCK)
+        task = asyncio.create_task(daemon.start())
+        await asyncio.sleep(0.1)
+        t0 = time.perf_counter()
+
+        def one_app() -> None:
+            client = RuntimeClient(url=daemon.url)
+            pids = [client.submit(BilledAgent(calls=APP_CALLS))
+                    for _ in range(PER_APP)]
+            for pid in pids:
+                client.wait(pid, timeout=120)
+
+        await asyncio.gather(*(asyncio.to_thread(one_app) for _ in range(APPS)))
+        wall = time.perf_counter() - t0
+        ledger = store.model_costs()
+        billed = sum(c["calls"] for c in ledger.values())
+        daemon.stop()
+        await asyncio.wait_for(task, timeout=30)
+        store.close()
+        return wall, billed, billed == APPS * PER_APP * APP_CALLS
+
+    return asyncio.run(go())
+
+
+def _load_library(run_one_app) -> tuple[float, int, bool]:
+    """Shared shape for the library frameworks: N apps as N threads, each
+    owning its own state, and the tally as the only global view."""
+    import concurrent.futures as cf
+
+    tmp = tempfile.mkdtemp()
+    tally = os.path.join(tmp, "tally.db")
+    tally_init(tally)
+    t0 = time.perf_counter()
+    with cf.ThreadPoolExecutor(max_workers=APPS) as pool:
+        list(pool.map(lambda i: run_one_app(tmp, tally, i), range(APPS)))
+    wall = time.perf_counter() - t0
+    seen = tally_count(tally)
+    return wall, seen, seen == APPS * PER_APP * APP_CALLS
+
+
+def load_langgraph() -> tuple[float, int, bool]:
+    def one_app(tmp: str, tally: str, i: int) -> None:
+        for a in range(PER_APP):
+            _lg_run(_lg_steps(tally, APP_CALLS, 0.0),
+                    os.path.join(tmp, f"lg{i}.db"), f"app{i}-{a}", False)
+    return _load_library(one_app)
+
+
+def load_crewai() -> tuple[float, int, bool]:
+    def one_app(tmp: str, tally: str, i: int) -> None:
+        for a in range(PER_APP):
+            flow_cls, _ = _crewai_flow(
+                tally, os.path.join(tmp, f"cw{i}-{a}.db"), APP_CALLS, 0.0)
+            flow_cls().kickoff()
+
+    # Quiet the whole run, not each thread: redirect_stdout swaps a global,
+    # so per-thread use would race and leak panels into the table.
+    with _quiet():
+        return _load_library(one_app)
+
+
 # ============================ 3. human in the loop ==========================
 
 async def hitl_agentos(rounds: int = 5) -> tuple[float, float]:
@@ -631,6 +728,26 @@ def main() -> int:
         _row("temporal", f"{v:.2f}s", f"+{(v-floor)/floor*100:.1f}%")
 
     # -- 3. human in the loop
+    # -- 2c. cost under multi-application load (the third p.17 axis)
+    print(f"\n2c. COST UNDER MULTI-APPLICATION LOAD — {APPS} independent apps,"
+          f"\n    {PER_APP} agents each, {APP_CALLS} billed calls per agent:"
+          f" does one ledger see them all?")
+    _row("framework", "wall", "calls seen", "ledger")
+    a_wall, a_seen, a_exact = load_agentos()
+    _row("agentos", f"{a_wall:.2f}s", f"{a_seen}/{APPS*PER_APP*APP_CALLS}",
+         "exact" if a_exact else "MISMATCH")
+    if HAVE["langgraph"]:
+        w, seen, exact = load_langgraph()
+        _row("langgraph", f"{w:.2f}s", f"{seen}/{APPS*PER_APP*APP_CALLS}",
+             "per-app only" if exact else "MISMATCH")
+    if HAVE["crewai"]:
+        w, seen, exact = load_crewai()
+        _row("crewai (flow)", f"{w:.2f}s", f"{seen}/{APPS*PER_APP*APP_CALLS}",
+             "per-app only" if exact else "MISMATCH")
+    print("   AgentOS bills through one kernel, so one ledger covers every")
+    print("   application. The others have no shared runtime to account in:")
+    print("   each app carries its own state, and totals are the caller's job.")
+
     print("\n3. HUMAN-IN-THE-LOOP — approve -> the agent has finished")
     _row("framework", "median", "worst")
     m, w = asyncio.run(hitl_agentos())

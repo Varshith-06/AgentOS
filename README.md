@@ -2,7 +2,7 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 87 passing](https://img.shields.io/badge/tests-87%20passing-brightgreen)
+![Tests: 111 passing](https://img.shields.io/badge/tests-111%20passing-brightgreen)
 ![Status: all phases complete](https://img.shields.io/badge/status-complete-blue)
 
 An operating system-inspired runtime for autonomous AI agents. Linux abstracts
@@ -38,8 +38,8 @@ anything to compare against, and skips whichever are absent.) Design doc:
 - A shared runtime daemon that outlives applications, runs each agent as a
   real OS process with syscalls carried over a token-authenticated loopback
   TCP socket (or stdio pipes), and serves a live dashboard
-- A CLI (`agent ps / top / events / logs / kill / pause / resume / approve /
-  grant / revoke / recover / daemon`), 87 tests, three full example
+- A CLI (`agent ps / top / wait / events / logs / kill / pause / resume /
+  approve / grant / revoke / recover / daemon`), 111 tests, three full example
   applications, a benchmark that measures the design's claims, and a
   head-to-head against LangGraph, CrewAI, AutoGen, and Temporal
 
@@ -48,11 +48,11 @@ anything to compare against, and skips whichever are absent.) Design doc:
 | | |
 |---|---|
 | **Crash recovery** | the only runtime measured that repeats **0** work after a hard kill |
-| **Approval latency** | 1.7ms median — lowest of the five |
-| **Durable step overhead** | 5.8ms — lowest of the five |
-| **Realistic workloads** | +4.1%, within a few points of every comparator |
+| **Approval latency** | 1.2ms median — lowest of the five |
+| **Durable step overhead** | 3.7ms — lowest of the five |
+| **Realistic workloads** | +2.3%, within a few points of every comparator |
 | **Multi-app cost ledger** | exact to the token across concurrent applications |
-| **Test suite** | 87 tests, zero dependencies, fully offline |
+| **Test suite** | 111 tests, zero dependencies, fully offline |
 
 ---
 
@@ -97,7 +97,7 @@ calls.
 Reproduce all of it:
 
 ```bash
-python -m unittest discover tests -v    # 87 tests
+python -m unittest discover tests -v    # 111 tests
 python benchmarks/bench.py              # the three tables above
 ```
 
@@ -144,22 +144,40 @@ never fires again — the in-flight case included.
 
 | framework | per step |
 |---|---|
-| **AgentOS** | **5.8ms** |
-| AutoGen | 6.5ms |
-| LangGraph | 8.0ms |
-| CrewAI Flows | 24.7ms |
-| Temporal | 68.9ms |
+| **AgentOS** | **3.7ms** |
+| AutoGen | 4.6ms |
+| LangGraph | 5.4ms |
+| CrewAI Flows | 16.3ms |
+| Temporal | 68.6ms |
 
 ### 3. Human-in-the-loop — approve → the agent has finished
 
 | framework | median | worst |
 |---|---|---|
-| **AgentOS** | **1.7ms** | **2.4ms** |
-| LangGraph | 4.6ms | 7.3ms |
-| Temporal | 10.9ms | 22.3ms |
+| **AgentOS** | **1.2ms** | **1.4ms** |
+| LangGraph | 3.3ms | 4.3ms |
+| Temporal | 8.7ms | 8.8ms |
 | CrewAI / AutoGen | — | no durable wait-for-a-human primitive to time |
 
-### 4. The same steps with real work in them
+### 4. Cost under multi-application load
+
+The third axis Phase 8 asks for, and the one that is not really a race. Three
+independent applications, five agents each, two billed calls per agent:
+
+| framework | wall | calls seen | ledger |
+|---|---|---|---|
+| **AgentOS** | 0.34s | 30/30 | **one ledger, exact to the token** |
+| LangGraph | 0.29s | 30/30 | per-app only |
+| CrewAI Flows | 0.50s | 30/30 | per-app only |
+
+Everyone does the work; the difference is who can answer "what did all of that
+cost". AgentOS bills through one kernel, so one ledger covers every
+application submitting to it. LangGraph and CrewAI are libraries — each
+application owns its own state, and totalling across them is the caller's job.
+That is the p.8 shared-runtime claim rather than a performance result, which
+is why the wall-time column is close and uninteresting.
+
+### 5. The same steps with real work in them
 
 Bare-step overhead is the wrong denominator for agent systems: a step that
 does nothing is not a step anyone runs. The same 30 steps with 600ms of work
@@ -167,18 +185,22 @@ each — one modest model call — against an 18.0s floor:
 
 | framework | wall | over floor |
 |---|---|---|
-| AutoGen | 18.58s | +3.2% |
-| LangGraph | 18.59s | +3.3% |
-| **AgentOS** | **18.73s** | **+4.1%** |
-| Temporal | 18.99s | +5.5% |
-| CrewAI Flows | 19.12s | +6.2% |
+| AutoGen | 18.23s | +1.3% |
+| LangGraph | 18.36s | +2.0% |
+| **AgentOS** | **18.41s** | **+2.3%** |
+| Temporal | 18.59s | +3.3% |
+| CrewAI Flows | 18.76s | +4.2% |
 
 ### What this shows
 
-AgentOS has the lowest per-step overhead, the lowest approval latency, and is
-the only runtime here that repeats **no** work after a crash. On realistic
-workloads every framework lands within a few points of the floor and AgentOS
-is third by 0.8pp
+AgentOS has the lowest per-step overhead, the lowest approval latency, the
+only single ledger across applications, and is the only runtime measured here
+that repeats **no** work after a crash. On realistic workloads every framework
+lands within a few points of the floor and AgentOS is third by 1.0pp — close
+enough that the ranking in that column would not survive a different machine.
+Most of that gap is one Windows artifact: `ctx.sleep` is a kernel timer, and
+`loop.call_later` cannot resolve below the platform's ~15.6ms quantum, where
+the comparators' inline `time.sleep` can. On Linux it largely disappears.
 
 
 ## The one architectural decision
@@ -271,15 +293,30 @@ work, not this commit.
 
 ### Processes and scheduling
 
-The kernel keeps a process table over a 9-state lifecycle
-(`New → Ready → Running → Sleeping/Waiting/Blocked → … → Terminated`), with
-`spawn`, `kill`, `pause`, `resume`, and `wait` as kernel operations. Execution
+The kernel keeps a process table over the nine lifecycle states from p.3 —
+`Ready`, `Running`, `Waiting`, `Sleeping`, `Blocked`, `Checkpointing`,
+`Suspended`, `Finished`, `Failed` — with an enforced transition table: an
+illegal move raises `InvalidTransition` rather than quietly corrupting the
+process table. Each agent carries the full p.3 metadata card (PID, name,
+parent, children, status, priority, waiting-on, **model**, **permissions**,
+memory, checkpoint), which is what `agent ps` prints. `spawn`, `kill`,
+`pause`, `resume`, and `wait` are kernel operations. Execution
 slots bound concurrency: `--slots 2` means only two agents may hold a slot at
 once, so a five-agent tree is forced to queue. A woken agent goes back to
 `Ready` and re-queues for a slot rather than resuming instantly — that is the
 difference between a scheduler and a callback, and there is a test that fails
 if it regresses. Scheduling policy is swappable at the command line:
 `--policy fifo | priority | dependency`.
+
+Retries are a scheduler responsibility (p.4), not the application's: an agent
+that raises can be restarted within a budget (`Kernel(retries=N)`, or a
+`retries` attribute on the agent). A restart is a real edge out of `Failed`
+back to `Ready`, so `agent logs` narrates `Running → Failed → Ready →
+Running → Finished` and the process card counts the attempts. The restarted
+agent replays its journal, so a retry costs only the work after its last
+completed syscall — the same machinery crash recovery uses, applied to one
+process instead of the whole runtime. A *killed* agent is never retried: a
+human said stop. Off by default.
 
 The scheduler loop is **event-driven with the tick as a ceiling, not a
 period**. A syscall or a newly-runnable agent wakes it in microseconds; `tick`
@@ -371,6 +408,21 @@ running tool call is a dependency-graph node like any other — the agent shows
 `Waiting on tool sql` in `agent ps`, completion publishes `ToolCompleted`, and
 the woken agent re-queues for a slot like everyone else.
 
+`drivers/base.py` owns the discipline p.7 assigns to drivers, once, for all of
+them: timeouts, rate limiting, retries, error handling, and **caching**.
+Caching is opt-in and per-operation, because caching a write would be a
+correctness bug rather than an optimisation — each driver declares which of
+its ops are reads (`sql.query`, `http.get`, `filesystem.read/list/exists`),
+and a TTL turns it on:
+
+```python
+Kernel(tools={"http": {"cache_ttl": 30.0}})   # 0, the default, is off
+```
+
+Every dispatch is recorded, so the runtime can answer what tools were used and
+how often they failed — the p.8 "all tool usage" claim, visible in the
+dashboard's Tool usage panel.
+
 ### Memory
 
 Six kinds of memory behind four verbs, backend invisible to agents
@@ -405,7 +457,18 @@ reply["text"], reply["model"], reply["cost"]
 Routing lives in `.agentos/models.json`: each class is a candidate list tried
 in order — a candidate is skipped when unavailable (its API key is not set, or
 the prompt exceeds its context window) and a candidate that fails at call time
-falls through to the next. The seeded "fast" chain is Claude Haiku 4.5 → a
+falls through to the next. Config order is the default because a hand-written
+order is the most honest expression of a preference, but the runtime will
+choose on the p.7 criteria instead when asked:
+
+```json
+{"classes": {"reasoning": {"prefer": "cheapest", "candidates": [ ... ]}}}
+```
+
+`cheapest` ranks by projected cost for *this* prompt at the same rates the
+ledger bills; `fastest` by declared latency; `best` by declared quality.
+Candidates that cannot fit the prompt sort last rather than vanishing, so a
+failure still names them. The seeded "fast" chain is Claude Haiku 4.5 → a
 local Ollama endpoint → an offline mock that always answers, so the same agent
 code lands on a frontier model, a local model, or the mock depending purely on
 runtime config. Tokens and cost are recorded per agent (`COST` column in
@@ -426,6 +489,18 @@ python -m agentos.cli run examples/crash.py    # 3 workers x 5 slow steps
 kill -9 <os_pid>                               # mid-run, no cleanup, no mercy
 python -m agentos.cli recover
 ```
+
+An agent can also mark a durable point by name:
+
+```python
+n = await ctx.checkpoint("draft complete")   # p.9's kernel.checkpoint()
+```
+
+Recovery never needs it — a journaled syscall is a checkpoint whether or not
+anyone asked — but it flushes the write-ahead log and moves the agent through
+the `Checkpointing` state, which is what makes that p.3 state observable in
+`agent ps` and `agent logs` rather than one the design implies and nobody can
+ever see.
 
 Recovery re-creates each agent from its spec and re-runs it; journaled
 syscalls return their recorded replies instantly instead of re-executing — a
@@ -486,11 +561,17 @@ audit trail are what the permission system guarantees.
 
 ### Dashboard and example applications
 
-The daemon serves a live dashboard at `http://127.0.0.1:7070/` —
-running/waiting/blocked agents, the live dependency graph, the event timeline,
-memory, and cost, polling the same JSON API everything else uses. One HTML
-file, vanilla JS, no build step; the API is the interesting part and the page
-is a window onto it.
+The daemon serves a live dashboard at `http://127.0.0.1:7070/` with the p.8
+panel list: running, waiting, and blocked agents, the live dependency graph,
+the event timeline, memory, model usage, tool usage, latency, cost, and GPU
+utilisation — polling the same JSON API everything else uses. One HTML file,
+vanilla JS, no build step; the API is the interesting part and the page is a
+window onto it.
+
+GPU is reporting only, and says `none` on a machine without one. AgentOS does
+not *schedule* GPU memory — p.4 lists GPU-aware scheduling as a future idea,
+and claiming it would be worse than reporting honestly. Detection shells out
+to `nvidia-smi`, whose absence is an answer rather than an error.
 
 Three full applications exercise everything at once, offline:
 `software_company.py` (events wake the team, code lands via the sandboxed
@@ -507,7 +588,7 @@ No installs, no API keys — the kernel is demonstrated with agents that only
 sleep, so scheduling is deterministic and a bug reproduces the same way twice.
 
 ```bash
-python -m unittest discover tests -v          # 87 tests
+python -m unittest discover tests -v          # 111 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
@@ -538,7 +619,8 @@ Watch any run live from a second terminal:
 
 ```bash
 python -m agentos.cli top          # live process table
-python -m agentos.cli ps           # one-shot snapshot
+python -m agentos.cli ps           # one-shot snapshot (the p.3 card per agent)
+python -m agentos.cli wait 3       # block until pid 3 terminates; exits 0/1
 python -m agentos.cli events -v    # who published what, and whom it woke
 python -m agentos.cli logs         # every state transition
 python -m agentos.cli kill 3       # kill a child; the parent survives
@@ -559,6 +641,7 @@ python -m agentos.cli revoke Finance sql   # applies to a running system
 agentos/
   kernel/     states.py process.py scheduler.py messages.py store.py
               events.py depgraph.py permissions.py memory.py models.py kernel.py
+              gpu.py               # utilisation reporting; None without a GPU
   drivers/    base.py              # timeout / rate limit / retry discipline, once
               filesystem.py shell.py python.py sql.py http.py browser.py
   runtime/    executor.py          # runs agents as asyncio tasks; owns Context
@@ -569,9 +652,9 @@ agentos/
               dashboard.py         # the live dashboard served at /
   agents/     base.py              # Agent, the direct-invocation guard, spec loader
   client.py                        # RuntimeClient: the thin client applications use
-  cli.py                           # agent ps / top / events / logs / approvals / tools /
-                                   #   kill / pause / resume / approve / grant / revoke /
-                                   #   recover / daemon
+  cli.py                           # agent ps / top / wait / events / logs / approvals /
+                                   #   tools / kill / pause / resume / approve / grant /
+                                   #   revoke / recover / daemon
 examples/     tree.py              # a five-agent tree queuing for two slots
               pipeline.py          # the event pipeline + dependency graph
               deadlock.py          # both stall modes, neither hangs
@@ -590,4 +673,5 @@ benchmarks/   bench.py             # recovery, approval latency, multi-app cost
               _autogen_defs.py     # handler types AutoGen resolves at import
 tests/        test_kernel.py test_events.py test_approvals.py test_tools.py
               test_memory.py test_models.py test_recovery.py test_daemon.py
+              test_spec_gaps.py    # the design-doc items an audit found missing
 ```

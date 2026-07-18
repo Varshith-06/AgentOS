@@ -1,5 +1,5 @@
-"""`agent ps / top / logs / events / approvals / tools / kill / pause / resume /
-approve / grant / revoke`.
+"""`agent ps / top / wait / logs / events / approvals / tools / kill / pause /
+resume / approve / grant / revoke`.
 
 The CLI is a client, not part of the runtime. It reads the published process
 table and pushes control commands back — which is exactly what it will do in
@@ -48,9 +48,12 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
         return "no agents (is the runtime running? try: agent run <example>)"
     mem = store.memory_usage() if store else {}
     costs = store.model_costs() if store else {}
+    # The p.3 process card, one row per agent: MODEL and PERMS are on that
+    # card next to PID and status, so they belong here and not only in
+    # `agent tools`.
     cols = [
         "PID", "NAME", "PARENT", "CHILDREN", "STATUS", "PRIORITY",
-        "WAITING ON", "MEM", "COST", "CKPT", "TIME",
+        "WAITING ON", "MODEL", "PERMS", "MEM", "COST", "CKPT", "TIME",
     ]
     data = [
         [
@@ -58,9 +61,11 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
             r["name"],
             "-" if r["parent"] is None else str(r["parent"]),
             str(r["children"]),
-            r["status"],
+            r["status"] + (f" x{r['retries']}" if r.get("retries") else ""),
             r["priority"],
             r["waiting_on"] or "-",
+            r.get("model") or "-",
+            ",".join(r.get("permissions") or []) or "-",
             # private memory follows the pid; longterm/semantic follow the name
             _bytes_str(mem.get(str(r["pid"]), 0) + mem.get(r["name"], 0)),
             f"${costs[r['pid']]['cost']:.4f}" if r["pid"] in costs else "-",
@@ -92,6 +97,41 @@ def cmd_ps(args, store: Store) -> int:
     print()
     print(_table(store.processes(), store))
     return 0
+
+
+def cmd_wait(args, store: Store) -> int:
+    """`agent wait <pid>` (p.8) — block until an agent terminates.
+
+    A polling reader, not a kernel call: the CLI is a client and the process
+    table is the contract between them. Exits 0 if the agent finished, 1 if
+    it failed, 2 if the runtime went away while we were waiting.
+    """
+    deadline = time.time() + args.timeout if args.timeout else None
+    last = None
+    while True:
+        row = next((r for r in store.processes() if r["pid"] == args.pid), None)
+        if row is None:
+            print(f"no such agent: pid {args.pid}")
+            return 2
+        if row["status"] != last:
+            last = row["status"]
+            if not args.quiet:
+                print(f"pid {args.pid} {row['name']}: {last}"
+                      + (f" (waiting on {row['waiting_on']})" if row["waiting_on"] else ""))
+        if row["status"] in ("Finished", "Failed"):
+            if row["status"] == "Finished":
+                print(f"result: {row['result']!r}")
+                return 0
+            print(f"failed: {row['exit_reason']}")
+            return 1
+        info = store.runtime_info()
+        if info and time.time() - info["heartbeat"] > STALE_AFTER:
+            print(f"runtime went stale while waiting on pid {args.pid}")
+            return 2
+        if deadline and time.time() > deadline:
+            print(f"timed out after {args.timeout}s; pid {args.pid} is {last}")
+            return 2
+        time.sleep(0.1)
 
 
 def cmd_top(args, store: Store) -> int:
@@ -326,6 +366,13 @@ def build_parser() -> argparse.ArgumentParser:
         c = sub.add_parser(name, help=help_text)
         c.add_argument("pid", type=int)
 
+    wait = sub.add_parser("wait", help="block until an agent terminates (p.8)")
+    wait.add_argument("pid", type=int)
+    wait.add_argument("--timeout", type=float, default=0.0,
+                      help="give up after N seconds (0 = wait forever)")
+    wait.add_argument("-q", "--quiet", action="store_true",
+                      help="only print the final result")
+
     approve = sub.add_parser("approve", help="grant a pending human approval (p.6)")
     approve.add_argument("pid", type=int)
     approve.add_argument(
@@ -391,6 +438,7 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "ps": cmd_ps,
         "top": cmd_top,
+        "wait": cmd_wait,
         "logs": cmd_logs,
         "events": cmd_events,
         "run": cmd_run,

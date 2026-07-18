@@ -28,6 +28,15 @@ class AgentProcess:
     ended_at: float | None = None
     #: Completed (journaled) syscalls — the p.3 card's "Checkpoint: #31".
     checkpoint: int = 0
+    #: The p.3 card's "Model: GPT-5" — whatever the router last picked for
+    #: this agent. None until it makes its first request_model.
+    model: str | None = None
+    #: The p.3 card's "Permissions: Browser, Python". Filled by the kernel
+    #: from the permission matrix, so ps shows what this agent may reach.
+    permissions: list[str] = field(default_factory=list)
+    #: Times this agent has been restarted after a failure (p.4: the
+    #: scheduler is responsible for retries).
+    retries: int = 0
 
     # Runtime-only handles. Never cross the message boundary, never persisted.
     task: asyncio.Task | None = field(default=None, repr=False, compare=False)
@@ -77,6 +86,9 @@ class AgentProcess:
             "spec": self.spec,
             "result": self.result,
             "checkpoint": self.checkpoint,
+            "model": self.model,
+            "permissions": list(self.permissions),
+            "retries": self.retries,
         }
 
 

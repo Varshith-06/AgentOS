@@ -11,6 +11,7 @@ from .base import ToolDriver
 class SQL(ToolDriver):
     name = "sql"
     timeout = 15.0
+    cacheable = ("query",)  # reads only; caching a write would be a bug
 
     def __init__(self, db: str = ":memory:", **kw: Any) -> None:
         super().__init__(**kw)

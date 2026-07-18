@@ -87,6 +87,8 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   <div class="tile"><div class="v" id="t-waiting">–</div><div class="k">waiting</div></div>
   <div class="tile"><div class="v" id="t-blocked">–</div><div class="k">blocked on humans</div></div>
   <div class="tile"><div class="v" id="t-cost">–</div><div class="k">model spend</div></div>
+  <div class="tile"><div class="v" id="t-latency">–</div><div class="k">mean model latency</div></div>
+  <div class="tile"><div class="v" id="t-gpu">–</div><div class="k">GPU</div></div>
 </div>
 
 <section>
@@ -104,6 +106,24 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
     <section><h2>Event timeline</h2><div id="events" class="log"></div></section>
   </div>
   <div>
+    <section>
+      <h2>Model usage</h2>
+      <table>
+        <thead><tr><th>Model</th><th class="num">Calls</th><th class="num">Tokens</th>
+          <th class="num">Latency</th><th class="num">Cost</th></tr></thead>
+        <tbody id="models"></tbody>
+      </table>
+      <div id="models-empty" class="empty">no model calls yet</div>
+    </section>
+    <section>
+      <h2>Tool usage</h2>
+      <table>
+        <thead><tr><th>Capability</th><th class="num">Calls</th>
+          <th class="num">Failed</th><th class="num">Latency</th></tr></thead>
+        <tbody id="tools"></tbody>
+      </table>
+      <div id="tools-empty" class="empty">no tool calls yet</div>
+    </section>
     <section><h2>Kernel log</h2><div id="logs" class="log"></div></section>
   </div>
 </div>
@@ -185,6 +205,34 @@ async function tick() {
     $("t-blocked").textContent = count("Blocked");
     const spend = Object.values(ps.costs).reduce((a, c) => a + c.cost, 0);
     $("t-cost").textContent = "$" + spend.toFixed(4);
+
+    // Latency and GPU (p.8). A machine with no GPU says so rather than
+    // showing a zero that looks like an idle one.
+    const models = Object.entries(ps.models || {});
+    const totalCalls = models.reduce((a, [, m]) => a + m.calls, 0);
+    $("t-latency").textContent = totalCalls
+      ? (models.reduce((a, [, m]) => a + m.mean_latency * m.calls, 0)
+         / totalCalls).toFixed(2) + "s"
+      : "–";
+    $("t-gpu").textContent = state.gpu
+      ? state.gpu.utilization + "% · " +
+        Math.round(state.gpu.memory_used_mb / 1024) + "/" +
+        Math.round(state.gpu.memory_total_mb / 1024) + "G"
+      : "none";
+
+    $("models").innerHTML = models.map(([name, m]) => `<tr>
+      <td>${esc(name)}</td><td class="num">${m.calls}${m.failed ? " (" + m.failed + " failed)" : ""}</td>
+      <td class="num">${m.input_tokens + m.output_tokens}</td>
+      <td class="num">${m.mean_latency.toFixed(2)}s</td>
+      <td class="num">$${m.cost.toFixed(4)}</td></tr>`).join("");
+    $("models-empty").style.display = models.length ? "none" : "";
+
+    const tools = Object.entries(ps.tools || {});
+    $("tools").innerHTML = tools.map(([name, t]) => `<tr>
+      <td>${esc(name)}</td><td class="num">${t.calls}</td>
+      <td class="num">${t.failed || "–"}</td>
+      <td class="num">${t.mean_latency.toFixed(2)}s</td></tr>`).join("");
+    $("tools-empty").style.display = tools.length ? "none" : "";
 
     $("procs").innerHTML = procs.map(p => `<tr>
       <td>${p.pid}</td><td>${esc(p.name)}</td><td>${badge(p.status)}</td>
