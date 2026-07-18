@@ -20,17 +20,20 @@ API keys. Design doc: `AgentOS.pdf`.
 - Six kinds of memory behind four verbs
 - Model routing by capability class, with an exact per-agent cost ledger
 - Journal-based crash recovery: every completed syscall is a checkpoint
-- A shared runtime daemon that outlives applications, runs agents as real OS
-  subprocesses, and serves a live dashboard
+- A shared runtime daemon that outlives applications, runs each agent as a
+  real OS process with syscalls carried over a token-authenticated loopback
+  TCP socket (or stdio pipes), and serves a live dashboard
 - A CLI (`agent ps / top / events / logs / kill / pause / resume / approve /
-  grant / revoke / recover / daemon`), 83 tests, three full example
+  grant / revoke / recover / daemon`), 87 tests, three full example
   applications, and a benchmark that measures the design's claims
 
 ## Results
 
 `benchmarks/bench.py` measures the three claims from the design doc instead of
-asserting them. Offline, deterministic (mock models, 10ms scheduler tick);
-numbers below are from a full run on this machine:
+asserting them. Offline and deterministic: mock models, 10ms scheduler tick,
+task isolation (so the numbers measure the kernel's scheduling and
+accounting, with no process-spawn noise). Numbers below are from a full run
+on this machine:
 
 **1. A hard kill costs nothing beyond the last completed syscall.** Three
 agents run an 18-step workload; the kernel is killed with no cleanup roughly a
@@ -40,7 +43,7 @@ third of the way in (3 steps done), then recovered.
 |---|---|
 | journaled syscalls replayed | 9 |
 | steps re-executed after recovery | **0** |
-| recovery wall time (replay + remaining work) | 0.89s |
+| recovery wall time (replay + remaining work) | 0.79s |
 | every agent finished | yes |
 
 **2. Humans wake agents at scheduler speed.** An agent blocks on
@@ -49,8 +52,8 @@ re-queued, scheduled, run to completion:
 
 | metric | result |
 |---|---|
-| median (5 rounds) | **39.9ms** |
-| worst | 42.9ms |
+| median (5 rounds) | **31.8ms** |
+| worst | 33.1ms |
 
 **3. One runtime accounts for every application, exactly.** Three applications
 submit five agents each to one shared daemon; every agent makes two model
@@ -58,7 +61,7 @@ calls.
 
 | metric | result |
 |---|---|
-| throughput | **20.9 agents/s** (15 agents, 0.72s wall) |
+| throughput | **22.3 agents/s** (15 agents, 0.67s wall) |
 | ledger total (30 mock calls) | $0.001380 |
 | ledger exact to the token | **yes** |
 
@@ -69,25 +72,93 @@ as another column by anyone with those installed.
 Reproduce all of it:
 
 ```bash
-python -m unittest discover tests -v    # 83 tests
+python -m unittest discover tests -v    # 87 tests
 python benchmarks/bench.py              # the three tables above
 ```
 
 ## The one architectural decision
 
-Agents are **asyncio tasks behind a strict message-passing boundary**. An agent
-never holds a reference to the kernel, the process table, or another agent — its
-entire world is `Context` (`spawn`, `sleep`, `wait`, `log`, …), and every call
-crosses a queue as a JSON-serializable `Syscall`, coming back as a `Reply`.
+Agents live behind a **strict message-passing boundary**. An agent never
+holds a reference to the kernel, the process table, or another agent — its
+entire world is `Context` (`spawn`, `sleep`, `wait`, `log`, …), and every
+call crosses to the kernel as a JSON-serializable `Syscall`, coming back as a
+`Reply`. That constraint is enforced at runtime (`assert_serializable`), and
+it is what pays for the two hardest features:
 
-That constraint is enforced at runtime (`assert_serializable`), and it is what
-pays for the two hardest features:
+- **Crash recovery**: everything an agent does crosses the syscall boundary
+  as JSON, so the kernel can journal every reply and replay it after a crash.
+- **Execution-substrate freedom**: anything that survives `json.dumps`
+  survives a pipe or a socket, so *where* an agent executes is pure
+  configuration — no agent code knows or changes.
 
-- **Crash recovery**: everything an agent does crosses the syscall boundary as
-  JSON, so the kernel can journal every reply and replay it after a crash.
-- **Process isolation**: anything that survives `json.dumps` survives a pipe,
-  so agents moved into real OS subprocesses without a line of agent code
-  changing.
+### Where agents execute: isolation
+
+"Agents are processes" means the **kernel's** sense of process: a PID, an
+entry in the process table, a 9-state lifecycle, admission into bounded
+execution slots, membership in the dependency graph, and a syscall journal.
+What executes the agent's code underneath is the `isolation` setting:
+
+| `isolation=` | what runs the agent | concurrency | default for |
+|---|---|---|---|
+| `"process"` | its own OS process — own interpreter, own GIL, own address space | true parallelism across cores | the daemon (`agent daemon`) |
+| `"task"` | an asyncio task inside the kernel's event loop | cooperative interleaving, one core | embedded `Kernel(...)`, tests, examples, `agent run` |
+
+The two executors (`runtime/subproc.py` and `runtime/executor.py`) present an
+identical interface; the kernel cannot tell which one it is driving, and
+slots, pause-at-syscall, kill, and journal replay behave identically on both.
+Task isolation exists because it is deterministic and cheap — the tests and
+the benchmark use it so a bug reproduces the same way twice. Process
+isolation is the deployment mode: two agents with disjoint dependencies
+execute simultaneously on different cores, and `agent kill` terminates a real
+OS process.
+
+To be precise about where asyncio sits in process mode, since "async" and
+"parallel" are easy to conflate:
+
+- **In the kernel process**, asyncio is an I/O multiplexer: per agent it runs
+  a supervisor task and two pump tasks that shuttle bytes to and from the
+  child. No agent code runs here.
+- **In each child process**, a private event loop runs exactly one agent.
+  The agent is a coroutine not for concurrency — there is nothing to be
+  concurrent with — but for *suspension*: `await ctx.anything(...)` is the
+  syscall, the point where the agent parks until the kernel's `Reply` arrives
+  and the scheduler grants it a slot. This is also what makes recovery
+  possible: an agent's resume point is always a syscall boundary, so a
+  coroutine never needs to be snapshotted.
+
+### How syscalls travel: transport
+
+With process isolation, `Syscall` and `Reply` cross between child and kernel
+as JSON lines over a `transport`:
+
+| `transport=` | channel | default |
+|---|---|---|
+| `"socket"` | loopback TCP, one connection per agent | **yes** |
+| `"pipe"` | the child's stdio | `--transport pipe` to select |
+
+The socket transport works like this: the executor opens one listening socket
+on `127.0.0.1` (ephemeral port) the first time it spawns an agent. Each child
+is handed the endpoint and a **single-use token** in its environment
+(`AGENTOS_CONNECT`, `AGENTOS_TOKEN`), dials back, sends the token as its
+first line, and from then on the wire format is byte-identical to the pipe
+transport. A connection with an unknown, reused, or missing token is dropped
+(there is a test that does exactly this), and stderr still flows over a pipe
+for crash diagnostics either way.
+
+The channel is a persistent full-duplex stream deliberately *not* HTTP: a
+reply arrives whenever the scheduler grants the agent a slot, not as the
+response to a request, so request/response framing is the wrong shape. HTTP
+is used where request/response is the right shape — the daemon's control
+plane (`api/server.py`), which applications and the CLI talk to.
+
+What the socket transport changes: the syscall channel no longer assumes
+parent-child stdio inheritance, which is the prerequisite for agents that
+live on other machines or are written in other languages — anything that can
+open a TCP connection and speak JSON lines can be an agent. What it does
+*not* change today: agents are still spawned locally by the executor, the
+listener binds to loopback only, and the stream is plaintext — remote agents
+would need the listener opened up plus TLS on the channel, which is future
+work, not this commit.
 
 ## Components
 
@@ -275,14 +346,18 @@ every application at once. The control plane is HTTP + JSON, served stdlib
 (`api/server.py`) — the routes are the API; FastAPI would be a drop-in
 transport swap.
 
-By default the daemon runs each agent as a **real OS subprocess**
-(`--isolation process`, also `Kernel(isolation="process")`).
+By default the daemon runs each agent as a **real OS process**
+(`--isolation process`) with syscalls carried over a **loopback TCP socket**
+(`--transport socket`) — both defaults, both swappable at the command line
+(`--isolation task` for asyncio tasks, `--transport pipe` for stdio). See
+"The one architectural decision" above for exactly what each mode means.
 `agentos/runtime/child.py` reuses the *same* `Context` class agents have
-always had — its queues just end at a pipe now, with `Syscall` and `Reply`
-crossing as JSON lines. Not a line of `agents/` or `kernel/` changed: anything
-that survives `json.dumps` survives a pipe. Slots, pause-at-syscall, journal
-replay — all of it works on subprocess agents unchanged, and `agent kill`
-kills an actual process.
+always had — its queues just end at a socket or a pipe now, with `Syscall`
+and `Reply` crossing as JSON lines. Not a line of `agents/` or `kernel/`
+changed for either transport. Slots, pause-at-syscall, journal replay — all
+of it works on subprocess agents unchanged, `agent kill` kills an actual
+process, and `/health` reports which isolation and transport a running daemon
+is using.
 
 Honest scope: subprocesses give agents a separate address space (they
 physically cannot reach the kernel or each other), but a malicious agent's
@@ -312,7 +387,7 @@ No installs, no API keys — the kernel is demonstrated with agents that only
 sleep, so scheduling is deterministic and a bug reproduces the same way twice.
 
 ```bash
-python -m unittest discover tests -v          # 83 tests
+python -m unittest discover tests -v          # 87 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
@@ -325,6 +400,8 @@ python -m agentos.cli run examples/crash.py               # kill -9 it, then:
 python -m agentos.cli recover                             # nothing runs twice
 
 python -m agentos.cli daemon                              # the shared runtime
+#   agents run as OS processes, syscalls over loopback TCP; opt out with
+#   --isolation task or --transport pipe
 python examples/app_research.py                           # app 1, another terminal
 python examples/app_support.py                            # app 2, another terminal
 # dashboard: http://127.0.0.1:7070/                       # live, while it runs
@@ -362,7 +439,8 @@ agentos/
   drivers/    base.py              # timeout / rate limit / retry discipline, once
               filesystem.py shell.py python.py sql.py http.py browser.py
   runtime/    executor.py          # runs agents as asyncio tasks; owns Context
-              subproc.py child.py  # ...or as real OS processes; same Context
+              subproc.py child.py  # ...or as real OS processes; same Context,
+                                   #   syscalls over loopback TCP (default) or stdio
               daemon.py            # the shared runtime that outlives applications
   api/        server.py            # the daemon's HTTP control plane (stdlib)
               dashboard.py         # the live dashboard served at /

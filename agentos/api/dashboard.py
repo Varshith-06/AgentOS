@@ -177,7 +177,8 @@ async function tick() {
     const live = procs.filter(p => !TERMINAL.includes(p.status));
     const count = s => procs.filter(p => p.status === s).length;
     $("meta").textContent =
-      `policy=${state.policy} · slots=${state.slots} · isolation=${state.isolation} · ${procs.length} agents`;
+      `policy=${state.policy} · slots=${state.slots} · isolation=${state.isolation}` +
+      (state.transport ? `(${state.transport})` : "") + ` · ${procs.length} agents`;
     $("t-live").textContent = live.length;
     $("t-running").textContent = count("Running");
     $("t-waiting").textContent = count("Waiting") + count("Sleeping");

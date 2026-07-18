@@ -51,7 +51,7 @@ from typing import Any
 from ..agents.base import Agent, agent_from_spec, spec_of
 from ..drivers import REGISTRY, ToolError
 from ..runtime.executor import Executor
-from ..runtime.subproc import ProcessExecutor
+from ..runtime.subproc import ProcessExecutor, SocketExecutor
 from . import depgraph as dg
 from .depgraph import DependencyGraph
 from .events import Event, EventBus
@@ -92,6 +92,7 @@ class Kernel:
         models: Any = None,
         recover: bool = False,
         isolation: str = "task",
+        transport: str = "socket",
         daemon: bool = False,
     ) -> None:
         self.table = ProcessTable()
@@ -126,10 +127,18 @@ class Kernel:
 
         # Phase 7: agents as asyncio tasks or as real OS subprocesses. The
         # kernel cannot tell the difference — that is the message boundary.
+        # With process isolation the syscall transport is itself swappable:
+        # a loopback TCP socket (default) or stdio pipes.
         if isolation not in ("task", "process"):
             raise ValueError(f"isolation must be 'task' or 'process', not {isolation!r}")
+        if transport not in ("socket", "pipe"):
+            raise ValueError(f"transport must be 'socket' or 'pipe', not {transport!r}")
         self.isolation = isolation
-        executor_cls = ProcessExecutor if isolation == "process" else Executor
+        self.transport = transport if isolation == "process" else None
+        if isolation == "process":
+            executor_cls = SocketExecutor if transport == "socket" else ProcessExecutor
+        else:
+            executor_cls = Executor
         self.executor = executor_cls(self.mailbox, self._on_finish, self._on_fail)
         #: Daemon mode: the runtime outlives its work. Never exit on quiescence,
         #: and never declare a stall a deadlock — new work can always arrive.
@@ -356,6 +365,9 @@ class Kernel:
             task.cancel()
         if self._io_tasks:
             await asyncio.gather(*self._io_tasks, return_exceptions=True)
+        close = getattr(self.executor, "aclose", None)
+        if close is not None:  # the socket transport's listener
+            await close()
 
     async def run_until_done(self, agent: Agent) -> Any:
         pid = self.spawn(agent)
@@ -374,6 +386,7 @@ class Kernel:
             "policy": self.policy.name,
             "slots": self.slots,
             "isolation": self.isolation,
+            "transport": self.transport,
             "running": sorted(self.running),
             "ready": [p.pid for p in self.ready],
             "processes": [p.row() for p in self.table.all()],

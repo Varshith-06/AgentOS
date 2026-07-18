@@ -188,7 +188,12 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
 
 
 class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
-    """The executor swap (p.17): real OS subprocesses, same kernel, same agents."""
+    """The executor swap (p.17): real OS subprocesses, same kernel, same agents.
+
+    Runs on the default transport — the loopback TCP socket. The pipe
+    subclass below re-runs every test with stdio pipes carrying the syscalls;
+    the tests cannot tell, which is the point.
+    """
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -199,6 +204,7 @@ class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
         self.tmp.cleanup()
 
     def kernel(self, **kw):
+        kw.setdefault("transport", "socket")
         return Kernel(store=self.store, tick=0.01, isolation="process", **kw)
 
     async def test_agents_run_in_a_different_address_space(self):
@@ -235,6 +241,44 @@ class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
         proc = k.table.get(pid)
         self.assertEqual(proc.state.value, "Failed")
         self.assertIn("killed", proc.exit_reason)
+
+
+class PipeTransportTest(ProcessIsolationTest):
+    """Same guarantees when the syscall channel is stdio pipes, not TCP."""
+
+    def kernel(self, **kw):
+        kw["transport"] = "pipe"
+        return super().kernel(**kw)
+
+
+class SocketAuthTest(unittest.IsolatedAsyncioTestCase):
+    """The socket transport's door policy: no valid token, no channel."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Store(self.tmp.name)
+        self.addCleanup(self.store.close)
+
+    async def test_a_connection_with_a_bogus_token_is_dropped(self):
+        k = Kernel(store=self.store, tick=0.01, isolation="process")
+        pid = k.spawn(Napper(app="sock", nap=0.1))
+        run = asyncio.create_task(k.run())
+
+        async def server_up():
+            while getattr(k.executor, "_port", None) is None:
+                await asyncio.sleep(0.02)
+
+        await asyncio.wait_for(server_up(), timeout=60)
+        reader, writer = await asyncio.open_connection("127.0.0.1", k.executor._port)
+        writer.write(b'{"token": "bogus"}\n')
+        await writer.drain()
+        # The executor hangs up without ever sending a header line.
+        self.assertEqual(await asyncio.wait_for(reader.readline(), timeout=30), b"")
+        writer.close()
+        # The impostor cost the real agent nothing.
+        await asyncio.wait_for(run, timeout=60)
+        self.assertEqual(k.table.get(pid).state.value, "Finished")
 
 
 if __name__ == "__main__":

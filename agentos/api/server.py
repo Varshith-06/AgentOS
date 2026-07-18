@@ -78,6 +78,7 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
                         "version": __version__,
                         "url": daemon.url,
                         "isolation": daemon.kernel.isolation,
+                        "transport": daemon.kernel.transport,
                         "runtime": store.runtime_info(),
                     })
                 elif parts == ["ps"]:

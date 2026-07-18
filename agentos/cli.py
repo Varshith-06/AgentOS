@@ -240,10 +240,13 @@ def cmd_daemon(args, store: Store) -> int:
         policy=args.policy,
         slots=args.slots,
         isolation=args.isolation,
+        transport=args.transport,
         recover=recover,
     )
     print(f"agentos daemon at {daemon.url}  "
-          f"(policy={args.policy}, slots={args.slots}, isolation={args.isolation})")
+          f"(policy={args.policy}, slots={args.slots}, isolation={args.isolation}"
+          + (f", transport={args.transport}" if args.isolation == "process" else "")
+          + ")")
     print(f"dashboard: {daemon.url}/")
     if recover:
         print("recovering the previous run's agents from their journals")
@@ -368,6 +371,11 @@ def build_parser() -> argparse.ArgumentParser:
     daemon.add_argument(
         "--isolation", choices=["process", "task"], default="process",
         help="agents as real OS subprocesses (default) or asyncio tasks",
+    )
+    daemon.add_argument(
+        "--transport", choices=["socket", "pipe"], default="socket",
+        help="syscall channel to subprocess agents: loopback TCP (default) "
+             "or stdio pipes; ignored with --isolation task",
     )
     daemon.add_argument(
         "--recover", action="store_true",
