@@ -1,107 +1,135 @@
 # AgentOS
 
 An operating system-inspired runtime for autonomous AI agents. Linux abstracts
-hardware; AgentOS abstracts intelligence. Agents are processes, not objects: the
-runtime owns their lifecycle, scheduling, dependencies, memory, tools, and
+hardware; AgentOS abstracts intelligence. Agents are processes, not objects:
+the runtime owns their lifecycle, scheduling, dependencies, memory, tools, and
 recovery.
 
-Design doc: `AgentOS.pdf` (the phase roadmap is appended at the end of it).
+Zero dependencies, stdlib only. Everything below — the kernel, the daemon, the
+examples, the test suite, the benchmark — runs offline, with no installs and no
+API keys. Design doc: `AgentOS.pdf`.
 
-## Status
+**What ships:**
 
-| Phase | What it delivers | State |
-|-------|------------------|-------|
-| 1 | Process table, 9-state lifecycle, FIFO scheduler, spawn/kill/pause/resume/wait, CLI | **Done** |
-| 2 | Event bus, dependency graph, priority + dependency-aware scheduling, deadlock detection | **Done** |
-| 3 | Human approval as a kernel object | **Done** |
-| 4 | Permissions and tool drivers | **Done** |
-| 5 | Memory manager, then model routing (first LLM calls) | **Done** |
-| 6 | Checkpoints and crash recovery | **Done** |
-| 7 | Shared runtime daemon, OS-process agents | **Done** |
-| 8 | Dashboard, examples, benchmark | **Done** |
+- A kernel with a process table, a 9-state agent lifecycle, and swappable
+  scheduling policies (FIFO, priority, dependency-aware)
+- An event bus and dependency graph with deadlock detection — agents coordinate
+  without ever holding a reference to each other
+- Human approval as a durable kernel object, not a callback
+- Capability-based tool access behind a permission matrix, with six drivers
+- Six kinds of memory behind four verbs
+- Model routing by capability class, with an exact per-agent cost ledger
+- Journal-based crash recovery: every completed syscall is a checkpoint
+- A shared runtime daemon that outlives applications, runs agents as real OS
+  subprocesses, and serves a live dashboard
+- A CLI (`agent ps / top / events / logs / kill / pause / resume / approve /
+  grant / revoke / recover / daemon`), 83 tests, three full example
+  applications, and a benchmark that measures the design's claims
 
-All eight phases of the design doc are implemented. Zero dependencies, stdlib
-only; everything below is verifiable offline.
+## Results
 
-## Verify it yourself
+`benchmarks/bench.py` measures the three claims from the design doc instead of
+asserting them. Offline, deterministic (mock models, 10ms scheduler tick);
+numbers below are from a full run on this machine:
 
-No installs, no API keys — the kernel is demonstrated with agents that only
-sleep, so scheduling is deterministic and a bug reproduces the same way twice.
+**1. A hard kill costs nothing beyond the last completed syscall.** Three
+agents run an 18-step workload; the kernel is killed with no cleanup roughly a
+third of the way in (3 steps done), then recovered.
+
+| metric | result |
+|---|---|
+| journaled syscalls replayed | 9 |
+| steps re-executed after recovery | **0** |
+| recovery wall time (replay + remaining work) | 0.89s |
+| every agent finished | yes |
+
+**2. Humans wake agents at scheduler speed.** An agent blocks on
+`request_approval`; the time from `approve()` to the agent *finished* — woken,
+re-queued, scheduled, run to completion:
+
+| metric | result |
+|---|---|
+| median (5 rounds) | **39.9ms** |
+| worst | 42.9ms |
+
+**3. One runtime accounts for every application, exactly.** Three applications
+submit five agents each to one shared daemon; every agent makes two model
+calls.
+
+| metric | result |
+|---|---|
+| throughput | **20.9 agents/s** (15 agents, 0.72s wall) |
+| ledger total (30 mock calls) | $0.001380 |
+| ledger exact to the token | **yes** |
+
+The workloads are deliberately framework-shaped (step pipelines, an approval
+gate, N clients × M agents), so a LangGraph or CrewAI comparator can slot in
+as another column by anyone with those installed.
+
+Reproduce all of it:
 
 ```bash
-python -m unittest discover tests -v          # 83 tests
-
-python -m agentos.cli run examples/tree.py --slots 2      # processes (p.8)
-python -m agentos.cli run examples/pipeline.py            # events + deps (p.5)
-python -m agentos.cli run examples/deadlock.py            # neither run hangs
-python -m agentos.cli run examples/deploy.py              # human approval (p.5-6)
-python -m agentos.cli run examples/finance.py             # tools + permissions (p.6-7)
-python -m agentos.cli run examples/memory.py              # six memory kinds (p.6)
-python -m agentos.cli run examples/assistant.py           # model routing (p.7)
-python -m agentos.cli run examples/crash.py               # kill -9 it, then:
-python -m agentos.cli recover                             # nothing runs twice (p.7-8)
-
-python -m agentos.cli daemon                              # the shared runtime (p.8)
-python examples/app_research.py                           # app 1, another terminal
-python examples/app_support.py                            # app 2, another terminal
-# dashboard: http://127.0.0.1:7070/                       # live, while it runs
-
-python -m agentos.cli run examples/software_company.py    # the p.10 applications
-python -m agentos.cli run examples/research_assistant.py
-python -m agentos.cli run examples/customer_support.py
-
-python benchmarks/bench.py                                # the numbers (p.11)
+python -m unittest discover tests -v    # 83 tests
+python benchmarks/bench.py              # the three tables above
 ```
 
-`--slots 2` means only two agents may hold an execution slot at once, so the
-five-agent tree from the design doc is forced to queue. Watch it live from a
-second terminal:
+## The one architectural decision
 
-```bash
-python -m agentos.cli top          # live process table
-python -m agentos.cli ps           # one-shot snapshot
-python -m agentos.cli events -v    # who published what, and whom it woke
-python -m agentos.cli logs         # every state transition
-python -m agentos.cli kill 3       # kill a child; the parent survives
-python -m agentos.cli pause 4      # suspends at its next syscall
-python -m agentos.cli resume 4
-python -m agentos.cli approvals    # pending human decisions
-python -m agentos.cli approve 1 --as "Senior Engineer"
-python -m agentos.cli tools        # drivers + the permission matrix
-python -m agentos.cli grant Finance sql
-python -m agentos.cli revoke Finance sql   # applies to a running system
-```
+Agents are **asyncio tasks behind a strict message-passing boundary**. An agent
+never holds a reference to the kernel, the process table, or another agent — its
+entire world is `Context` (`spawn`, `sleep`, `wait`, `log`, …), and every call
+crosses a queue as a JSON-serializable `Syscall`, coming back as a `Reply`.
 
-Scheduling policy is swappable at the command line:
+That constraint is enforced at runtime (`assert_serializable`), and it is what
+pays for the two hardest features:
+
+- **Crash recovery**: everything an agent does crosses the syscall boundary as
+  JSON, so the kernel can journal every reply and replay it after a crash.
+- **Process isolation**: anything that survives `json.dumps` survives a pipe,
+  so agents moved into real OS subprocesses without a line of agent code
+  changing.
+
+## Components
+
+### Processes and scheduling
+
+The kernel keeps a process table over a 9-state lifecycle
+(`New → Ready → Running → Sleeping/Waiting/Blocked → … → Terminated`), with
+`spawn`, `kill`, `pause`, `resume`, and `wait` as kernel operations. Execution
+slots bound concurrency: `--slots 2` means only two agents may hold a slot at
+once, so a five-agent tree is forced to queue. A woken agent goes back to
+`Ready` and re-queues for a slot rather than resuming instantly — that is the
+difference between a scheduler and a callback, and there is a test that fails
+if it regresses. Scheduling policy is swappable at the command line:
 `--policy fifo | priority | dependency`.
 
-## Events and dependencies (Phase 2)
+### Events and dependencies
 
-`examples/pipeline.py` is the p.5 scenario. `Research` publishes a fact and
-stops — it never mentions `CodeAgent` or `DocumentationAgent`, and does not know
-they exist:
+In `examples/pipeline.py`, `Research` publishes a fact and stops — it never
+mentions `CodeAgent` or `DocumentationAgent`, and does not know they exist:
 
 ```python
 await ctx.publish("ResearchCompleted", topic=topic, findings=findings)
 ```
 
-The runtime wakes whoever subscribed. Adding a fourth subscriber (`Reviewer`)
-required editing no other agent. That isn't a style rule: `Context` gives an
-agent no way to name another agent, and `Agent.run` is wrapped so that calling
-another agent's `run()` directly raises `DirectInvocationError`.
+The runtime wakes whoever subscribed. Adding a fourth subscriber required
+editing no other agent. That isn't a style rule: `Context` gives an agent no
+way to name another agent, and `Agent.run` is wrapped so that calling another
+agent's `run()` directly raises `DirectInvocationError`.
 
-Agents wait on a dependency *set*, not a sequence — and the scheduler wakes them
+Agents wait on a dependency *set*, not a sequence — the scheduler wakes them
 when the last one resolves:
 
 ```python
 result = await ctx.wait_all(agents=[code, docs], events=["HumanApproved"], timer=5)
 ```
 
-A wait that would close a cycle is refused when it is requested. A stall with no
-cycle — everyone `Waiting`, nobody `Sleeping`, no timer pending — is detected and
-reported. Neither one hangs.
+A wait that would close a cycle is refused when it is requested. A stall with
+no cycle — everyone `Waiting`, nobody `Sleeping`, no timer pending — is
+detected and reported. Neither one hangs (`examples/deadlock.py` exercises
+both).
 
-## Human approval (Phase 3)
+### Human approval
 
 `examples/deploy.py` stops at:
 
@@ -109,8 +137,9 @@ reported. Neither one hangs.
 approval = await ctx.request_approval(role="Senior Engineer", reason="Production deployment")
 ```
 
-`agent ps` shows `Blocked`, waiting on `Senior Engineer`. The human is a node in
-the dependency graph — identical in kind to an agent, an event, or a timer — and
+`agent ps` shows `Blocked`, waiting on `Senior Engineer`. The human is a node
+in the dependency graph — identical in kind to an agent, an event, or a timer —
+and
 
 ```bash
 python -m agentos.cli approve 1 --as "Senior Engineer"
@@ -120,14 +149,15 @@ wakes the Deployer exactly where it stopped (approving `--as "Intern"` is
 refused). An agent blocked on a human is not a deadlock; the runtime keeps
 serving.
 
-The approval is a durable kernel object, not a callback. Kill the runtime while
-it is blocked, run it again, and the re-run agent re-attaches to the same
+The approval is a durable kernel object, not a callback. Kill the runtime
+while it is blocked, run it again, and the re-run agent re-attaches to the same
 pending approval instead of asking twice — `agent approve` writes the grant to
 the store, not to the process, so a human can even approve while nothing is
 running and the next run sails through. Every grant also publishes a
-`HumanApproved` event, so `wait_all(events=["HumanApproved"])` composes with it.
+`HumanApproved` event, so `wait_all(events=["HumanApproved"])` composes with
+it.
 
-## Tools and permissions (Phase 4)
+### Tools and permissions
 
 Agents never import tool libraries. They request a capability by name, and the
 kernel dispatches to the driver that owns authentication, rate limiting,
@@ -140,10 +170,11 @@ rows = await ctx.request_tool("sql", "query", query="SELECT SUM(amount) FROM inv
 The kernel validates the capability against the permission matrix
 (`.agentos/permissions.json`, agent name → capabilities, deny by default)
 *before* dispatch — the application does not get a vote, and a denial is an
-audit-log entry the agent can catch, not a stack trace. `examples/finance.py`
-is the p.7 matrix: its SQL calls run, its browser call is refused. Revoke with
-`agent revoke Finance sql` and the same code fails at its first query — the
-file is re-read when it changes, so revocation applies to a *running* system.
+audit-log entry the agent can catch, not a stack trace. In
+`examples/finance.py`, the SQL calls run and the browser call is refused.
+Revoke with `agent revoke Finance sql` and the same code fails at its first
+query — the file is re-read when it changes, so revocation applies to a
+*running* system.
 
 Six drivers ship (`agent tools`): filesystem (sandboxed to a root, publishes
 `FileCreated`), shell, python (fresh interpreter), sql, http, browser. A
@@ -151,12 +182,7 @@ running tool call is a dependency-graph node like any other — the agent shows
 `Waiting on tool sql` in `agent ps`, completion publishes `ToolCompleted`, and
 the woken agent re-queues for a slot like everyone else.
 
-What this phase does **not** claim: an in-process agent that imports sqlite3
-behind the kernel's back is not physically stopped yet. That isolation arrives
-in Phase 7, when agents move into OS subprocesses; the kernel-side capability
-check and audit trail are complete now.
-
-## Memory (Phase 5)
+### Memory
 
 Six kinds of memory behind four verbs, backend invisible to agents
 (`examples/memory.py`):
@@ -177,9 +203,10 @@ agent's own history, written by the kernel, read-only. The semantic embedding
 is a deterministic stdlib placeholder — swap it for a real model without any
 agent changing. Per-agent memory bytes show in the `MEM` column of `agent ps`.
 
-## Model routing (Phase 5)
+### Model routing
 
-Agents request a capability class, never a model name (`examples/assistant.py`):
+Agents request a capability class, never a model name
+(`examples/assistant.py`):
 
 ```python
 reply = await ctx.request_model("fast", prompt="Summarize: ...")
@@ -196,16 +223,14 @@ runtime config. Tokens and cost are recorded per agent (`COST` column in
 `agent ps`/`top`), every call publishes `ModelFinished`, and failures are on
 the record too. Providers: `anthropic` (official SDK when installed, stdlib
 HTTP otherwise), `openai`-compatible (OpenAI, Ollama, vLLM, LM Studio),
-`litellm` (optional), `mock`. Tests and every example before this phase remain
-fully offline.
+`litellm` (optional), `mock`. The tests and most examples run fully offline.
 
-## Crash recovery (Phase 6)
+### Crash recovery
 
 You cannot snapshot a running coroutine — and you do not need to. Everything
-an agent does crosses the syscall boundary as JSON (the Phase 1 rule), so the
-kernel journals every syscall reply. **Every completed syscall is a
-checkpoint** — the `CKPT` column in `agent ps`, and the p.3 card's
-"Checkpoint: #31".
+an agent does crosses the syscall boundary as JSON, so the kernel journals
+every syscall reply. **Every completed syscall is a checkpoint** — the `CKPT`
+column in `agent ps`.
 
 ```bash
 python -m agentos.cli run examples/crash.py    # 3 workers x 5 slow steps
@@ -219,7 +244,8 @@ tool does not run twice, a model is not billed twice, a child is not spawned
 twice, `MemoryUpdated` is not re-published — until the agent catches up to
 where it died and goes live (`agent logs | grep recover` narrates it). The
 crash log ends with every (worker, step) pair exactly once: a hard kill cost
-the work since the last completed syscall and nothing more.
+the work since the last completed syscall and nothing more. The benchmark
+above measures exactly this: **0 steps re-executed**.
 
 The rest of the kernel state comes back the same way: finished children return
 with their results so a waiting parent still resolves; a pending approval
@@ -229,9 +255,9 @@ replayed agent makes different syscalls than it made last time —
 nondeterminism outside the boundary — the divergence is detected, logged, and
 the agent simply goes live from there.
 
-## The shared runtime daemon (Phase 7)
+### The shared runtime daemon
 
-The runtime becomes a process that outlives any application:
+The runtime is a process that outlives any application:
 
 ```bash
 python -m agentos.cli daemon          # terminal 1: the runtime
@@ -249,59 +275,83 @@ every application at once. The control plane is HTTP + JSON, served stdlib
 (`api/server.py`) — the routes are the API; FastAPI would be a drop-in
 transport swap.
 
-And the executor swap: by default the daemon runs each agent as a **real OS
-subprocess** (`--isolation process`, also `Kernel(isolation="process")`).
+By default the daemon runs each agent as a **real OS subprocess**
+(`--isolation process`, also `Kernel(isolation="process")`).
 `agentos/runtime/child.py` reuses the *same* `Context` class agents have
 always had — its queues just end at a pipe now, with `Syscall` and `Reply`
-crossing as JSON lines. Not a line of `agents/` or `kernel/` changed, which
-was the Phase 1 bet stated on day one: anything that survives `json.dumps`
-survives a pipe. Slots, pause-at-syscall, journal replay — all of it works on
-subprocess agents unchanged, and `agent kill` now kills an actual process.
+crossing as JSON lines. Not a line of `agents/` or `kernel/` changed: anything
+that survives `json.dumps` survives a pipe. Slots, pause-at-syscall, journal
+replay — all of it works on subprocess agents unchanged, and `agent kill`
+kills an actual process.
 
 Honest scope: subprocesses give agents a separate address space (they
 physically cannot reach the kernel or each other), but a malicious agent's
-imports are still not sandboxed — that would take OS-level confinement, which
-is beyond this phase.
+imports are not sandboxed — that would take OS-level confinement, which is out
+of scope here. Likewise, an *in-process* agent that imports sqlite3 behind the
+kernel's back is not physically stopped; the kernel-side capability check and
+audit trail are what the permission system guarantees.
 
-## Dashboard, applications, and the numbers (Phase 8)
+### Dashboard and example applications
 
-The daemon serves a live dashboard at `/` — running/waiting/blocked agents,
-the live dependency graph, the event timeline, memory, and cost, polling the
-same JSON API everything else uses. One HTML file, vanilla JS, no build step;
-the API is the interesting part and the page is a window onto it.
+The daemon serves a live dashboard at `http://127.0.0.1:7070/` —
+running/waiting/blocked agents, the live dependency graph, the event timeline,
+memory, and cost, polling the same JSON API everything else uses. One HTML
+file, vanilla JS, no build step; the API is the interesting part and the page
+is a window onto it.
 
-The three p.10 applications exercise everything at once, offline:
+Three full applications exercise everything at once, offline:
 `software_company.py` (events wake the team, code lands via the sandboxed
 filesystem driver, and shipping blocks on a Release Manager's approval),
 `research_assistant.py` (parallel searchers coordinate through shared and
 semantic memory only), `customer_support.py` (tickets arrive as events, get
 classified by model calls, and routed to specialists).
 
-`benchmarks/bench.py` measures the p.11 claims instead of asserting them —
-representative numbers from this machine:
+## Try it
 
-| claim | measurement |
-|---|---|
-| a hard kill costs nothing beyond the last syscall | 18-step workload, killed a third in: **0 steps re-executed**, recovery 0.8s |
-| humans wake agents at scheduler speed | approve → finished: **~29ms median** (10ms tick) |
-| one runtime accounts for every application | 3 apps × 5 agents × 2 calls: 22 agents/s, ledger **exact to the token** |
+No installs, no API keys — the kernel is demonstrated with agents that only
+sleep, so scheduling is deterministic and a bug reproduces the same way twice.
 
-The workloads are framework-shaped (step pipelines, an approval gate,
-N clients × M agents), so a LangGraph or CrewAI comparator can slot in as
-another column by anyone with those installed; the doc's head-to-head remains
-future work.
+```bash
+python -m unittest discover tests -v          # 83 tests
 
-## The one architectural decision
+python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
+python -m agentos.cli run examples/pipeline.py            # events + dependencies
+python -m agentos.cli run examples/deadlock.py            # neither stall mode hangs
+python -m agentos.cli run examples/deploy.py              # human approval
+python -m agentos.cli run examples/finance.py             # tools + permissions
+python -m agentos.cli run examples/memory.py              # six memory kinds
+python -m agentos.cli run examples/assistant.py           # model routing
+python -m agentos.cli run examples/crash.py               # kill -9 it, then:
+python -m agentos.cli recover                             # nothing runs twice
 
-Agents are **asyncio tasks behind a strict message-passing boundary**. An agent
-never holds a reference to the kernel, the process table, or another agent — its
-entire world is `Context` (`spawn`, `sleep`, `wait`, `log`), and every call
-crosses a queue as a JSON-serializable `Syscall`, coming back as a `Reply`.
+python -m agentos.cli daemon                              # the shared runtime
+python examples/app_research.py                           # app 1, another terminal
+python examples/app_support.py                            # app 2, another terminal
+# dashboard: http://127.0.0.1:7070/                       # live, while it runs
 
-That constraint is enforced at runtime (`assert_serializable`), and it is what
-makes Phase 7 cheap: anything that can survive `json.dumps` can survive a pipe,
-so agents can move into real OS subprocesses without a line of agent code
-changing.
+python -m agentos.cli run examples/software_company.py    # the full applications
+python -m agentos.cli run examples/research_assistant.py
+python -m agentos.cli run examples/customer_support.py
+
+python benchmarks/bench.py                                # the numbers above
+```
+
+Watch any run live from a second terminal:
+
+```bash
+python -m agentos.cli top          # live process table
+python -m agentos.cli ps           # one-shot snapshot
+python -m agentos.cli events -v    # who published what, and whom it woke
+python -m agentos.cli logs         # every state transition
+python -m agentos.cli kill 3       # kill a child; the parent survives
+python -m agentos.cli pause 4      # suspends at its next syscall
+python -m agentos.cli resume 4
+python -m agentos.cli approvals    # pending human decisions
+python -m agentos.cli approve 1 --as "Senior Engineer"
+python -m agentos.cli tools        # drivers + the permission matrix
+python -m agentos.cli grant Finance sql
+python -m agentos.cli revoke Finance sql   # applies to a running system
+```
 
 ## Layout
 
@@ -321,23 +371,19 @@ agentos/
   cli.py                           # agent ps / top / events / logs / approvals / tools /
                                    #   kill / pause / resume / approve / grant / revoke /
                                    #   recover / daemon
-examples/     tree.py              # the p.8 agent tree
-              pipeline.py          # the p.5 event pipeline + dependency graph
+examples/     tree.py              # a five-agent tree queuing for two slots
+              pipeline.py          # the event pipeline + dependency graph
               deadlock.py          # both stall modes, neither hangs
               deploy.py            # blocks on a human; the approval survives restarts
-              finance.py           # the p.7 matrix: sql granted, browser denied
+              finance.py           # the permission matrix: sql granted, browser denied
               memory.py            # six memory kinds; longterm survives restarts
-              assistant.py         # first LLM call; model choice is runtime config
+              assistant.py         # LLM calls; model choice is runtime config
               crash.py             # kill -9 mid-run; recover; nothing runs twice
               app_research.py      # thin client #1 — owns no runtime
               app_support.py       # thin client #2 — same daemon, same ps
-              software_company.py  # the p.10 applications: everything at once
+              software_company.py  # the full applications: everything at once
               research_assistant.py customer_support.py
 benchmarks/   bench.py             # recovery, approval latency, multi-app cost
 tests/        test_kernel.py test_events.py test_approvals.py test_tools.py
               test_memory.py test_models.py test_recovery.py test_daemon.py
 ```
-
-A woken agent goes back to `Ready` and re-queues for a slot rather than resuming
-instantly. That is the difference between a scheduler and a callback, and there
-is a test that fails if it regresses.
