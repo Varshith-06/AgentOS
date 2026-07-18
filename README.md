@@ -1,5 +1,10 @@
 # AgentOS
 
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
+![Tests: 87 passing](https://img.shields.io/badge/tests-87%20passing-brightgreen)
+![Status: all phases complete](https://img.shields.io/badge/status-complete-blue)
+
 An operating system-inspired runtime for autonomous AI agents. Linux abstracts
 hardware; AgentOS abstracts intelligence. Agents are processes, not objects:
 the runtime owns their lifecycle, scheduling, dependencies, memory, tools, and
@@ -7,9 +12,18 @@ recovery.
 
 Zero dependencies, stdlib only. Everything below — the kernel, the daemon, the
 examples, the test suite, the benchmark — runs offline, with no installs and no
-API keys. Design doc: `AgentOS.pdf`.
+API keys. (The one exception is the optional LangGraph comparison in
+`benchmarks/compare.py`, which needs LangGraph installed to have anything to
+compare against, and skips cleanly when it is not.) Design doc: `AgentOS.pdf`.
 
-**What ships:**
+**Contents:** [What ships](#what-ships) · [Results](#results) ·
+[Compared to LangGraph](#compared-to-langgraph) ·
+[The one architectural decision](#the-one-architectural-decision) ·
+[Components](#components) · [Try it](#try-it) · [Layout](#layout)
+
+---
+
+## What ships
 
 - A kernel with a process table, a 9-state agent lifecycle, and swappable
   scheduling policies (FIFO, priority, dependency-aware)
@@ -25,7 +39,20 @@ API keys. Design doc: `AgentOS.pdf`.
   TCP socket (or stdio pipes), and serves a live dashboard
 - A CLI (`agent ps / top / events / logs / kill / pause / resume / approve /
   grant / revoke / recover / daemon`), 87 tests, three full example
-  applications, and a benchmark that measures the design's claims
+  applications, a benchmark that measures the design's claims, and a
+  head-to-head against LangGraph
+
+### At a glance
+
+| | |
+|---|---|
+| **Crash recovery** | 0 steps re-executed after a hard kill (LangGraph repeats 1–3 on the same workload) |
+| **Approval latency** | 31.8ms median, approve → agent finished |
+| **vs. LangGraph, realistic work** | within ~5% wall time |
+| **Multi-app cost ledger** | exact to the token across concurrent applications |
+| **Test suite** | 87 tests, zero dependencies, fully offline |
+
+---
 
 ## Results
 
@@ -65,16 +92,94 @@ calls.
 | ledger total (30 mock calls) | $0.001380 |
 | ledger exact to the token | **yes** |
 
-The workloads are deliberately framework-shaped (step pipelines, an approval
-gate, N clients × M agents), so a LangGraph or CrewAI comparator can slot in
-as another column by anyone with those installed.
-
 Reproduce all of it:
 
 ```bash
 python -m unittest discover tests -v    # 87 tests
 python benchmarks/bench.py              # the three tables above
 ```
+
+---
+
+## Compared to LangGraph
+
+`benchmarks/compare.py` runs the same workloads against **LangGraph 1.2.9**
+with its SQLite checkpointer, on one machine, with SQLite durability on both
+sides and no network in the loop. The crash is a real `kill` of a real OS
+process, delivered by the parent once both frameworks have completed the same
+amount of work — nothing is simulated in-process. Numbers below are stable
+across repeated runs.
+
+```bash
+pip install langgraph langgraph-checkpoint-sqlite
+python benchmarks/compare.py            # skips the comparator if absent
+```
+
+**Where AgentOS wins: nothing is redone after a crash.** The workload makes
+six billable calls (each an irreversible write plus 80ms of work); the process
+is killed after three, then recovered. The count is how many of the six
+executed *twice* — in a real system, model spend paid twice.
+
+| framework | billable calls repeated |
+|---|---|
+| **AgentOS** | **0** |
+| LangGraph, six calls in one node | 3 |
+| LangGraph, one node per call | 1 |
+
+The reason is checkpoint granularity. LangGraph persists state at node
+boundaries, so a crash inside a node re-runs that whole node on resume — three
+repeated calls when the calls sit in a loop. Decomposing to one node per call
+narrows it to one, because the node that was *in flight* at the kill has no
+checkpoint and re-runs. AgentOS journals each syscall reply the moment the
+syscall completes, so the replayed agent gets the recorded answer and the tool
+never fires again — the in-flight case included.
+
+Note the shape of that: LangGraph can approach this granularity, but only if
+you restructure the work into one node per side effect. AgentOS gives the same
+guarantee to code written the obvious way.
+
+**Where LangGraph wins: raw overhead.** A durable step with no real work in it:
+
+| framework | per durable step |
+|---|---|
+| LangGraph | ~12ms |
+| AgentOS (tick=1ms) | ~31ms |
+| AgentOS (tick=5ms) | ~31ms |
+| AgentOS (tick=20ms) | ~64ms |
+
+AgentOS costs about **19ms more per step**, and the scheduler tick is not the
+main reason — 1ms and 5ms ticks measure the same, so the cost is the extra
+SQLite traffic: a journal append per syscall plus a row per state transition,
+against LangGraph's one checkpoint per node. That is the price of the finer
+granularity, not waste.
+
+Human-in-the-loop is the same story: approve → agent finished is **~6ms**
+median for LangGraph's `interrupt()`/`Command(resume=...)` against **~27ms**
+for AgentOS. LangGraph resumes by calling the function; AgentOS hands the
+approval to a running scheduler that re-queues the agent for a slot alongside
+everyone else's agents.
+
+**What the trade is worth.** Bare-step overhead is the wrong denominator for
+agent systems, because a step that does no work is not a step anyone runs. The
+same 30 steps with 600ms of work each — one modest model call:
+
+| framework | wall time |
+|---|---|
+| LangGraph | 18.8s |
+| AgentOS | 19.8s (**+5%**) |
+
+So the honest summary: **AgentOS is within about 5% of LangGraph's wall time on
+realistic agent workloads, and loses zero work to a crash where LangGraph
+repeats one to three billable calls on the same workload.** On workloads made
+of bare, sub-100ms steps, LangGraph is meaningfully faster and the recovery
+difference may not be worth 19ms a step.
+
+What this comparison does *not* establish: it is one machine, one workload
+family, single-process on both sides, and it does not touch CrewAI, AutoGen, or
+Temporal. It says nothing about ecosystem, integrations, or agent quality —
+only about runtime overhead and recovery granularity.
+
+---
 
 ## The one architectural decision
 
@@ -159,6 +264,8 @@ open a TCP connection and speak JSON lines can be an agent. What it does
 listener binds to loopback only, and the stream is plaintext — remote agents
 would need the listener opened up plus TLS on the channel, which is future
 work, not this commit.
+
+---
 
 ## Components
 
@@ -381,6 +488,8 @@ filesystem driver, and shipping blocks on a Release Manager's approval),
 semantic memory only), `customer_support.py` (tickets arrive as events, get
 classified by model calls, and routed to specialists).
 
+---
+
 ## Try it
 
 No installs, no API keys — the kernel is demonstrated with agents that only
@@ -411,6 +520,7 @@ python -m agentos.cli run examples/research_assistant.py
 python -m agentos.cli run examples/customer_support.py
 
 python benchmarks/bench.py                                # the numbers above
+python benchmarks/compare.py                              # vs LangGraph, if installed
 ```
 
 Watch any run live from a second terminal:
@@ -429,6 +539,8 @@ python -m agentos.cli tools        # drivers + the permission matrix
 python -m agentos.cli grant Finance sql
 python -m agentos.cli revoke Finance sql   # applies to a running system
 ```
+
+---
 
 ## Layout
 
@@ -462,6 +574,7 @@ examples/     tree.py              # a five-agent tree queuing for two slots
               software_company.py  # the full applications: everything at once
               research_assistant.py customer_support.py
 benchmarks/   bench.py             # recovery, approval latency, multi-app cost
+              compare.py           # head-to-head vs LangGraph (optional dep)
 tests/        test_kernel.py test_events.py test_approvals.py test_tools.py
               test_memory.py test_models.py test_recovery.py test_daemon.py
 ```
