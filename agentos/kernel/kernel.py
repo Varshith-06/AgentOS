@@ -45,6 +45,7 @@ over HTTP and one process table shows everyone's work.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import deque
 from typing import Any
 
@@ -118,6 +119,11 @@ class Kernel:
         )
 
         self.mailbox: asyncio.Queue[Syscall] = asyncio.Queue()
+        #: Syscalls the idle wait pulled off the mailbox early; drained first.
+        self._early: deque[Syscall] = deque()
+        self._last_poll = 0.0  # when the tick-rate polling work last ran
+        #: Set to cut an idle short. Created on the loop, so not in __init__.
+        self._wakeup: asyncio.Event | None = None
         self.ready: deque[AgentProcess] = deque()
         self.running: set[int] = set()
         self.agents: dict[int, Agent] = {}
@@ -349,18 +355,40 @@ class Kernel:
         return event
 
     async def run(self) -> None:
-        """Run until every process is terminal — or until nothing can progress."""
+        """Run until every process is terminal — or until nothing can progress.
+
+        The loop is event-driven with a tick as its *ceiling*, not its period:
+        a syscall wakes it immediately, and `tick` only bounds how long it may
+        doze when nothing is happening. That distinction is worth more than it
+        looks — `asyncio.sleep()` cannot resolve below the platform timer
+        quantum (~15.6ms on Windows), so a loop that slept the tick every pass
+        paid that quantum on every syscall no matter how small the tick was.
+        Polling work — control commands, approvals, the permission file,
+        deadlock detection — stays on the tick, where it belongs.
+        """
         while not self._shutdown:
-            self.perms.refresh()  # a revoked capability applies to a running system
-            self._drain_commands()
-            self._drain_approvals()
+            now = time.time()
+            polled = now - self._last_poll >= self.tick
+            if polled:
+                # Everything that reads the outside world — the permission
+                # file, the command and approval tables, the heartbeat — is
+                # rate-limited to the tick. These are the expensive ones.
+                self._last_poll = now
+                self.perms.refresh()  # a revocation applies to a running system
+                self._drain_commands()
+                self._drain_approvals()
+                self.store.heartbeat()
+
             await self._drain_mailbox()
             self._admit()
-            self.store.heartbeat()
+
+            # Cheap and in-memory, so it runs every pass: an agent that just
+            # finished should not wait out a tick for the runtime to notice.
             if self._quiescent() and not self.daemon_mode:
                 break
-            self._detect_deadlock()
-            await asyncio.sleep(self.tick)
+            if polled:
+                self._detect_deadlock()
+            await self._idle(self.tick)
         for task in list(self._io_tasks):  # no owners remain for these
             task.cancel()
         if self._io_tasks:
@@ -439,6 +467,7 @@ class Kernel:
             return
         self._journal(proc, reply.req_id, proc.current_op or "?", reply.value, reply.error)
         proc.pending = reply
+        self._nudge()  # something became runnable: do not doze until the tick
         if proc.state is AgentState.SUSPENDED:
             return  # stashed; delivered when a human resumes it
         self.table.transition(proc, AgentState.READY, waiting_on=None)
@@ -450,9 +479,42 @@ class Kernel:
         self._requeue(proc, Reply(req_id=w.req_id, value=_shape(w.results)))
 
     # -- syscalls --------------------------------------------------------
+    def _nudge(self) -> None:
+        """Cut the current idle short: there is work the loop should see now."""
+        if self._wakeup is not None:
+            self._wakeup.set()
+
+    async def _idle(self, timeout: float) -> None:
+        """Doze until a syscall arrives, someone nudges, or `timeout` elapses.
+
+        The early wake is the point: a pending syscall or a freshly-runnable
+        agent is handled in microseconds instead of waiting out a timer
+        quantum (~15.6ms on Windows). Anything pulled off the mailbox is
+        stashed for _drain_mailbox rather than handled here, so the loop keeps
+        exactly one place where syscalls are dispatched. Cancelling a pending
+        `Queue.get()` never consumes an item, and _drain_mailbox runs on the
+        very next line, so nothing can be stranded in the queue.
+        """
+        if self._wakeup is None:
+            self._wakeup = asyncio.Event()
+        getter = asyncio.ensure_future(self.mailbox.get())
+        waker = asyncio.ensure_future(self._wakeup.wait())
+        try:
+            done, pending = await asyncio.wait(
+                {getter, waker}, timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if getter in done and not getter.cancelled():
+                self._early.append(getter.result())
+        finally:
+            for task in (getter, waker):
+                if not task.done():
+                    task.cancel()
+            self._wakeup.clear()
+
     async def _drain_mailbox(self) -> None:
-        while not self.mailbox.empty():
-            call = self.mailbox.get_nowait()
+        while self._early or not self.mailbox.empty():
+            call = self._early.popleft() if self._early else self.mailbox.get_nowait()
             proc = self.table.get(call.pid)
             try:
                 self._handle(proc, call)
@@ -928,6 +990,7 @@ class Kernel:
 
     def _announce_exit(self, proc: AgentProcess) -> None:
         """A terminated agent is an event and a resolved dependency (p.5)."""
+        self._nudge()  # a process just went terminal: re-evaluate immediately
         self.bus.forget(proc.pid)
         self.memory.forget_process(proc.pid)  # private memory dies with the pid
         finished = proc.state is AgentState.FINISHED

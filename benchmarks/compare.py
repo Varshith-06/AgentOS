@@ -401,8 +401,14 @@ def main() -> int:
         bare["lg"] = l["ms_per_step"]
         print(f"   {'langgraph':<22} {l['wall_s']:>8.2f}s  "
               f"{l['ms_per_step']:>7.1f} ms/step")
-        gap = bare[0.001] - bare["lg"]
-        print(f"\n   AgentOS pays ~{gap:.0f}ms more per durable step at its best tick.")
+        best = min(bare[t] for t in (0.001, 0.005, 0.02))
+        gap = best - bare["lg"]
+        if gap > 0:
+            print(f"\n   AgentOS pays ~{gap:.1f}ms more per durable step"
+                  f" at its best tick.")
+        else:
+            print(f"\n   AgentOS is ~{-gap:.1f}ms faster per durable step"
+                  f" at its best tick.")
 
     print(f"\n2b. the same steps when each does {int(REAL_WORK*1000)}ms of real work")
     print("    (what a model call costs) — overhead as a share of the total")

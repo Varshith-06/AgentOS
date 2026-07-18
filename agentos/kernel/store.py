@@ -119,6 +119,13 @@ class Store:
         self.db = sqlite3.connect(self.path, isolation_level=None, timeout=5.0)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")  # concurrent CLI reads
+        # WAL + NORMAL fsyncs at checkpoints instead of on every commit. What
+        # that gives up is the last few transactions if the *machine* loses
+        # power; what it keeps is everything this runtime actually claims —
+        # a killed process cannot lose committed data, because the WAL is
+        # already in the OS's hands. Autocommit means one commit per write,
+        # so the difference is large: ~273ms of fsync per 400 writes, gone.
+        self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.executescript(SCHEMA)
 
     # -- runtime identity ------------------------------------------------

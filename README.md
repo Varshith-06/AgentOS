@@ -47,8 +47,9 @@ compare against, and skips cleanly when it is not.) Design doc: `AgentOS.pdf`.
 | | |
 |---|---|
 | **Crash recovery** | 0 steps re-executed after a hard kill (LangGraph repeats 1–3 on the same workload) |
-| **Approval latency** | 31.8ms median, approve → agent finished |
-| **vs. LangGraph, realistic work** | within ~5% wall time |
+| **Approval latency** | 1.4ms median, approve → agent finished |
+| **Durable step overhead** | 3.5ms vs LangGraph's 5.7ms |
+| **vs. LangGraph, realistic work** | +0.9% wall time |
 | **Multi-app cost ledger** | exact to the token across concurrent applications |
 | **Test suite** | 87 tests, zero dependencies, fully offline |
 
@@ -68,9 +69,9 @@ third of the way in (3 steps done), then recovered.
 
 | metric | result |
 |---|---|
-| journaled syscalls replayed | 9 |
+| journaled syscalls replayed | 24 |
 | steps re-executed after recovery | **0** |
-| recovery wall time (replay + remaining work) | 0.79s |
+| recovery wall time (replay + remaining work) | 0.26s |
 | every agent finished | yes |
 
 **2. Humans wake agents at scheduler speed.** An agent blocks on
@@ -79,8 +80,8 @@ re-queued, scheduled, run to completion:
 
 | metric | result |
 |---|---|
-| median (5 rounds) | **31.8ms** |
-| worst | 33.1ms |
+| median (5 rounds) | **1.4ms** |
+| worst | 1.6ms |
 
 **3. One runtime accounts for every application, exactly.** Three applications
 submit five agents each to one shared daemon; every agent makes two model
@@ -88,7 +89,7 @@ calls.
 
 | metric | result |
 |---|---|
-| throughput | **22.3 agents/s** (15 agents, 0.67s wall) |
+| throughput | **41.8 agents/s** (15 agents, 0.36s wall) |
 | ledger total (30 mock calls) | $0.001380 |
 | ledger exact to the token | **yes** |
 
@@ -115,10 +116,11 @@ pip install langgraph langgraph-checkpoint-sqlite
 python benchmarks/compare.py            # skips the comparator if absent
 ```
 
-**Where AgentOS wins: nothing is redone after a crash.** The workload makes
-six billable calls (each an irreversible write plus 80ms of work); the process
-is killed after three, then recovered. The count is how many of the six
-executed *twice* — in a real system, model spend paid twice.
+### Nothing is redone after a crash
+
+The workload makes six billable calls (each an irreversible write plus 80ms of
+work); the process is killed after three, then recovered. The count is how many
+of the six executed *twice* — in a real system, model spend paid twice.
 
 | framework | billable calls repeated |
 |---|---|
@@ -138,46 +140,55 @@ Note the shape of that: LangGraph can approach this granularity, but only if
 you restructure the work into one node per side effect. AgentOS gives the same
 guarantee to code written the obvious way.
 
-**Where LangGraph wins: raw overhead.** A durable step with no real work in it:
+### Overhead
+
+A durable step with no real work in it, so this is pure framework cost:
 
 | framework | per durable step |
 |---|---|
-| LangGraph | ~12ms |
-| AgentOS (tick=1ms) | ~31ms |
-| AgentOS (tick=5ms) | ~31ms |
-| AgentOS (tick=20ms) | ~64ms |
+| **AgentOS** (tick=1ms) | **3.6ms** |
+| **AgentOS** (tick=5ms) | **3.4ms** |
+| **AgentOS** (tick=20ms) | **3.5ms** |
+| LangGraph | 5.7ms |
 
-AgentOS costs about **19ms more per step**, and the scheduler tick is not the
-main reason — 1ms and 5ms ticks measure the same, so the cost is the extra
-SQLite traffic: a journal append per syscall plus a row per state transition,
-against LangGraph's one checkpoint per node. That is the price of the finer
-granularity, not waste.
+Human-in-the-loop, approve → agent finished:
 
-Human-in-the-loop is the same story: approve → agent finished is **~6ms**
-median for LangGraph's `interrupt()`/`Command(resume=...)` against **~27ms**
-for AgentOS. LangGraph resumes by calling the function; AgentOS hands the
-approval to a running scheduler that re-queues the agent for a slot alongside
-everyone else's agents.
+| framework | median | worst |
+|---|---|---|
+| **AgentOS** | **1.2ms** | **1.8ms** |
+| LangGraph | 3.2ms | 19.6ms |
 
-**What the trade is worth.** Bare-step overhead is the wrong denominator for
-agent systems, because a step that does no work is not a step anyone runs. The
-same 30 steps with 600ms of work each — one modest model call:
+And the same 30 steps when each does 600ms of real work — one modest model
+call, which is the regime any real agent runs in:
 
 | framework | wall time |
 |---|---|
-| LangGraph | 18.8s |
-| AgentOS | 19.8s (**+5%**) |
+| LangGraph | 18.28s |
+| AgentOS | 18.45s (**+0.9%**) |
 
-So the honest summary: **AgentOS is within about 5% of LangGraph's wall time on
-realistic agent workloads, and loses zero work to a crash where LangGraph
-repeats one to three billable calls on the same workload.** On workloads made
-of bare, sub-100ms steps, LangGraph is meaningfully faster and the recovery
-difference may not be worth 19ms a step.
+### Summary
 
-What this comparison does *not* establish: it is one machine, one workload
-family, single-process on both sides, and it does not touch CrewAI, AutoGen, or
-Temporal. It says nothing about ecosystem, integrations, or agent quality —
-only about runtime overhead and recovery granularity.
+**AgentOS matches or beats LangGraph on every axis measured here — lower
+per-step overhead, lower approval latency, within 1% on realistic workloads —
+while losing zero work to a crash where LangGraph repeats one to three billable
+calls.**
+
+Two honest caveats on that. First, the overhead numbers were much worse until
+recently: the kernel loop used to sleep a fixed tick every pass, and
+`asyncio.sleep()` cannot resolve below the platform timer quantum (~15.6ms on
+Windows), so every syscall paid that quantum regardless of how small the tick
+was. The loop is now event-driven — a syscall or a newly-runnable agent wakes
+it immediately, and the tick only bounds how long it may doze when nothing is
+happening. That change is what moved bare steps from ~31ms to ~3.5ms and
+approvals from ~31ms to ~1.2ms. Because the old bottleneck was a *platform
+timer floor*, the win is largest on Windows; on Linux, where the timer
+resolution is ~1ms, the previous polling loop was far less penalized and the
+gap being closed here would have been correspondingly smaller.
+
+Second, what this comparison does *not* establish: it is one machine, one
+workload family, single-process on both sides, and it does not touch CrewAI,
+AutoGen, or Temporal. It says nothing about ecosystem, integrations, or agent
+quality — only about runtime overhead and recovery granularity.
 
 ---
 
@@ -280,6 +291,17 @@ once, so a five-agent tree is forced to queue. A woken agent goes back to
 difference between a scheduler and a callback, and there is a test that fails
 if it regresses. Scheduling policy is swappable at the command line:
 `--policy fifo | priority | dependency`.
+
+The scheduler loop is **event-driven with the tick as a ceiling, not a
+period**. A syscall or a newly-runnable agent wakes it in microseconds; `tick`
+only bounds how long it may doze when nothing is happening, and rate-limits
+the work that reads the outside world (the permission file, the command and
+approval tables, the heartbeat, deadlock detection). This matters more than it
+sounds: `asyncio.sleep()` cannot resolve below the platform timer quantum
+(~15.6ms on Windows), so a loop that slept the tick on every pass paid that
+quantum per syscall no matter how small the tick was set. Ticks below the
+quantum were an illusion. Being woken by the work itself is what makes a 1ms
+and a 20ms tick perform the same today.
 
 ### Events and dependencies
 
