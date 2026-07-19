@@ -54,8 +54,8 @@ config at a real one and the same code runs live.
 | | |
 |---|---|
 | **Crash recovery** | the only runtime measured that repeats **0** work after a hard kill |
-| **Approval latency** | 1.2ms median, approve → agent finished — lowest of the five |
-| **Durable step overhead** | 3.4ms — lowest of the five |
+| **Approval latency** | 1.8ms median, approve → agent finished — lowest of the five |
+| **Durable step overhead** | 5.7ms — lowest of the five |
 | **Multi-app cost ledger** | one ledger, exact to the token, across every application |
 | **Capability ceiling** | a task's root grant bounds its whole invented tree, kernel-enforced |
 | **Auth** | bearer token on every route; refuses to bind non-loopback without one |
@@ -112,32 +112,38 @@ trade, in both directions.
 ## The numbers
 
 `python benchmarks/bench.py` — offline, deterministic, mock models, 10ms
-tick. From this machine:
+tick. **Medians of seven runs**, because publishing a lucky run is its own
+kind of dishonesty: reproduce it, get something else, and stop believing the
+rest of the page.
 
 **A hard kill costs nothing beyond the last completed syscall.** Three agents,
 18 steps, killed halfway with no cleanup, recovered:
 
-| metric | result |
-|---|---|
-| steps re-executed after recovery | **0** |
-| journaled syscalls replayed | 24 |
-| recovery wall time (replay + all remaining work) | 0.25s |
+| metric | result | across 7 runs |
+|---|---|---|
+| steps re-executed after recovery | **0** | 0 every time |
+| journaled syscalls replayed | 24 | — |
+| recovery wall (replay + all remaining work) | 0.25s | 0.24–0.26 |
 
 **Humans wake agents at scheduler speed** — `approve()` to *agent finished*,
 through the full path (dependency resolved, re-queued, scheduled, run):
 
-| metric | result |
-|---|---|
-| median | **1.2ms** |
-| worst | 1.6ms |
+| metric | result | across 7 runs |
+|---|---|---|
+| median | **1.8ms** | 1.7–2.3 |
+| worst | 2.4ms | 2.0–3.2 |
 
 **One runtime accounts for every application, exactly.** Three apps × five
 agents × two model calls against one daemon:
 
-| metric | result |
-|---|---|
-| throughput | **44.6 agents/s** |
-| ledger, 30 concurrent billed calls | $0.001380 — **exact to the token** |
+| metric | result | across 7 runs |
+|---|---|---|
+| throughput | **37.4 agents/s** | 32.4–39.0 |
+| ledger, 30 concurrent billed calls | $0.001380 — **exact to the token** | exact every time |
+
+The two *claims* — zero re-execution and an exact ledger — held in every run.
+The timings move with the machine, which is why the spread is printed next to
+them.
 
 ---
 
@@ -171,19 +177,19 @@ gives it to code written the obvious way.
 
 | framework | per step |
 |---|---|
-| **AgentOS** | **3.4ms** |
-| AutoGen | 4.1ms |
-| LangGraph | 5.4ms |
-| CrewAI Flows | 15.2ms |
-| Temporal | 68.6ms |
+| **AgentOS** | **5.7ms** |
+| AutoGen | 6.0ms |
+| LangGraph | 8.1ms |
+| CrewAI Flows | 21.5ms |
+| Temporal | 68.9ms |
 
 **Human-in-the-loop — approve → finished:**
 
 | framework | median | worst |
 |---|---|---|
-| **AgentOS** | **1.2ms** | **2.3ms** |
-| LangGraph | 3.2ms | 17.7ms |
-| Temporal | 6.2ms | 11.0ms |
+| **AgentOS** | **1.9ms** | **2.5ms** |
+| LangGraph | 5.6ms | 32.0ms |
+| Temporal | 14.1ms | 27.8ms |
 | CrewAI / AutoGen | — | no durable wait-for-a-human primitive to time |
 
 **Cost under multi-application load** (3 apps × 5 agents × 2 billed calls):
@@ -198,10 +204,18 @@ Everyone does the work; the difference is who can answer "what did all of
 that cost." Libraries can't, structurally: each app owns its own state.
 
 **With real work in the steps** (600ms each, one modest model call), every
-framework lands within a few points of the floor — AutoGen +1.5%, LangGraph
-+1.7%, **AgentOS +2.4%**, Temporal +2.8%, CrewAI +3.3%. That column is a
+framework lands within a few points of the floor — LangGraph +4.0%, AutoGen
++4.2%, **AgentOS +4.7%**, Temporal +6.6%, CrewAI +7.5%. That column is a
 wash: the ranking would not survive a different machine, and most of
 AgentOS's gap is a Windows timer quantum that largely disappears on Linux.
+
+**On reproducing these.** Absolute figures move a lot with machine state —
+across a day, the same benchmark gave AgentOS anywhere from 3.4ms to 5.7ms
+per step, and every comparator moved with it. What does *not* move is the
+ordering, because `compare.py` measures all five inside one process under
+identical conditions. Expect your numbers to differ; expect the ranking not
+to. The recovery column is deterministic by construction and was identical
+in every run.
 
 Scope, honestly: one machine, one workload family, and Temporal's single
 repeat is its documented at-least-once contract working as designed — it
@@ -360,10 +374,36 @@ correctness. Publishing an event harms nobody — declarations just turn a
 silent stall into a loud error.
 
 See it offline: `python -m agentos.cli run examples/planner.py` (the model
-is a deterministic script, so what it demonstrates is the runtime). One
-candid caveat: the protocol has so far been exercised against scripted and
-mock models — set a key and the same path runs gpt-oss-120b live, and that
-shakedown is the next thing this project needs.
+is a deterministic script, so what it demonstrates is the runtime).
+
+**It runs live.** With `GROQ_API_KEY` set, the same `POST /task` path drives
+real **gpt-oss-120b** — no code change, the router simply stops falling
+through to the mock:
+
+```
+POST /task  "perform a small experiment about trees: invent measurements,
+             save them to a file, and state one conclusion"
+         -> Finished in 2.1s
+
+decided: tool: filesystem.write     # the model chose the tool and the path
+decided: done: finishing
+FileCreated  from the filesystem driver
+
+tree_measurements.txt:
+  Tree 1: Height=12.5m, TrunkDiameter=0.45m, LeafCount=3400
+  Tree 2: Height=8.3m,  TrunkDiameter=0.30m, LeafCount=2100  ...
+
+result: "...trees with larger trunk diameters tend to have higher leaf
+         counts, suggesting a correlation between trunk size and foliage."
+
+ledger: 2 calls, 1111+554 tokens, $0.000582, 0.85s mean latency
+```
+
+Real model, real tool call, real file, metered to six decimal places — and
+the write landed inside the sandbox root the operator configured, because the
+grant said `filesystem` and nothing else. The model solved that task solo
+rather than delegating; multi-agent delegation under a live model is the next
+thing to exercise.
 
 ---
 

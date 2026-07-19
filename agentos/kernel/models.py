@@ -404,7 +404,14 @@ def _post_json(url: str, body: dict[str, Any], headers: dict[str, str]) -> dict:
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", **headers},
+        # The User-Agent matters: several providers sit behind Cloudflare,
+        # which rejects urllib's default signature outright (403, code 1010).
+        # Groq does; this header is the difference between working and not.
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "agentos/1.0",
+            **headers,
+        },
         method="POST",
     )
     try:
