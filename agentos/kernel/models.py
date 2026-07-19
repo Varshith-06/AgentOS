@@ -45,31 +45,57 @@ DEFAULT_TIMEOUT = 120.0
 #: The seeded routing table (examples, daemon first boot). Candidates in
 #: preference order; unavailable ones are skipped, failing ones fall through.
 #: Prices are USD per million tokens (input, output).
+#: One open-weight model, four ways to reach it: Groq and OpenRouter serve
+#: gpt-oss-120b hosted (set the matching key and the router uses it), Ollama
+#: serves the same weights locally (needs ~64GB), and the mock always
+#: answers so everything stays runnable offline. Same agent code either way.
 DEFAULT_MODELS_CONFIG: dict[str, Any] = {
     "classes": {
         "fast": [
             {
-                "provider": "anthropic",
-                "model": "claude-haiku-4-5",
-                "cost_per_mtok": [1.00, 5.00],
-                "context_window": 200000,
+                "provider": "openai",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key_env": "GROQ_API_KEY",
+                "model": "openai/gpt-oss-120b",
+                "cost_per_mtok": [0.15, 0.75],
+                "context_window": 131072,
+            },
+            {
+                "provider": "openai",
+                "base_url": "https://openrouter.ai/api/v1",
+                "api_key_env": "OPENROUTER_API_KEY",
+                "model": "openai/gpt-oss-120b",
+                "cost_per_mtok": [0.15, 0.75],
+                "context_window": 131072,
             },
             {
                 "provider": "openai",
                 "base_url": "http://localhost:11434/v1",
-                "model": "llama3.2",
+                "model": "gpt-oss:120b",
                 "api_key_env": None,
                 "cost_per_mtok": [0, 0],
+                "context_window": 131072,
             },
             {"provider": "mock", "model": "mock-fast"},
         ],
         "reasoning": [
             {
-                "provider": "anthropic",
-                "model": "claude-opus-4-8",
-                "cost_per_mtok": [5.00, 25.00],
-                "context_window": 1000000,
-                "params": {"thinking": {"type": "adaptive"}},
+                "provider": "openai",
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key_env": "GROQ_API_KEY",
+                "model": "openai/gpt-oss-120b",
+                "cost_per_mtok": [0.15, 0.75],
+                "context_window": 131072,
+                "params": {"reasoning_effort": "high"},
+            },
+            {
+                "provider": "openai",
+                "base_url": "https://openrouter.ai/api/v1",
+                "api_key_env": "OPENROUTER_API_KEY",
+                "model": "openai/gpt-oss-120b",
+                "cost_per_mtok": [0.15, 0.75],
+                "context_window": 131072,
+                "params": {"reasoning_effort": "high"},
             },
             {"provider": "mock", "model": "mock-reasoning"},
         ],

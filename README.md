@@ -3,126 +3,154 @@
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
 ![Tests: 184 passing](https://img.shields.io/badge/tests-184%20passing-brightgreen)
-![Status: all phases complete](https://img.shields.io/badge/status-complete-blue)
+![Model: gpt--oss--120b](https://img.shields.io/badge/default%20model-gpt--oss--120b-orange)
 
-An operating system-inspired runtime for autonomous AI agents. Linux abstracts
-hardware; AgentOS abstracts intelligence. Agents are processes, not objects:
-the runtime owns their lifecycle, scheduling, dependencies, memory, tools, and
-recovery.
+**An operating system for AI agents — a kernel, not a framework.**
 
-Zero dependencies, stdlib only. Everything below — the kernel, the daemon, the
-examples, the test suite, the benchmark — runs offline, with no installs and no
-API keys. (The one exception is the optional cross-framework comparison in
-`benchmarks/compare.py`, which needs the other frameworks installed to have
-anything to compare against, and skips whichever are absent.) Design doc:
-`AgentOS.pdf`.
+Agents run as OS processes with PIDs, a nine-state lifecycle, and a
+scheduler. Every tool call, model call, and message crosses a syscall
+boundary, is permission-checked, journaled, and billed. `kill -9` the runtime
+mid-task and it resumes with **zero work re-executed and zero calls
+re-billed** — measured, not claimed, against LangGraph, CrewAI, AutoGen, and
+Temporal on identical workloads.
 
-**Contents:** [What ships](#what-ships) · [Results](#results) ·
-[Compared to the field](#compared-to-the-field) ·
-[The one architectural decision](#the-one-architectural-decision) ·
-[Components](#components) · [Try it](#try-it) · [Layout](#layout)
+And because an agent's identity is JSON, agents don't have to be written in
+advance. POST a sentence and a tool list; a planner **invents the team at
+runtime** — roles, tools, event wiring, all of it — while the kernel holds
+one line: *nothing in that tree, at any depth, can ever reach a capability
+you didn't grant at the door.*
+
+```
+$ curl -H "Authorization: Bearer $TOKEN" -X POST localhost:7070/task \
+    -d '{"goal": "perform an experiment about trees", "tools": ["filesystem"]}'
+
+$ agent ps
+PID  NAME      STATUS    PERMS       EVENTS
+1    Planner   Running   filesystem  -
+2    Surveyor  Running   filesystem  pub:MeasurementsReady
+3    Analyst   Waiting   -           pub:AnalysisReady sub:MeasurementsReady
+```
+
+Nobody wrote a `Surveyor` class. Nobody drew a graph. The planner invented
+both agents, granted one of them `filesystem` (a subset of its own grant —
+the kernel refuses anything wider), and made up the event names that wire
+them together. The runtime schedules, journals, meters, and recovers all of
+it like any other process.
+
+Zero dependencies. Stdlib only. Everything — kernel, daemon, tests,
+benchmarks — runs offline against a deterministic mock model; point the
+config at a real one and the same code runs live.
+
+**Contents:** [Runtime, not library](#a-runtime-not-a-library) ·
+[The numbers](#the-numbers) · [Head-to-head](#head-to-head) ·
+[How it works](#how-it-works) · [Invented agents](#agents-invented-at-runtime) ·
+[Running it for real](#running-it-for-real) · [Try it](#try-it) ·
+[Layout](#layout)
 
 ---
 
-## What ships
-
-- A kernel with a process table, a 9-state agent lifecycle, and swappable
-  scheduling policies (FIFO, priority, dependency-aware)
-- An event bus and dependency graph with deadlock detection — agents coordinate
-  without ever holding a reference to each other
-- Human approval as a durable kernel object, not a callback
-- Capability-based tool access behind a permission matrix, with six drivers
-- Six kinds of memory behind four verbs
-- Model routing by capability class, with an exact per-agent cost ledger
-- Journal-based crash recovery: every completed syscall is a checkpoint
-- A shared runtime daemon that outlives applications, runs each agent as a
-  real OS process with syscalls carried over a token-authenticated loopback
-  TCP socket (or stdio pipes), and serves a live dashboard
-- A CLI (`agent ps / top / wait / events / logs / kill / pause / resume /
-  approve / grant / revoke / recover / daemon`), 184 tests, three full example
-  applications, a benchmark that measures the design's claims, and a
-  head-to-head against LangGraph, CrewAI, AutoGen, and Temporal
-
-### At a glance
+## At a glance
 
 | | |
 |---|---|
 | **Crash recovery** | the only runtime measured that repeats **0** work after a hard kill |
-| **Approval latency** | 1.2ms median — lowest of the five |
-| **Durable step overhead** | 3.7ms — lowest of the five |
-| **Realistic workloads** | +2.3%, within a few points of every comparator |
-| **Multi-app cost ledger** | exact to the token across concurrent applications |
+| **Approval latency** | 1.2ms median, approve → agent finished — lowest of the five |
+| **Durable step overhead** | 3.4ms — lowest of the five |
+| **Multi-app cost ledger** | one ledger, exact to the token, across every application |
+| **Capability ceiling** | a task's root grant bounds its whole invented tree, kernel-enforced |
+| **Auth** | bearer token on every route; refuses to bind non-loopback without one |
 | **Test suite** | 184 tests, zero dependencies, fully offline |
 
 ---
 
-## Results
+## A runtime, not a library
 
-`benchmarks/bench.py` measures the three claims from the design doc instead of
-asserting them. Offline and deterministic: mock models, 10ms scheduler tick,
-task isolation (so the numbers measure the kernel's scheduling and
-accounting, with no process-spawn noise). Numbers below are from a full run
-on this machine:
+LangGraph, CrewAI, and AutoGen are libraries: you `import` them, and your
+application owns the orchestration state. AgentOS is a **daemon your
+applications connect to** — closer to Postgres than to an ORM. That is a real
+trade, in both directions.
 
-**1. A hard kill costs nothing beyond the last completed syscall.** Three
-agents run an 18-step workload; the kernel is killed with no cleanup roughly a
-third of the way in (3 steps done), then recovered.
+**What the runtime shape buys:**
 
-| metric | result |
-|---|---|
-| journaled syscalls replayed | 24 |
-| steps re-executed after recovery | **0** |
-| recovery wall time (replay + remaining work) | 0.26s |
-| every agent finished | yes |
+- **Durability nobody has to write.** Every syscall is journaled; a crashed
+  task resumes from its last completed call with nothing re-executed and no
+  model call billed twice. In a library, checkpointing is your application's
+  problem, at whatever granularity you remembered to implement.
+- **One view of everything.** Every application's agents in one `agent ps`,
+  one dependency graph, one event timeline, one cost ledger exact to the
+  token. "What did all of this cost today?" has an answer.
+- **Enforcement, not convention.** A library's permission check lives in the
+  same process as the agent that wants around it. Here the kernel refuses the
+  call in a different process — the agent physically cannot reach a tool it
+  wasn't granted, and cannot grant a child what it doesn't hold.
+- **Agents outlive callers.** Submit and disconnect; the work continues. A
+  human approves a blocked agent from another terminal, days later, even
+  across a runtime restart.
+- **An ops surface.** `ps / top / logs / events / kill / pause / resume /
+  approve / grant / revoke`, plus a live dashboard — for agents, which is
+  where fleets of them get opaque.
 
-**2. Humans wake agents at scheduler speed.** An agent blocks on
-`request_approval`; the time from `approve()` to the agent *finished* — woken,
-re-queued, scheduled, run to completion:
+**What it costs:**
 
-| metric | result |
-|---|---|
-| median (5 rounds) | **1.4ms** |
-| worst | 1.6ms |
-
-**3. One runtime accounts for every application, exactly.** Three applications
-submit five agents each to one shared daemon; every agent makes two model
-calls.
-
-| metric | result |
-|---|---|
-| throughput | **41.8 agents/s** (15 agents, 0.36s wall) |
-| ledger total (30 mock calls) | $0.001380 |
-| ledger exact to the token | **yes** |
-
-Reproduce all of it:
-
-```bash
-python -m unittest discover tests -v    # 184 tests
-python benchmarks/bench.py              # the three tables above
-```
+- **A moving part.** A server to start, monitor, and upgrade, where a library
+  is a `pip install`. For one app with one workflow in one process, a
+  library is genuinely simpler.
+- **The boundary is strict.** Agent params must survive `json.dumps` — no
+  closures, no live objects — and agent classes must be importable by the
+  daemon. That discipline is exactly what makes recovery and process
+  isolation work, but it is a discipline.
+- **Ecosystem.** LangGraph has hundreds of integrations, streaming UIs, and a
+  hosted platform. This has six drivers, four model providers, and no
+  streaming. Zero dependencies cuts both ways.
+- **One box, one writer.** A single kernel over SQLite. It profiles
+  disk-bound at ~3.4ms/step, so one machine absorbs a lot of agents whose
+  real work is model calls — but there is no failover and no horizontal
+  scale.
 
 ---
 
-## Compared to the field
+## The numbers
+
+`python benchmarks/bench.py` — offline, deterministic, mock models, 10ms
+tick. From this machine:
+
+**A hard kill costs nothing beyond the last completed syscall.** Three agents,
+18 steps, killed halfway with no cleanup, recovered:
+
+| metric | result |
+|---|---|
+| steps re-executed after recovery | **0** |
+| journaled syscalls replayed | 24 |
+| recovery wall time (replay + all remaining work) | 0.25s |
+
+**Humans wake agents at scheduler speed** — `approve()` to *agent finished*,
+through the full path (dependency resolved, re-queued, scheduled, run):
+
+| metric | result |
+|---|---|
+| median | **1.2ms** |
+| worst | 1.6ms |
+
+**One runtime accounts for every application, exactly.** Three apps × five
+agents × two model calls against one daemon:
+
+| metric | result |
+|---|---|
+| throughput | **44.6 agents/s** |
+| ledger, 30 concurrent billed calls | $0.001380 — **exact to the token** |
+
+---
+
+## Head-to-head
 
 `benchmarks/compare.py` runs identical workloads against **LangGraph 1.2.9**,
-**CrewAI 1.15.4** (Flows), **AutoGen 0.7.5**, and **Temporal 1.30** — on one
-machine, with SQLite durability wherever the framework offers it and no
-network in the loop. Executions are counted in a shared tally table rather
-than any framework's own logs, and the crash is a real OS `kill` of a real
-process delivered once every framework has completed the same work. Nothing
-is simulated in-process.
+**CrewAI 1.15.4**, **AutoGen 0.7.5**, and **Temporal 1.30**. Executions are
+counted in a shared tally table — no framework grades its own homework — and
+the crash is a real OS kill delivered once every framework has completed the
+same work. Any comparator not installed is skipped.
 
-```bash
-pip install langgraph langgraph-checkpoint-sqlite crewai autogen-core temporalio
-python benchmarks/compare.py       # any comparator not installed is skipped
-```
-
-### 1. Recovery — billable calls repeated after a hard kill
-
-Six billable calls (each an irreversible write plus 80ms of work), killed
-after three, then resumed. The number is how many of the six executed
-*twice*: work redone, and in a real system, model spend paid twice.
+**Recovery — billable calls repeated after a hard kill** (6 calls, killed
+after 3):
 
 | framework | repeated | why |
 |---|---|---|
@@ -130,629 +158,284 @@ after three, then resumed. The number is how many of the six executed
 | LangGraph (one node per call) | 1 | the in-flight node has no checkpoint |
 | Temporal | 1 | at-least-once activity semantics |
 | LangGraph (calls in one node) | 3 | a crash re-runs the whole node |
-| CrewAI Flows | 3 | `@persist` restores state, then replays from `@start` |
+| CrewAI Flows | 3 | `@persist` restores state, then replays from the start |
 | AutoGen | 3 | `save_state` restores state; the handler starts over |
 
-The axis is checkpoint granularity. LangGraph and CrewAI persist at method or
-node boundaries, so a crash inside one re-runs all of it; decomposing into one
-node per side effect narrows LangGraph to a single repeat, which is the same
-place Temporal lands. AgentOS journals the reply the moment a syscall
-completes, so the replayed agent is handed the recorded answer and the tool
-never fires again — the in-flight case included.
+The axis is checkpoint granularity. Others persist at node or method
+boundaries; AgentOS journals at the syscall, so even the call *in flight* at
+the kill returns its recorded reply instead of running twice. LangGraph can
+approach this — if you restructure into one node per side effect. AgentOS
+gives it to code written the obvious way.
 
-### 2. Overhead — one durable step, no real work
+**Overhead — one durable step, no real work:**
 
 | framework | per step |
 |---|---|
-| **AgentOS** | **3.7ms** |
-| AutoGen | 4.6ms |
+| **AgentOS** | **3.4ms** |
+| AutoGen | 4.1ms |
 | LangGraph | 5.4ms |
-| CrewAI Flows | 16.3ms |
+| CrewAI Flows | 15.2ms |
 | Temporal | 68.6ms |
 
-### 3. Human-in-the-loop — approve → the agent has finished
+**Human-in-the-loop — approve → finished:**
 
 | framework | median | worst |
 |---|---|---|
-| **AgentOS** | **1.2ms** | **1.4ms** |
-| LangGraph | 3.3ms | 4.3ms |
-| Temporal | 8.7ms | 8.8ms |
+| **AgentOS** | **1.2ms** | **2.3ms** |
+| LangGraph | 3.2ms | 17.7ms |
+| Temporal | 6.2ms | 11.0ms |
 | CrewAI / AutoGen | — | no durable wait-for-a-human primitive to time |
 
-### 4. Cost under multi-application load
+**Cost under multi-application load** (3 apps × 5 agents × 2 billed calls):
 
-The third axis Phase 8 asks for, and the one that is not really a race. Three
-independent applications, five agents each, two billed calls per agent:
-
-| framework | wall | calls seen | ledger |
-|---|---|---|---|
-| **AgentOS** | 0.34s | 30/30 | **one ledger, exact to the token** |
-| LangGraph | 0.29s | 30/30 | per-app only |
-| CrewAI Flows | 0.50s | 30/30 | per-app only |
-
-Everyone does the work; the difference is who can answer "what did all of that
-cost". AgentOS bills through one kernel, so one ledger covers every
-application submitting to it. LangGraph and CrewAI are libraries — each
-application owns its own state, and totalling across them is the caller's job.
-That is the p.8 shared-runtime claim rather than a performance result, which
-is why the wall-time column is close and uninteresting.
-
-### 5. The same steps with real work in them
-
-Bare-step overhead is the wrong denominator for agent systems: a step that
-does nothing is not a step anyone runs. The same 30 steps with 600ms of work
-each — one modest model call — against an 18.0s floor:
-
-| framework | wall | over floor |
+| framework | calls seen | ledger |
 |---|---|---|
-| AutoGen | 18.23s | +1.3% |
-| LangGraph | 18.36s | +2.0% |
-| **AgentOS** | **18.41s** | **+2.3%** |
-| Temporal | 18.59s | +3.3% |
-| CrewAI Flows | 18.76s | +4.2% |
+| **AgentOS** | 30/30 | **one ledger, exact to the token** |
+| LangGraph | 30/30 | per-app only |
+| CrewAI Flows | 30/30 | per-app only |
 
-### What this shows
+Everyone does the work; the difference is who can answer "what did all of
+that cost." Libraries can't, structurally: each app owns its own state.
 
-AgentOS has the lowest per-step overhead, the lowest approval latency, the
-only single ledger across applications, and is the only runtime measured here
-that repeats **no** work after a crash. On realistic workloads every framework
-lands within a few points of the floor and AgentOS is third by 1.0pp — close
-enough that the ranking in that column would not survive a different machine.
-Most of that gap is one Windows artifact: `ctx.sleep` is a kernel timer, and
-`loop.call_later` cannot resolve below the platform's ~15.6ms quantum, where
-the comparators' inline `time.sleep` can. On Linux it largely disappears.
+**With real work in the steps** (600ms each, one modest model call), every
+framework lands within a few points of the floor — AutoGen +1.5%, LangGraph
++1.7%, **AgentOS +2.4%**, Temporal +2.8%, CrewAI +3.3%. That column is a
+wash: the ranking would not survive a different machine, and most of
+AgentOS's gap is a Windows timer quantum that largely disappears on Linux.
 
-
-## The one architectural decision
-
-Agents live behind a **strict message-passing boundary**. An agent never
-holds a reference to the kernel, the process table, or another agent — its
-entire world is `Context` (`spawn`, `sleep`, `wait`, `log`, …), and every
-call crosses to the kernel as a JSON-serializable `Syscall`, coming back as a
-`Reply`. That constraint is enforced at runtime (`assert_serializable`), and
-it is what pays for the two hardest features:
-
-- **Crash recovery**: everything an agent does crosses the syscall boundary
-  as JSON, so the kernel can journal every reply and replay it after a crash.
-- **Execution-substrate freedom**: anything that survives `json.dumps`
-  survives a pipe or a socket, so *where* an agent executes is pure
-  configuration — no agent code knows or changes.
-
-### Where agents execute: isolation
-
-"Agents are processes" means the **kernel's** sense of process: a PID, an
-entry in the process table, a 9-state lifecycle, admission into bounded
-execution slots, membership in the dependency graph, and a syscall journal.
-What executes the agent's code underneath is the `isolation` setting:
-
-| `isolation=` | what runs the agent | concurrency | default for |
-|---|---|---|---|
-| `"process"` | its own OS process — own interpreter, own GIL, own address space | true parallelism across cores | the daemon (`agent daemon`) |
-| `"task"` | an asyncio task inside the kernel's event loop | cooperative interleaving, one core | embedded `Kernel(...)`, tests, examples, `agent run` |
-
-The two executors (`runtime/subproc.py` and `runtime/executor.py`) present an
-identical interface; the kernel cannot tell which one it is driving, and
-slots, pause-at-syscall, kill, and journal replay behave identically on both.
-Task isolation exists because it is deterministic and cheap — the tests and
-the benchmark use it so a bug reproduces the same way twice. Process
-isolation is the deployment mode: two agents with disjoint dependencies
-execute simultaneously on different cores, and `agent kill` terminates a real
-OS process.
-
-To be precise about where asyncio sits in process mode, since "async" and
-"parallel" are easy to conflate:
-
-- **In the kernel process**, asyncio is an I/O multiplexer: per agent it runs
-  a supervisor task and two pump tasks that shuttle bytes to and from the
-  child. No agent code runs here.
-- **In each child process**, a private event loop runs exactly one agent.
-  The agent is a coroutine not for concurrency — there is nothing to be
-  concurrent with — but for *suspension*: `await ctx.anything(...)` is the
-  syscall, the point where the agent parks until the kernel's `Reply` arrives
-  and the scheduler grants it a slot. This is also what makes recovery
-  possible: an agent's resume point is always a syscall boundary, so a
-  coroutine never needs to be snapshotted.
-
-### How syscalls travel: transport
-
-With process isolation, `Syscall` and `Reply` cross between child and kernel
-as JSON lines over a `transport`:
-
-| `transport=` | channel | default |
-|---|---|---|
-| `"socket"` | loopback TCP, one connection per agent | **yes** |
-| `"pipe"` | the child's stdio | `--transport pipe` to select |
-
-The socket transport works like this: the executor opens one listening socket
-on `127.0.0.1` (ephemeral port) the first time it spawns an agent. Each child
-is handed the endpoint and a **single-use token** in its environment
-(`AGENTOS_CONNECT`, `AGENTOS_TOKEN`), dials back, sends the token as its
-first line, and from then on the wire format is byte-identical to the pipe
-transport. A connection with an unknown, reused, or missing token is dropped
-(there is a test that does exactly this), and stderr still flows over a pipe
-for crash diagnostics either way.
-
-The channel is a persistent full-duplex stream deliberately *not* HTTP: a
-reply arrives whenever the scheduler grants the agent a slot, not as the
-response to a request, so request/response framing is the wrong shape. HTTP
-is used where request/response is the right shape — the daemon's control
-plane (`api/server.py`), which applications and the CLI talk to.
-
-What the socket transport changes: the syscall channel no longer assumes
-parent-child stdio inheritance, which is the prerequisite for agents that
-live on other machines or are written in other languages — anything that can
-open a TCP connection and speak JSON lines can be an agent. What it does
-*not* change today: agents are still spawned locally by the executor, the
-listener binds to loopback only, and the stream is plaintext — remote agents
-would need the listener opened up plus TLS on the channel, which is future
-work, not this commit.
+Scope, honestly: one machine, one workload family, and Temporal's single
+repeat is its documented at-least-once contract working as designed — it
+buys multi-host durability AgentOS does not attempt. This measures runtime
+overhead and recovery granularity, not ecosystems or agent quality.
 
 ---
 
-## Components
+## How it works
 
-### Processes and scheduling
+### The one decision everything hangs on
 
-The kernel keeps a process table over the nine lifecycle states from p.3 —
-`Ready`, `Running`, `Waiting`, `Sleeping`, `Blocked`, `Checkpointing`,
-`Suspended`, `Finished`, `Failed` — with an enforced transition table: an
-illegal move raises `InvalidTransition` rather than quietly corrupting the
-process table. Each agent carries the full p.3 metadata card (PID, name,
-parent, children, status, priority, waiting-on, **model**, **permissions**,
-memory, checkpoint), which is what `agent ps` prints. `spawn`, `kill`,
-`pause`, `resume`, and `wait` are kernel operations. Execution
-slots bound concurrency: `--slots 2` means only two agents may hold a slot at
-once, so a five-agent tree is forced to queue. A woken agent goes back to
-`Ready` and re-queues for a slot rather than resuming instantly — that is the
-difference between a scheduler and a callback, and there is a test that fails
-if it regresses. Scheduling policy is swappable at the command line:
-`--policy fifo | priority | dependency`.
+An agent never holds a reference to the kernel, the process table, or
+another agent. Its entire world is `Context`, and every call crosses to the
+kernel as a JSON-serializable `Syscall`, answered by a `Reply` — enforced at
+runtime, not asked politely. That single boundary pays for all three hard
+features:
 
-Retries are a scheduler responsibility (p.4), not the application's: an agent
-that raises can be restarted within a budget (`Kernel(retries=N)`, or a
-`retries` attribute on the agent). A restart is a real edge out of `Failed`
-back to `Ready`, so `agent logs` narrates `Running → Failed → Ready →
-Running → Finished` and the process card counts the attempts. The restarted
-agent replays its journal, so a retry costs only the work after its last
-completed syscall — the same machinery crash recovery uses, applied to one
-process instead of the whole runtime. A *killed* agent is never retried: a
-human said stop. Off by default.
+- **Crash recovery** — everything an agent does is JSON crossing a boundary,
+  so the kernel journals every reply. Replay hands back recorded answers
+  instead of re-executing; the agent fast-forwards to where it died and goes
+  live. Every completed syscall is a checkpoint.
+- **Real process isolation** — anything that survives `json.dumps` survives a
+  socket. The daemon runs each agent as its **own OS process**, syscalls
+  crossing a token-authenticated loopback TCP connection as JSON lines (or
+  stdio pipes with `--transport pipe`). Not a line of agent code knows which.
+- **Invented agents** — an agent whose identity is its parameters can be
+  *constructed by a model*, and still journals, recovers, and isolates like
+  anything hand-written.
 
-The scheduler loop is **event-driven with the tick as a ceiling, not a
-period**. A syscall or a newly-runnable agent wakes it in microseconds; `tick`
-only bounds how long it may doze when nothing is happening, and rate-limits
-the work that reads the outside world (the permission file, the command and
-approval tables, the heartbeat, deadlock detection). This matters more than it
-sounds: `asyncio.sleep()` cannot resolve below the platform timer quantum
-(~15.6ms on Windows), so a loop that slept the tick on every pass paid that
-quantum per syscall no matter how small the tick was set. Ticks below the
-quantum were an illusion. Being woken by the work itself is what makes a 1ms
-and a 20ms tick perform the same today.
+### The kernel
 
-### Events and dependencies
+**Processes.** A process table over nine lifecycle states with an enforced
+transition table — an illegal move raises instead of corrupting state. Each
+agent carries a full card: PID, parent, children, status, priority, model,
+permissions, event wiring, memory, cost, checkpoint. Execution slots bound
+concurrency; a woken agent re-queues rather than resuming instantly — that's
+what makes it a scheduler and not a callback, and a test fails if it
+regresses. Policies: FIFO, priority (with ageing), dependency-aware — run
+whoever unblocks the most work, a policy only a kernel with the whole
+wait-for graph can have. The loop is event-driven with the tick as a ceiling:
+a syscall or a newly-runnable agent wakes it in microseconds.
 
-In `examples/pipeline.py`, `Research` publishes a fact and stops — it never
-mentions `CodeAgent` or `DocumentationAgent`, and does not know they exist:
+**Events and dependencies.** Agents never call each other — `Context` gives
+them no way to. They publish; the runtime wakes subscribers. A waiting agent
+declares a dependency *set* — agents, events, timers, human approvals — and
+the scheduler wakes it when the last one resolves. A wait that would close a
+cycle is refused when requested; a stall with no cycle is detected and
+reported; a wait on an event that *provably* nobody will publish fails
+immediately — including when its last possible publisher exits mid-wait.
+Nothing hangs silently.
+
+**Humans as kernel objects.** `request_approval(role=...)` blocks the agent
+on a *durable* approval — a dependency-graph node identical in kind to an
+agent or a timer. Kill the runtime while blocked; restart; the agent
+re-attaches to the same pending approval instead of asking twice. A human
+can approve while nothing is running at all.
+
+**Tools behind capabilities.** Agents never import tool libraries. They
+request a capability by name; the kernel checks the permission matrix
+*before* dispatch (deny by default, revocation applies to a running system)
+and routes to a driver owning timeouts, rate limits, retries, caching, and
+error handling. Six ship: filesystem (sandboxed to a root), shell, python,
+sql, http, browser. Every dispatch is recorded — the runtime knows all tool
+usage, and shows it.
+
+**Memory.** Six kinds behind four verbs: working and scratchpad die with the
+process; shared crosses agents through the kernel with an access list;
+longterm and semantic are keyed by agent *name* and survive restarts;
+episodic is the kernel's own record, read-only. The semantic embedding is a
+deterministic stdlib placeholder a real model can replace without any agent
+changing.
+
+**Models by capability class.** Agents ask for `"fast"` or `"reasoning"`,
+never a model name. The default chain is **gpt-oss-120b** four ways — Groq,
+OpenRouter, local Ollama, then an offline mock that always answers:
+
+```jsonc
+// .agentos/models.json — set GROQ_API_KEY or OPENROUTER_API_KEY and the
+// same agent code lands on the real model; unset it and the mock answers.
+"fast": [
+  {"provider": "openai", "base_url": "https://api.groq.com/openai/v1",
+   "api_key_env": "GROQ_API_KEY", "model": "openai/gpt-oss-120b", ...},
+  {"provider": "openai", "base_url": "https://openrouter.ai/api/v1",
+   "api_key_env": "OPENROUTER_API_KEY", "model": "openai/gpt-oss-120b", ...},
+  {"provider": "openai", "base_url": "http://localhost:11434/v1",
+   "model": "gpt-oss:120b", ...},
+  {"provider": "mock", "model": "mock-fast"}
+]
+```
+
+Unavailable candidates are skipped, failing ones fall through, and the
+runtime can rank by projected cost, latency, or quality (`"prefer":
+"cheapest"`). Tokens and dollars are recorded per agent and per model;
+failures are on the record too. Providers: any OpenAI-compatible endpoint,
+Anthropic, LiteLLM (optional), mock.
+
+**Retries are the scheduler's job.** An agent that raises can be restarted
+within a budget, as a real `Failed → Ready` edge in the state machine. The
+restarted agent replays its journal *minus the failed tail* — a failed
+syscall had no side effect, so it re-executes live instead of replaying its
+own recorded failure forever. A killed agent is never retried: a human said
+stop.
+
+---
+
+## Agents invented at runtime
+
+Everything above works with agents somebody wrote. The interesting case is
+when nobody wrote them.
+
+`LLMAgent` is one class whose **parameters are its identity** — role, goal,
+tools, model. Creating an agent at runtime means constructing four JSON
+values, so a model can do it, and the result still satisfies every kernel
+discipline: it journals, recovers, runs in its own OS process, and shows up
+on `agent ps` under the role the model invented. The planner is the same
+class with `may_spawn=True`.
+
+Its protocol is one JSON action per model turn — `tool`, `spawn`, `publish`,
+`wait`, `remember`/`recall` (the memory system), `ask_human` (the durable
+approval object), `done` — with the full `Context` surface reachable, because
+a planner that can't use the kernel's services routes around them. Every
+decision is logged before it runs; `agent logs` narrates the model's run.
+
+**Authority: the operator's grant is the ceiling.** An agent may delegate
+only a subset of what it holds — checked in the kernel at spawn:
 
 ```python
-await ctx.publish("ResearchCompleted", topic=topic, findings=findings)
+await ctx.spawn(LLMAgent(role="Surveyor", ...), grant=["filesystem"])  # ⊆ mine, or refused
 ```
 
-The runtime wakes whoever subscribed. Adding a fourth subscriber required
-editing no other agent. That isn't a style rule: `Context` gives an agent no
-way to name another agent, and `Agent.run` is wrapped so that calling another
-agent's `run()` directly raises `DirectInvocationError`.
+So the capability set on the *root* agent bounds the entire tree, however
+many layers of agents a model invents, whatever it names them. Start a
+planner with `["filesystem"]` and nothing beneath it reaches a shell. You
+cannot answer "what could this touch?" by reading code that doesn't exist
+yet — so the kernel answers it instead. (Grants ride on the *process*, not
+the class name; a narrowed child is never re-widened; authority dies with
+its holder.)
 
-Agents wait on a dependency *set*, not a sequence — the scheduler wakes them
-when the last one resolves:
-
-```python
-result = await ctx.wait_all(agents=[code, docs], events=["HumanApproved"], timer=5)
-```
-
-A wait that would close a cycle is refused when it is requested. A stall with
-no cycle — everyone `Waiting`, nobody `Sleeping`, no timer pending — is
-detected and reported. Neither one hangs (`examples/deadlock.py` exercises
-both).
-
-### Human approval
-
-`examples/deploy.py` stops at:
-
-```python
-approval = await ctx.request_approval(role="Senior Engineer", reason="Production deployment")
-```
-
-`agent ps` shows `Blocked`, waiting on `Senior Engineer`. The human is a node
-in the dependency graph — identical in kind to an agent, an event, or a timer —
-and
-
-```bash
-python -m agentos.cli approve 1 --as "Senior Engineer"
-```
-
-wakes the Deployer exactly where it stopped (approving `--as "Intern"` is
-refused). An agent blocked on a human is not a deadlock; the runtime keeps
-serving.
-
-The approval is a durable kernel object, not a callback. Kill the runtime
-while it is blocked, run it again, and the re-run agent re-attaches to the same
-pending approval instead of asking twice — `agent approve` writes the grant to
-the store, not to the process, so a human can even approve while nothing is
-running and the next run sails through. Every grant also publishes a
-`HumanApproved` event, so `wait_all(events=["HumanApproved"])` composes with
-it.
-
-### Tools and permissions
-
-Agents never import tool libraries. They request a capability by name, and the
-kernel dispatches to the driver that owns authentication, rate limiting,
-retries, timeouts, and error handling:
-
-```python
-rows = await ctx.request_tool("sql", "query", query="SELECT SUM(amount) FROM invoices")
-```
-
-The kernel validates the capability against the permission matrix
-(`.agentos/permissions.json`, agent name → capabilities, deny by default)
-*before* dispatch — the application does not get a vote, and a denial is an
-audit-log entry the agent can catch, not a stack trace. In
-`examples/finance.py`, the SQL calls run and the browser call is refused.
-Revoke with `agent revoke Finance sql` and the same code fails at its first
-query — the file is re-read when it changes, so revocation applies to a
-*running* system.
-
-Six drivers ship (`agent tools`): filesystem (sandboxed to a root, publishes
-`FileCreated`), shell, python (fresh interpreter), sql, http, browser. A
-running tool call is a dependency-graph node like any other — the agent shows
-`Waiting on tool sql` in `agent ps`, completion publishes `ToolCompleted`, and
-the woken agent re-queues for a slot like everyone else.
-
-`drivers/base.py` owns the discipline p.7 assigns to drivers, once, for all of
-them: timeouts, rate limiting, retries, error handling, and **caching**.
-Caching is opt-in and per-operation, because caching a write would be a
-correctness bug rather than an optimisation — each driver declares which of
-its ops are reads (`sql.query`, `http.get`, `filesystem.read/list/exists`),
-and a TTL turns it on:
-
-```python
-Kernel(tools={"http": {"cache_ttl": 30.0}})   # 0, the default, is off
-```
-
-Every dispatch is recorded, so the runtime can answer what tools were used and
-how often they failed — the p.8 "all tool usage" claim, visible in the
-dashboard's Tool usage panel.
-
-### Agents invented at runtime
-
-Everywhere above, an agent is a class someone wrote in advance. That is the
-right shape when the work is known, and the wrong one when a task arrives as a
-sentence and the team that should do it has to be invented on the spot.
-
-`agentos/agents/llm.py` is the other shape: **one agent class whose parameters
-are its identity** — a role, a goal, a set of tools, a model class. Creating an
-agent at runtime means constructing those four values, which are JSON, so a
-runtime-invented agent still satisfies the Phase 1 rule that an agent is
-re-creatable from its spec. It journals, recovers, and runs in a subprocess
-like anything else. The planner is not a special class either; it is the same
-`LLMAgent` with `may_spawn=True`.
-
-```bash
-python -m agentos.cli run examples/planner.py
-```
-
-That example hands the runtime one sentence — *"perform an experiment about
-trees"* — and no workflow graph and no agent definitions. The planner invents a
-Surveyor and an Analyst, grants each of them tools, waits for both, and
-answers. It is fully offline: the model is a scripted mock, so what it
-demonstrates is the runtime rather than a model's cleverness.
-
-**Authority is the interesting part.** An agent may delegate only a subset of
-what it holds:
-
-```python
-await ctx.spawn(LLMAgent(role="Surveyor", goal="...", tools=["filesystem"]),
-                grant=["filesystem"])          # refused if the parent lacks it
-```
-
-The kernel checks that at spawn, which makes the capability set handed to the
-root agent **the ceiling for the entire task tree** — however many layers of
-agents a model invents, and whatever it decides to call them. Start the planner
-with `["filesystem"]` and nothing underneath it can reach a shell. Grants live
-on the process rather than the class (every dynamic agent would otherwise be
-named `LLMAgent`), a narrower grant is never re-widened by the name matrix, and
-authority dies with the process that held it.
-
-That is what makes an unpredictable agent tree bounded: you cannot answer
-"what could this touch?" by reading code that does not exist yet, so the kernel
-answers it instead.
-
-**The invented agents coordinate through the event bus, like everything else.**
-Agents never call each other — but somebody has to choose event names, and no
-programmer is present to do it. So the parent chooses: a spawn carries the
-events that child may publish and the ones it will wait for.
+**Coordination: the parent names the events.** Loose coupling doesn't relax
+just because the agents are invented — but somebody has to choose event
+names, and no programmer is present. So the parent chooses, per child, at
+spawn:
 
 ```json
-{"action": "spawn", "role": "Surveyor", "tools": ["filesystem"],
- "publishes": ["MeasurementsReady"], "subscribes": []}
-{"action": "spawn", "role": "Analyst",  "tools": [],
+{"action": "spawn", "role": "Analyst", "tools": [],
  "publishes": ["AnalysisReady"], "subscribes": ["MeasurementsReady"]}
 ```
 
-Running `examples/planner.py` shows what flows:
-
-```
-pid 2  Surveyor  publishes=MeasurementsReady  waits_for=-
-pid 3  Analyst   publishes=AnalysisReady      waits_for=MeasurementsReady
-
-MeasurementsReady  from pid 2 -> woke pid 3
-AnalysisReady      from pid 3 -> woke pid 1
-```
-
 The Surveyor and the Analyst never name each other; the runtime does the
-waking. No event name appears anywhere in the source — the planner invented
-both, and the only thing it was told is to use the same one on each side.
+waking. Because the parent named *both sides* of every match, the kernel
+knows the vocabulary — so publishing an unwired name is refused with a
+message the model can act on, and waiting for a name nobody will publish
+fails fast instead of hanging. Attenuation is for security; wiring is for
+correctness. Publishing an event harms nobody — declarations just turn a
+silent stall into a loud error.
 
-**Why the kernel records the wiring.** Events match by exact string, so a
-publisher and a waiter who disagree on a name do not fail — the waiter never
-wakes, and it surfaces as a stall. Because the parent named both sides, the
-kernel knows the vocabulary, which buys two things a model cannot get on its
-own: publishing a name it was not wired for is **refused with a message it
-can act on**, and waiting for a name that *provably* nobody will publish
-**fails immediately** instead of hanging. A wait is only refused when every
-live agent has a declared vocabulary and none of them names it — kernel
-events like `AgentFinished` are always waitable, and one unwired agent is
-enough to keep the wait open.
+See it offline: `python -m agentos.cli run examples/planner.py` (the model
+is a deterministic script, so what it demonstrates is the runtime). One
+candid caveat: the protocol has so far been exercised against scripted and
+mock models — set a key and the same path runs gpt-oss-120b live, and that
+shakedown is the next thing this project needs.
 
-Note the difference from tool grants. Attenuation exists for **security**;
-event wiring exists for **correctness**. Publishing an event harms nobody, so
-declarations bound nothing — they only turn a silent hang into a loud error.
-A hand-written agent, wired by no one, still decides its own events exactly
-as `examples/pipeline.py` always has.
+---
 
-**Everything a hand-written agent can reach, an invented one can too.** The
-action protocol covers the whole `Context` surface, because a planner that
-cannot use the kernel's services routes around them:
+## Running it for real
 
-- `remember` / `recall` — the six-kind memory system. `"kind": "shared"` is
-  how teammates hand each other real state (an event payload fits a
-  notification, not a dataset); `"longterm"` survives into future tasks under
-  the role's name; `recall` with `"query"` searches semantically.
-- `ask_human` — blocks on the kernel's durable approval object, the same one
-  `agent approve` grants. An invented agent can stop for a person exactly the
-  way a hand-written one always could.
-- `spawn` takes `"priority"` (the scheduler honours it) and `"retries"` — a
-  restart budget for a flaky child, clamped to 3. On restart the child
-  replays its journal **minus the failed tail**: a failed syscall had no side
-  effect, so it re-executes live instead of replaying its own recorded
-  failure forever. `POST /task` accepts both for the planner itself.
-- Every decision the model makes is written to the kernel log before it runs
-  (`agent logs` shows `decided: spawn: Surveyor …`), and `agent ps` shows
-  each invented agent's wiring in an `EVENTS` column — so the p.3 process
-  card is complete for agents nobody wrote.
-
-Two waits can no longer hang: one that starts unsatisfiable is refused, and
-one whose *last possible publisher exits* mid-wait now fails at that moment,
-naming the dead publisher — rather than surfacing minutes later as a runtime
-stall. (`wait_all`'s `timer` is deliberately not a timeout: it is one more
-dependency in the set, per p.5. The hang risk is closed by proof, not by
-racing a clock.)
-
-The one `Context` call *not* exposed to models is `checkpoint()`: every
-syscall an invented agent makes is already a checkpoint, so a model labelling
-durable points would add protocol surface with nothing to buy.
-
-**Over HTTP**, that is the whole hosted story — a sentence and a tool list in,
-a team out:
+### The hosted path
 
 ```bash
-python -m agentos.cli daemon --task-tools filesystem,http
+AGENTOS_TOKEN=$(openssl rand -hex 16) \
+python -m agentos.cli daemon --host 0.0.0.0 --task-tools filesystem,http
 ```
 
 ```bash
-curl -X POST localhost:7070/task -d '{
-  "goal": "perform an experiment about trees",
-  "tools": ["filesystem"]
-}'
-# -> {"pid": 1, "granted": ["filesystem"], "poll": "/task/1"}
-
-curl localhost:7070/task/1
-# -> status, result, and every agent the planner invented
+curl -H "Authorization: Bearer $AGENTOS_TOKEN" -X POST host:7070/task \
+     -d '{"goal": "...", "tools": ["filesystem"], "priority": "High", "retries": 1}'
+curl -H "Authorization: Bearer $AGENTOS_TOKEN" host:7070/task/1   # result + the team
 ```
 
-Authority is bounded twice. `--task-tools` is what the *operator* will ever
-allow a submitted task to hold; the request asks for a subset of that; and
-attenuation carries it down the tree. A request for `shell` on the daemon
-above is refused at the door with a 400, not discovered later in an audit
-log. Everything else arriving over the network is treated the same way: the
-goal is length-bounded, tool names must resolve to real drivers, and step and
-child limits are clamped rather than trusted.
+Authority is bounded twice: `--task-tools` is the most a submitted task may
+ever hold; the request asks for a subset; attenuation carries it down the
+tree. Everything off the socket is validated, clamped, or refused — goal
+length, tool names, step and child limits.
 
-`POST /agents` takes the same `grant`, for when you are submitting an agent
-class you wrote rather than a sentence.
+**Auth:** bearer token on every route — there are no exempt reads, because
+`/ps` carries other applications' results. Constant-time compare; denials
+reveal nothing; nothing logs the token. No token = loopback only: binding
+any other interface unauthenticated is refused at startup rather than
+allowed as a typo (`--insecure` is the explicit escape hatch for a proxy
+that already authenticates). Local clients pick the token up from
+`.agentos/daemon.json` automatically; remote ones read `AGENTOS_TOKEN`; the
+dashboard takes `/?token=…` once and uses a header thereafter.
 
-### Memory
+### Can this run 24/7 on a company server, working on your codebase?
 
-Six kinds of memory behind four verbs, backend invisible to agents
-(`examples/memory.py`):
+Mostly yes — with clear eyes about what it is and isn't. What's true today:
+the daemon runs indefinitely, survives hard kills (`--recover` resumes
+mid-task work with nothing repeated), authenticates its API, meters every
+token spent, and can take a sandboxed `filesystem` root pointed at a
+repository plus `http` for the outside world. An internal team can POST
+tasks from CI, cron, or chat hooks and read results — that is a real,
+defensible deployment.
 
-```python
-await ctx.memory.store("draft", data)                      # working: private
-await ctx.memory.store("finding", fact, kind="shared")     # publishes MemoryUpdated
-await ctx.memory.store("note", text, kind="semantic")      # + vector
-hits = await ctx.memory.retrieve(kind="semantic", query="who schedules agents?")
-```
+What to be honest about before leaving it unattended:
 
-`working`/`scratchpad` are private to a pid and freed when it exits. `shared`
-is the only way agents pass state — through the kernel, with an access list
-(`ctx.memory.share(key, with_agent=pid)`), never by touching each other.
-`longterm` and `semantic` are keyed by agent *name*, so they survive restarts
-(run `examples/memory.py` twice: the counter climbs). `episodic` is the
-agent's own history, written by the kernel, read-only. The semantic embedding
-is a deterministic stdlib placeholder — swap it for a real model without any
-agent changing. Per-agent memory bytes show in the `MEM` column of `agent ps`.
+- **Spending is metered, not capped.** The ledger is exact; nothing yet
+  *enforces* a per-task or per-day budget. Watch it, or add the cap first.
+- **`shell` and `python` grants are arbitrary code execution** by design.
+  The permission system decides *whether* those run; nothing confines what
+  they do once granted. Confinement is the container you run the daemon in
+  — drop privileges, mount the repo read-only where you can, and don't put
+  `shell` in `--task-tools` for anything the outside world can reach.
+- **One box.** No failover, no horizontal scale, SQLite underneath. Fine for
+  an internal workload; not an SLA.
+- **Single tenant.** One namespace, one ledger, one process table — a team's
+  shared visibility, not customer isolation.
+- **Something must submit the work.** There's no cron inside; pair it with
+  whatever already schedules things in your shop.
 
-### Model routing
+### Origin
 
-Agents request a capability class, never a model name
-(`examples/assistant.py`):
-
-```python
-reply = await ctx.request_model("fast", prompt="Summarize: ...")
-reply["text"], reply["model"], reply["cost"]
-```
-
-Routing lives in `.agentos/models.json`: each class is a candidate list tried
-in order — a candidate is skipped when unavailable (its API key is not set, or
-the prompt exceeds its context window) and a candidate that fails at call time
-falls through to the next. Config order is the default because a hand-written
-order is the most honest expression of a preference, but the runtime will
-choose on the p.7 criteria instead when asked:
-
-```json
-{"classes": {"reasoning": {"prefer": "cheapest", "candidates": [ ... ]}}}
-```
-
-`cheapest` ranks by projected cost for *this* prompt at the same rates the
-ledger bills; `fastest` by declared latency; `best` by declared quality.
-Candidates that cannot fit the prompt sort last rather than vanishing, so a
-failure still names them. The seeded "fast" chain is Claude Haiku 4.5 → a
-local Ollama endpoint → an offline mock that always answers, so the same agent
-code lands on a frontier model, a local model, or the mock depending purely on
-runtime config. Tokens and cost are recorded per agent (`COST` column in
-`agent ps`/`top`), every call publishes `ModelFinished`, and failures are on
-the record too. Providers: `anthropic` (official SDK when installed, stdlib
-HTTP otherwise), `openai`-compatible (OpenAI, Ollama, vLLM, LM Studio),
-`litellm` (optional), `mock`. The tests and most examples run fully offline.
-
-### Crash recovery
-
-You cannot snapshot a running coroutine — and you do not need to. Everything
-an agent does crosses the syscall boundary as JSON, so the kernel journals
-every syscall reply. **Every completed syscall is a checkpoint** — the `CKPT`
-column in `agent ps`.
-
-```bash
-python -m agentos.cli run examples/crash.py    # 3 workers x 5 slow steps
-kill -9 <os_pid>                               # mid-run, no cleanup, no mercy
-python -m agentos.cli recover
-```
-
-An agent can also mark a durable point by name:
-
-```python
-n = await ctx.checkpoint("draft complete")   # p.9's kernel.checkpoint()
-```
-
-Recovery never needs it — a journaled syscall is a checkpoint whether or not
-anyone asked — but it flushes the write-ahead log and moves the agent through
-the `Checkpointing` state, which is what makes that p.3 state observable in
-`agent ps` and `agent logs` rather than one the design implies and nobody can
-ever see.
-
-Recovery re-creates each agent from its spec and re-runs it; journaled
-syscalls return their recorded replies instantly instead of re-executing — a
-tool does not run twice, a model is not billed twice, a child is not spawned
-twice, `MemoryUpdated` is not re-published — until the agent catches up to
-where it died and goes live (`agent logs | grep recover` narrates it). The
-crash log ends with every (worker, step) pair exactly once: a hard kill cost
-the work since the last completed syscall and nothing more. The benchmark
-above measures exactly this: **0 steps re-executed**.
-
-The rest of the kernel state comes back the same way: finished children return
-with their results so a waiting parent still resolves; a pending approval
-re-attaches to the same durable approval row; events that were buffered but
-never consumed are redelivered (consumption is part of the record). If a
-replayed agent makes different syscalls than it made last time —
-nondeterminism outside the boundary — the divergence is detected, logged, and
-the agent simply goes live from there.
-
-### The shared runtime daemon
-
-The runtime is a process that outlives any application:
-
-```bash
-python -m agentos.cli daemon          # terminal 1: the runtime
-python examples/app_research.py       # terminal 2: an application
-python examples/app_support.py        # terminal 3: another one
-python -m agentos.cli ps              # everyone's agents, one table, one cost ledger
-```
-
-**Authentication.** Every route requires a bearer token when the daemon has
-one — there are no exempt reads, because `/ps` carries other applications'
-goals and results and `/logs` carries whatever their agents logged.
-
-```bash
-AGENTOS_TOKEN=$(openssl rand -hex 16) python -m agentos.cli daemon --host 0.0.0.0
-curl -H "Authorization: Bearer $AGENTOS_TOKEN" localhost:7070/ps
-```
-
-A daemon with **no** token serves loopback only: binding any other interface
-without one is **refused at startup** rather than allowed as a typo, since
-that would open submit, kill, read, and shutdown to anyone who can reach the
-port (`--insecure` is the explicit escape hatch for a proxy that already
-authenticates). Tokens are compared in constant time, denials say nothing
-about the token presented, and nothing writes one to the log. A client on the
-same machine picks the token up from `.agentos/daemon.json` and needs no
-configuration; one anywhere else reads `AGENTOS_TOKEN`. The dashboard, being
-a browser, accepts `/?token=…` and sends it as a header from then on.
-
-Applications are thin clients (`agentos.RuntimeClient`): they submit an agent
-as its *spec* — module, class, params, all JSON — and own nothing. No kernel,
-no event loop; they can exit after submitting and the agent keeps running.
-The daemon owns scheduling, permissions, memory, models, journaling, and
-recovery (`agent daemon --recover` replays a crashed daemon's journals) for
-every application at once. The control plane is HTTP + JSON, served stdlib
-(`api/server.py`) — the routes are the API; FastAPI would be a drop-in
-transport swap.
-
-By default the daemon runs each agent as a **real OS process**
-(`--isolation process`) with syscalls carried over a **loopback TCP socket**
-(`--transport socket`) — both defaults, both swappable at the command line
-(`--isolation task` for asyncio tasks, `--transport pipe` for stdio). See
-"The one architectural decision" above for exactly what each mode means.
-`agentos/runtime/child.py` reuses the *same* `Context` class agents have
-always had — its queues just end at a socket or a pipe now, with `Syscall`
-and `Reply` crossing as JSON lines. Not a line of `agents/` or `kernel/`
-changed for either transport. Slots, pause-at-syscall, journal replay — all
-of it works on subprocess agents unchanged, `agent kill` kills an actual
-process, and `/health` reports which isolation and transport a running daemon
-is using.
-
-Honest scope: subprocesses give agents a separate address space (they
-physically cannot reach the kernel or each other), but a malicious agent's
-imports are not sandboxed — that would take OS-level confinement, which is out
-of scope here. Likewise, an *in-process* agent that imports sqlite3 behind the
-kernel's back is not physically stopped; the kernel-side capability check and
-audit trail are what the permission system guarantees.
-
-### Dashboard and example applications
-
-The daemon serves a live dashboard at `http://127.0.0.1:7070/` with the p.8
-panel list: running, waiting, and blocked agents, the live dependency graph,
-the event timeline, memory, model usage, tool usage, latency, cost, and GPU
-utilisation — polling the same JSON API everything else uses. One HTML file,
-vanilla JS, no build step; the API is the interesting part and the page is a
-window onto it.
-
-GPU is reporting only, and says `none` on a machine without one. AgentOS does
-not *schedule* GPU memory — p.4 lists GPU-aware scheduling as a future idea,
-and claiming it would be worse than reporting honestly. Detection shells out
-to `nvidia-smi`, whose absence is an answer rather than an error.
-
-Three full applications exercise everything at once, offline:
-`software_company.py` (events wake the team, code lands via the sandboxed
-filesystem driver, and shipping blocks on a Release Manager's approval),
-`research_assistant.py` (parallel searchers coordinate through shared and
-semantic memory only), `customer_support.py` (tickets arrive as events, get
-classified by model calls, and routed to specialists).
+The project began as a design document — `AgentOS.pdf`, still in the repo —
+whose eight-phase plan is fully implemented and audited, and whose claims
+the benchmarks above measure rather than assert. What grew past the
+document: runtime-invented agents, capability attenuation, parent-named
+event wiring, the task API, and authentication.
 
 ---
 
 ## Try it
 
-No installs, no API keys — the kernel is demonstrated with agents that only
-sleep, so scheduling is deterministic and a bug reproduces the same way twice.
+No installs, no API keys — deterministic agents, so a bug reproduces the
+same way twice:
 
 ```bash
 python -m unittest discover tests -v          # 184 tests
@@ -766,39 +449,27 @@ python -m agentos.cli run examples/memory.py              # six memory kinds
 python -m agentos.cli run examples/assistant.py           # model routing
 python -m agentos.cli run examples/crash.py               # kill -9 it, then:
 python -m agentos.cli recover                             # nothing runs twice
-python -m agentos.cli run examples/planner.py             # no graph, no agent
-#   classes: a sentence goes in, the planner invents the team, and the
-#   operator's tool grant is the ceiling for everything it creates
+python -m agentos.cli run examples/planner.py             # the invented team
 
 python -m agentos.cli daemon                              # the shared runtime
-#   agents run as OS processes, syscalls over loopback TCP; opt out with
-#   --isolation task or --transport pipe
 python examples/app_research.py                           # app 1, another terminal
 python examples/app_support.py                            # app 2, another terminal
-# dashboard: http://127.0.0.1:7070/                       # live, while it runs
-
-python -m agentos.cli run examples/software_company.py    # the full applications
-python -m agentos.cli run examples/research_assistant.py
-python -m agentos.cli run examples/customer_support.py
+# dashboard: http://127.0.0.1:7070/
 
 python benchmarks/bench.py                                # the numbers above
-python benchmarks/compare.py                              # vs the other frameworks
+python benchmarks/compare.py                              # vs the field
 ```
 
-Watch any run live from a second terminal:
+Watch any run from a second terminal:
 
 ```bash
 python -m agentos.cli top          # live process table
-python -m agentos.cli ps           # one-shot snapshot (the p.3 card per agent)
-python -m agentos.cli wait 3       # block until pid 3 terminates; exits 0/1
+python -m agentos.cli ps           # the full per-agent card
+python -m agentos.cli wait 3       # block until pid 3 terminates
 python -m agentos.cli events -v    # who published what, and whom it woke
-python -m agentos.cli logs         # every state transition
+python -m agentos.cli logs         # every transition and every model decision
 python -m agentos.cli kill 3       # kill a child; the parent survives
-python -m agentos.cli pause 4      # suspends at its next syscall
-python -m agentos.cli resume 4
-python -m agentos.cli approvals    # pending human decisions
 python -m agentos.cli approve 1 --as "Senior Engineer"
-python -m agentos.cli tools        # drivers + the permission matrix
 python -m agentos.cli grant Finance sql
 python -m agentos.cli revoke Finance sql   # applies to a running system
 ```
@@ -810,45 +481,26 @@ python -m agentos.cli revoke Finance sql   # applies to a running system
 ```
 agentos/
   kernel/     states.py process.py scheduler.py messages.py store.py
-              events.py depgraph.py permissions.py memory.py models.py kernel.py
-              gpu.py               # utilisation reporting; None without a GPU
-  drivers/    base.py              # timeout / rate limit / retry discipline, once
+              events.py depgraph.py permissions.py memory.py models.py
+              gpu.py kernel.py
+  drivers/    base.py              # timeout / rate limit / retry / cache, once
               filesystem.py shell.py python.py sql.py http.py browser.py
-  runtime/    executor.py          # runs agents as asyncio tasks; owns Context
-              subproc.py child.py  # ...or as real OS processes; same Context,
-                                   #   syscalls over loopback TCP (default) or stdio
+  runtime/    executor.py          # asyncio executor; owns Context
+              subproc.py child.py  # agents as OS processes; TCP or stdio syscalls
               daemon.py            # the shared runtime that outlives applications
-  api/        server.py            # the daemon's HTTP control plane (stdlib)
-              dashboard.py         # the live dashboard served at /
+  api/        server.py            # HTTP control plane: auth, /task, /agents
+              dashboard.py         # live dashboard served at /
   agents/     base.py              # Agent, the direct-invocation guard, spec loader
-              llm.py               # LLMAgent: params are the identity, so an
-                                   #   agent can be invented at runtime
-  client.py                        # RuntimeClient: the thin client applications use
-  cli.py                           # agent ps / top / wait / events / logs / approvals /
-                                   #   tools / kill / pause / resume / approve / grant /
-                                   #   revoke / recover / daemon
-examples/     tree.py              # a five-agent tree queuing for two slots
-              pipeline.py          # the event pipeline + dependency graph
-              deadlock.py          # both stall modes, neither hangs
-              deploy.py            # blocks on a human; the approval survives restarts
-              finance.py           # the permission matrix: sql granted, browser denied
-              memory.py            # six memory kinds; longterm survives restarts
-              assistant.py         # LLM calls; model choice is runtime config
-              crash.py             # kill -9 mid-run; recover; nothing runs twice
-              planner.py           # one sentence in; the team is invented on
-                                   #   the spot, bounded by the operator's grant
-              app_research.py      # thin client #1 — owns no runtime
-              app_support.py       # thin client #2 — same daemon, same ps
-              software_company.py  # the full applications: everything at once
-              research_assistant.py customer_support.py
+              llm.py               # LLMAgent: params are the identity
+  client.py                        # RuntimeClient: submit / task / wait / ps
+  cli.py                           # agent ps top wait logs events approvals tools
+                                   #   kill pause resume approve grant revoke
+                                   #   recover daemon
+examples/     tree pipeline deadlock deploy finance memory assistant crash
+              planner              # a sentence in, an invented team out
+              app_research app_support software_company research_assistant
+              customer_support
 benchmarks/   bench.py             # recovery, approval latency, multi-app cost
               compare.py           # vs LangGraph / CrewAI / AutoGen / Temporal
-              _temporal_defs.py    # workflows: Temporal re-imports these
-              _autogen_defs.py     # handler types AutoGen resolves at import
-tests/        test_kernel.py test_events.py test_approvals.py test_tools.py
-              test_memory.py test_models.py test_recovery.py test_daemon.py
-              test_spec_gaps.py    # the design-doc items an audit found missing
-              test_dynamic_agents.py  # runtime-invented agents; the grant ceiling
-              test_task_api.py     # the hosted path, and what it refuses
-              test_auth.py         # the control plane, and what it refuses
+tests/        184 of them          # including what the API and kernel refuse
 ```
