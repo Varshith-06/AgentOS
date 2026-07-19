@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import ipaddress
 import json
 import os
 import threading
@@ -26,6 +27,21 @@ from ..api import make_server
 from ..kernel.kernel import Kernel
 from ..kernel.models import DEFAULT_MODELS_CONFIG
 from ..kernel.store import Store
+
+
+def _is_loopback(host: str) -> bool:
+    """Is this address reachable only from this machine?
+
+    An empty host or 0.0.0.0 means "every interface", which is the case this
+    guard exists for. Anything that does not resolve is treated as exposed:
+    when in doubt about reachability, assume the worse of the two.
+    """
+    if not host or host in ("0.0.0.0", "::", "*"):
+        return False
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host.lower() in ("localhost", "localhost.localdomain")
 
 
 class Daemon:
@@ -45,7 +61,24 @@ class Daemon:
         permissions: Any = None,
         tools: dict[str, dict[str, Any]] | None = None,
         task_tools: list[str] | None = None,
+        token: str | None = None,
+        insecure: bool = False,
     ) -> None:
+        # Authentication. A daemon with no token is unauthenticated, which is
+        # only defensible because nothing outside this machine can reach
+        # loopback. Bind anywhere else without one and every route -- submit,
+        # kill, read everyone's results, shut down -- is open to whoever can
+        # route to the port, so refuse rather than let that be a typo. The
+        # escape hatch exists because a private network behind a proxy that
+        # already authenticates is a real deployment.
+        self.token = token or os.environ.get("AGENTOS_TOKEN") or None
+        if not self.token and not _is_loopback(host) and not insecure:
+            raise ValueError(
+                f"refusing to serve {host} without a token: every route would "
+                "be open to anyone who can reach the port. Set AGENTOS_TOKEN "
+                "(or pass --token), or pass --insecure if something in front "
+                "of this already authenticates."
+            )
         self.store = store if store is not None else Store(dirpath)
         #: What POST /task is allowed to grant. The operator decides this when
         #: starting the runtime; a caller may request any subset and nothing
@@ -89,9 +122,22 @@ class Daemon:
     async def start(self) -> None:
         self.loop = asyncio.get_running_loop()
         endpoint = self.store.dir / "daemon.json"
+        # The token goes in the endpoint file so a client on this machine
+        # needs no configuration — the same trust boundary the runtime
+        # database already sits behind. A client elsewhere reads AGENTOS_TOKEN
+        # instead, and this file should not travel with it.
         endpoint.write_text(
-            json.dumps({"url": self.url, "os_pid": os.getpid()}), encoding="utf-8"
+            json.dumps({
+                "url": self.url,
+                "os_pid": os.getpid(),
+                **({"token": self.token} if self.token else {}),
+            }),
+            encoding="utf-8",
         )
+        try:  # best effort: not every filesystem honours this
+            endpoint.chmod(0o600)
+        except OSError:
+            pass
         threading.Thread(
             target=self.server.serve_forever, daemon=True, name="agentos-api"
         ).start()

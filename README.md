@@ -2,7 +2,7 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 167 passing](https://img.shields.io/badge/tests-167%20passing-brightgreen)
+![Tests: 184 passing](https://img.shields.io/badge/tests-184%20passing-brightgreen)
 ![Status: all phases complete](https://img.shields.io/badge/status-complete-blue)
 
 An operating system-inspired runtime for autonomous AI agents. Linux abstracts
@@ -39,7 +39,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
   real OS process with syscalls carried over a token-authenticated loopback
   TCP socket (or stdio pipes), and serves a live dashboard
 - A CLI (`agent ps / top / wait / events / logs / kill / pause / resume /
-  approve / grant / revoke / recover / daemon`), 167 tests, three full example
+  approve / grant / revoke / recover / daemon`), 184 tests, three full example
   applications, a benchmark that measures the design's claims, and a
   head-to-head against LangGraph, CrewAI, AutoGen, and Temporal
 
@@ -52,7 +52,7 @@ anything to compare against, and skips whichever are absent.) Design doc:
 | **Durable step overhead** | 3.7ms — lowest of the five |
 | **Realistic workloads** | +2.3%, within a few points of every comparator |
 | **Multi-app cost ledger** | exact to the token across concurrent applications |
-| **Test suite** | 167 tests, zero dependencies, fully offline |
+| **Test suite** | 184 tests, zero dependencies, fully offline |
 
 ---
 
@@ -97,7 +97,7 @@ calls.
 Reproduce all of it:
 
 ```bash
-python -m unittest discover tests -v    # 167 tests
+python -m unittest discover tests -v    # 184 tests
 python benchmarks/bench.py              # the three tables above
 ```
 
@@ -678,6 +678,25 @@ python examples/app_support.py        # terminal 3: another one
 python -m agentos.cli ps              # everyone's agents, one table, one cost ledger
 ```
 
+**Authentication.** Every route requires a bearer token when the daemon has
+one — there are no exempt reads, because `/ps` carries other applications'
+goals and results and `/logs` carries whatever their agents logged.
+
+```bash
+AGENTOS_TOKEN=$(openssl rand -hex 16) python -m agentos.cli daemon --host 0.0.0.0
+curl -H "Authorization: Bearer $AGENTOS_TOKEN" localhost:7070/ps
+```
+
+A daemon with **no** token serves loopback only: binding any other interface
+without one is **refused at startup** rather than allowed as a typo, since
+that would open submit, kill, read, and shutdown to anyone who can reach the
+port (`--insecure` is the explicit escape hatch for a proxy that already
+authenticates). Tokens are compared in constant time, denials say nothing
+about the token presented, and nothing writes one to the log. A client on the
+same machine picks the token up from `.agentos/daemon.json` and needs no
+configuration; one anywhere else reads `AGENTOS_TOKEN`. The dashboard, being
+a browser, accepts `/?token=…` and sends it as a header from then on.
+
 Applications are thin clients (`agentos.RuntimeClient`): they submit an agent
 as its *spec* — module, class, params, all JSON — and own nothing. No kernel,
 no event loop; they can exit after submitting and the agent keeps running.
@@ -736,7 +755,7 @@ No installs, no API keys — the kernel is demonstrated with agents that only
 sleep, so scheduling is deterministic and a bug reproduces the same way twice.
 
 ```bash
-python -m unittest discover tests -v          # 167 tests
+python -m unittest discover tests -v          # 184 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
@@ -831,4 +850,5 @@ tests/        test_kernel.py test_events.py test_approvals.py test_tools.py
               test_spec_gaps.py    # the design-doc items an audit found missing
               test_dynamic_agents.py  # runtime-invented agents; the grant ceiling
               test_task_api.py     # the hosted path, and what it refuses
+              test_auth.py         # the control plane, and what it refuses
 ```

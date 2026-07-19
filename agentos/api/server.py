@@ -30,10 +30,27 @@ POST /task is the doorway for work that has no predefined shape — a sentence
 and a tool list in, a planner out. What it may grant is bounded twice: by the
 daemon's own `task_tools` allowlist, which the operator sets when starting the
 runtime, and by the caller's request within it.
+
+Authentication
+--------------
+Every route requires a bearer token when the daemon has one. There are no
+"safe" reads to exempt: `/ps` carries other applications' goals and results,
+`/logs` carries whatever agents logged, and `/shutdown` stops the runtime. A
+daemon with no token configured is unauthenticated, which is fine on loopback
+and refused outright on any other interface — see Daemon.__init__.
+
+    Authorization: Bearer <token>      the normal path
+    ?token=<token>                     for the dashboard, which is a browser
+                                       and cannot set a header on a page load
+
+The query form is a deliberate trade: it is convenient and it leaks into
+Referer headers and shell history in a way the header does not. Prefer the
+header for anything programmatic.
 """
 
 from __future__ import annotations
 
+import hmac
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -158,11 +175,41 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
             length = int(self.headers.get("Content-Length") or 0)
             return json.loads(self.rfile.read(length)) if length else {}
 
+        # -- authentication -------------------------------------------------
+        def _authorized(self) -> bool:
+            """Constant-time compare, so a wrong token cannot be guessed a
+            character at a time by measuring how long the answer took."""
+            expected = daemon.token
+            if not expected:
+                return True  # unauthenticated daemon; loopback-only by construction
+            header = self.headers.get("Authorization", "")
+            if header.startswith("Bearer "):
+                presented = header[7:].strip()
+            else:
+                query = parse_qs(urlparse(self.path).query)
+                presented = query.get("token", [""])[0]
+            return hmac.compare_digest(presented, expected)
+
+        def _deny(self) -> None:
+            # The reply says a token is needed and nothing about the one sent:
+            # confirming "close but wrong" is help an attacker can use.
+            body = json.dumps({"error": "unauthorized: a bearer token is required"})
+            raw = body.encode("utf-8")
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Bearer realm="agentos"')
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
         def _limit(self, query: dict) -> int:
             return int(query.get("limit", ["200"])[0])
 
         # -- reads: straight from the store --------------------------------
         def do_GET(self) -> None:
+            if not self._authorized():
+                self._deny()
+                return
             url = urlparse(self.path)
             parts = [p for p in url.path.split("/") if p]
             query = parse_qs(url.query)
@@ -224,6 +271,9 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
 
         # -- mutations: onto the kernel's own thread ------------------------
         def do_POST(self) -> None:
+            if not self._authorized():
+                self._deny()
+                return
             parts = [p for p in urlparse(self.path).path.split("/") if p]
             try:
                 body = self._body()

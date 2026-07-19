@@ -16,6 +16,7 @@ the agent keeps running.
 from __future__ import annotations
 
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -34,25 +35,42 @@ class RemoteAgentFailed(Exception):
 
 
 class RuntimeClient:
-    def __init__(self, url: str | None = None, dirpath: str | Path = ".agentos") -> None:
-        if url is None:
+    def __init__(
+        self,
+        url: str | None = None,
+        dirpath: str | Path = ".agentos",
+        token: str | None = None,
+    ) -> None:
+        """Find the runtime and how to authenticate to it.
+
+        A token is looked for in three places, nearest first: the argument,
+        AGENTOS_TOKEN, and the endpoint file a local daemon wrote. That last
+        one is why an application on the same machine needs no configuration
+        at all, while one somewhere else must be told explicitly.
+        """
+        endpoint_data: dict[str, Any] = {}
+        if url is None or token is None:
             endpoint = Path(dirpath) / "daemon.json"
-            if not endpoint.exists():
+            if endpoint.exists():
+                endpoint_data = json.loads(endpoint.read_text(encoding="utf-8"))
+            elif url is None:
                 raise DaemonUnavailable(
                     f"no daemon endpoint at {endpoint}. "
                     "Start one: python -m agentos.cli daemon"
                 )
-            url = json.loads(endpoint.read_text(encoding="utf-8"))["url"]
-        self.url = url.rstrip("/")
+        self.url = (url or endpoint_data["url"]).rstrip("/")
+        self.token = (
+            token or os.environ.get("AGENTOS_TOKEN") or endpoint_data.get("token")
+        )
 
     # -- transport -----------------------------------------------------------
     def _request(self, method: str, path: str, body: dict | None = None) -> Any:
         data = None if body is None else json.dumps(body).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
         req = urllib.request.Request(
-            self.url + path,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method=method,
+            self.url + path, data=data, headers=headers, method=method,
         )
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:

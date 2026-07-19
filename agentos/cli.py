@@ -290,6 +290,8 @@ def cmd_daemon(args, store: Store) -> int:
         isolation=args.isolation,
         transport=args.transport,
         task_tools=[t.strip() for t in args.task_tools.split(",") if t.strip()],
+        token=args.token or None,
+        insecure=args.insecure,
         recover=recover,
     )
     print(f"agentos daemon at {daemon.url}  "
@@ -427,6 +429,16 @@ def build_parser() -> argparse.ArgumentParser:
     daemon.add_argument(
         "--isolation", choices=["process", "task"], default="process",
         help="agents as real OS subprocesses (default) or asyncio tasks",
+    )
+    daemon.add_argument(
+        "--token", default="",
+        help="bearer token every API request must present. Falls back to "
+             "$AGENTOS_TOKEN. Required to serve any address but loopback",
+    )
+    daemon.add_argument(
+        "--insecure", action="store_true",
+        help="serve a non-loopback address with no token. Only when something "
+             "in front of this already authenticates",
     )
     daemon.add_argument(
         "--task-tools", default="",

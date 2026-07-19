@@ -184,13 +184,24 @@ function drawGraph(snapshot) {
   $("graph").innerHTML = svg + "</svg>";
 }
 
+// A page loaded as /?token=... carries that token into every poll, because a
+// browser cannot put an Authorization header on the navigation that fetched
+// this page. Sent as a header from here on, so it stays out of the URLs.
+const TOKEN = new URLSearchParams(location.search).get("token");
+const authed = path => fetch(path, {
+  headers: TOKEN ? {Authorization: "Bearer " + TOKEN} : {},
+}).then(r => {
+  if (r.status === 401) throw new Error("unauthorized: open this page as /?token=<token>");
+  return r.json();
+});
+
 async function tick() {
   try {
     const [state, ps, events, logs] = await Promise.all([
-      fetch("/state").then(r => r.json()),
-      fetch("/ps").then(r => r.json()),
-      fetch("/events?limit=15").then(r => r.json()),
-      fetch("/logs?limit=25").then(r => r.json()),
+      authed("/state"),
+      authed("/ps"),
+      authed("/events?limit=15"),
+      authed("/logs?limit=25"),
     ]);
     $("err").style.display = "none";
     const procs = state.processes;
