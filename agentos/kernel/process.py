@@ -43,6 +43,15 @@ class AgentProcess:
     #: place. A list (including an empty one) is a contract: publishing
     #: anything else is refused, so a model's typo is an error rather than a
     #: subscriber that never wakes.
+    #: The pid at the top of this process's task — itself, for anything
+    #: submitted directly. Spending is metered against the whole tree, and a
+    #: tree is what a submitted task actually is.
+    root: int = 0
+    #: Dollars this task may spend on models before the kernel stops serving
+    #: it. Set on the root; descendants inherit by looking up the tree. None
+    #: means unmetered, which is the right default for a runtime you own and
+    #: the wrong one for a runtime taking work from outside.
+    budget_usd: float | None = None
     publishes: list[str] | None = None
     #: Event types this process was wired to wait for. Recorded for the same
     #: reason: so `agent ps` can show what a runtime-invented agent is for.
@@ -99,6 +108,8 @@ class AgentProcess:
             "model": self.model,
             "permissions": list(self.permissions),
             "retries": self.retries,
+            "root": self.root,
+            "budget_usd": self.budget_usd,
             "publishes": None if self.publishes is None else list(self.publishes),
             "subscribes": None if self.subscribes is None else list(self.subscribes),
         }
@@ -124,6 +135,9 @@ class ProcessTable:
         proc = AgentProcess(
             pid=pid, name=name, parent=parent, spec=spec, priority=priority
         )
+        # A child belongs to whatever task its parent belongs to, so budgets
+        # and accounting follow the tree rather than the individual agent.
+        proc.root = pid if parent is None else self._procs[parent].root
         self._procs[pid] = proc
         if parent is not None:
             self._procs[parent].children.append(pid)
@@ -150,6 +164,8 @@ class ProcessTable:
         )
         proc.state = state
         proc.started_at = started_at
+        proc.root = pid if parent is None else self._procs.get(
+            parent, proc).root or pid
         self._procs[pid] = proc
         self._next_pid = max(self._next_pid, pid + 1)
         if parent is not None and parent in self._procs:

@@ -199,9 +199,20 @@ class LLMAgent(Agent):
             )
 
         for step in range(max_steps):
-            reply = await ctx.request_model(
-                model, prompt=self._prompt(transcript), system=system
-            )
+            try:
+                reply = await ctx.request_model(
+                    model, prompt=self._prompt(transcript), system=system
+                )
+            except Exception as exc:
+                # The usual cause is the task's budget running out. There is
+                # no asking the model what to do when the model is what was
+                # refused, so stop and report honestly rather than spin.
+                return {
+                    "incomplete": True,
+                    "reason": str(exc),
+                    "steps_taken": step,
+                    "transcript": transcript[-3:],
+                }
             try:
                 action = self._parse(reply["text"])
             except ActionError as exc:

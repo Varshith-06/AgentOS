@@ -408,7 +408,12 @@ class Kernel:
         await self.run()
         return self.table.get(pid).result
 
-    def submit_spec(self, spec: dict[str, Any], grant: list[str] | None = None) -> int:
+    def submit_spec(
+        self,
+        spec: dict[str, Any],
+        grant: list[str] | None = None,
+        budget_usd: float | None = None,
+    ) -> int:
         """Spawn from a serialized spec — how a thin client hands the daemon
         an agent it has never imported (p.8).
 
@@ -417,15 +422,20 @@ class Kernel:
         the agent goes on to create, no descendant can exceed this set.
         """
         pid = self.spawn(self._create_agent(spec))
+        proc = self.table.get(pid)
         if grant is not None:
             self.perms.assign(pid, set(grant))
-            proc = self.table.get(pid)
             proc.permissions = sorted(grant)
-            self._publish_row(proc)
             self._log(
                 None, "grant",
                 f"pid {pid} admitted with {', '.join(sorted(grant)) or 'nothing'}",
             )
+        if budget_usd is not None:
+            # On the root, where the whole tree will look it up.
+            proc.budget_usd = float(budget_usd)
+            self._log(None, "budget", f"pid {pid} admitted with ${budget_usd:.4f}")
+        if grant is not None or budget_usd is not None:
+            self._publish_row(proc)
         return pid
 
     def snapshot(self) -> dict[str, Any]:
@@ -997,6 +1007,19 @@ class Kernel:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("request_model() needs a non-empty prompt")
 
+        over = self._over_budget(proc)
+        if over is not None:
+            spent, budget = over
+            self._log(
+                proc.pid, "budget",
+                f"{proc.name} refused: task {proc.root} has spent "
+                f"${spent:.6f} of its ${budget:.6f} budget",
+            )
+            raise ModelError(
+                f"budget exhausted: this task has spent ${spent:.6f} of its "
+                f"${budget:.6f} allowance. Finish with what you have."
+            )
+
         self._yield_slot(proc, AgentState.WAITING, waiting_on=f"model {need}")
         key = dg.key(dg.MODEL, f"{proc.pid}.{call.req_id}")
         self.deps.add(proc.pid, call.req_id, {key})
@@ -1006,6 +1029,29 @@ class Kernel:
         )
         self._io_tasks.add(task)
         task.add_done_callback(self._io_tasks.discard)
+
+    def _over_budget(self, proc: AgentProcess) -> tuple[float, float] | None:
+        """Has this agent's *task* spent its allowance? (spent, budget) if so.
+
+        Metered against the whole tree, because a planner that could spawn
+        its way around a cap would not have one. The check is before dispatch
+        rather than after, so a task can overshoot by at most the one call in
+        flight — the cost of a model call is not knowable until it returns.
+        """
+        try:
+            root = self.table.get(proc.root)
+        except KeyError:
+            return None
+        budget = root.budget_usd
+        if budget is None:
+            return None
+        costs = self.store.model_costs()
+        spent = sum(
+            entry["cost"]
+            for pid, entry in costs.items()
+            if pid in self.table._procs and self.table.get(pid).root == proc.root
+        )
+        return (spent, budget) if spent >= budget else None
 
     async def _run_model(
         self,

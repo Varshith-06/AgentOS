@@ -126,7 +126,7 @@ class RuntimeClient:
         body: dict[str, Any] = {
             "goal": goal, "tools": list(tools or []), "model": model
         }
-        body.update(options)
+        body.update(options)  # budget_usd, priority, retries, max_steps, ...
         return self._request("POST", "/task", body)["pid"]
 
     def task_tree(self, pid: int) -> dict[str, Any]:

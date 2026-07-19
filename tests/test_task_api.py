@@ -158,6 +158,27 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["priority"], "High")
         self.assertEqual(row["spec"]["params"]["retries"], 5)  # clamped
 
+    async def test_a_budget_over_the_operators_ceiling_is_refused(self):
+        """The daemon in this fixture allows no budget ceiling, so a request
+        naming one is accepted; the ceiling case is covered below."""
+        code, body = await asyncio.to_thread(
+            self.post, "/task", {"goal": "x", "tools": [], "budget_usd": 0.25})
+        self.assertEqual(code, 200)
+        self.assertEqual(body["budget_usd"], 0.25)
+
+    async def test_a_nonsense_budget_is_refused(self):
+        for bad in (0, -1, "lots", True):
+            code, _ = await asyncio.to_thread(
+                self.post, "/task",
+                {"goal": "x", "tools": [], "budget_usd": bad})
+            self.assertEqual(code, 400, f"budget {bad!r} was accepted")
+
+    async def test_explicit_null_is_unmetered_when_no_ceiling_is_set(self):
+        code, body = await asyncio.to_thread(
+            self.post, "/task", {"goal": "x", "tools": [], "budget_usd": None})
+        self.assertEqual(code, 200)
+        self.assertIsNone(body["budget_usd"])
+
     async def test_a_nonsense_priority_is_refused(self):
         code, body = await asyncio.to_thread(
             self.post, "/task", {"goal": "x", "tools": [], "priority": "Urgent"})
@@ -183,6 +204,61 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
             self.post, "/agents",
             {"spec": spec_of(LLMAgent(role="X", goal="y")), "grant": "filesystem"})
         self.assertEqual(code, 400)
+
+
+class BudgetCeilingTest(unittest.IsolatedAsyncioTestCase):
+    """A daemon started with --task-budget caps what a caller may ask for."""
+
+    async def asyncSetUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Store(self.tmp.name)
+        self.daemon = Daemon(store=self.store, port=0, tick=0.01,
+                             isolation="task", models=MODELS, permissions={},
+                             task_budget_usd=0.10)
+        self.task = asyncio.create_task(self.daemon.start())
+        await asyncio.sleep(0.15)
+
+    async def asyncTearDown(self):
+        self.daemon.stop()
+        await asyncio.wait_for(self.task, timeout=20)
+        self.store.close()
+
+    def post(self, body):
+        req = urllib.request.Request(
+            self.daemon.url + "/task", method="POST",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as exc:
+            return exc.code, json.loads(exc.read())
+
+    async def test_asking_for_more_than_the_ceiling_is_refused(self):
+        code, body = await asyncio.to_thread(
+            self.post, {"goal": "x", "tools": [], "budget_usd": 5.0})
+        self.assertEqual(code, 400)
+        self.assertIn("caps submitted tasks", body["error"])
+
+    async def test_asking_for_less_is_allowed(self):
+        code, body = await asyncio.to_thread(
+            self.post, {"goal": "x", "tools": [], "budget_usd": 0.02})
+        self.assertEqual(code, 200)
+        self.assertEqual(body["budget_usd"], 0.02)
+
+    async def test_the_ceiling_applies_when_none_is_requested(self):
+        code, body = await asyncio.to_thread(
+            self.post, {"goal": "x", "tools": []})
+        self.assertEqual(code, 200)
+        self.assertEqual(body["budget_usd"], 0.10)
+
+    async def test_asking_for_unmetered_cannot_bypass_the_ceiling(self):
+        """A cap you can opt out of by asking is not a cap."""
+        code, body = await asyncio.to_thread(
+            self.post, {"goal": "x", "tools": [], "budget_usd": None})
+        self.assertEqual(code, 400)
+        self.assertIn("not allowed", body["error"])
 
 
 class NoToolsAllowedTest(unittest.IsolatedAsyncioTestCase):

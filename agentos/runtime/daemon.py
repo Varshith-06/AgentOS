@@ -61,9 +61,14 @@ class Daemon:
         permissions: Any = None,
         tools: dict[str, dict[str, Any]] | None = None,
         task_tools: list[str] | None = None,
+        task_budget_usd: float | None = None,
         token: str | None = None,
         insecure: bool = False,
     ) -> None:
+        #: The most a submitted task may spend on models. A request may ask
+        #: for less and never more; None leaves submitted work unmetered,
+        #: which is only sane on a runtime nobody else can reach.
+        self.task_budget_usd = task_budget_usd
         # Authentication. A daemon with no token is unauthenticated, which is
         # only defensible because nothing outside this machine can reach
         # loopback. Bind anywhere else without one and every route -- submit,

@@ -290,6 +290,7 @@ def cmd_daemon(args, store: Store) -> int:
         isolation=args.isolation,
         transport=args.transport,
         task_tools=[t.strip() for t in args.task_tools.split(",") if t.strip()],
+        task_budget_usd=args.task_budget,
         token=args.token or None,
         insecure=args.insecure,
         recover=recover,
@@ -439,6 +440,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--insecure", action="store_true",
         help="serve a non-loopback address with no token. Only when something "
              "in front of this already authenticates",
+    )
+    daemon.add_argument(
+        "--task-budget", type=float, default=None, metavar="USD",
+        help="most a submitted task may spend on models, e.g. 0.50. A request "
+             "may ask for less. Unset means submitted tasks are unmetered",
     )
     daemon.add_argument(
         "--task-tools", default="",

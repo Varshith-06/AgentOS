@@ -113,6 +113,34 @@ def _task_request(daemon, body: dict) -> tuple[dict, list[str]]:
     if not isinstance(retries, int) or retries < 0:
         raise BadRequest('"retries" must be a non-negative integer')
 
+    # Spending is the one resource a caller can consume without limit, so the
+    # operator's ceiling applies the same way the tool allowlist does: the
+    # request may ask for less, never more.
+    ceiling = daemon.task_budget_usd
+    if "budget_usd" not in body:
+        budget = ceiling
+    else:
+        budget = body["budget_usd"]
+        if budget is None:
+            # Explicit null means "unmetered". Honouring that under a ceiling
+            # would let a caller opt out of the cap by asking to, which is
+            # not a cap at all.
+            if ceiling is not None:
+                raise BadRequest(
+                    f"this runtime caps submitted tasks at ${ceiling:.4f}; "
+                    '"budget_usd": null is not allowed'
+                )
+        elif not isinstance(budget, (int, float)) or isinstance(budget, bool) \
+                or budget <= 0:
+            raise BadRequest('"budget_usd" must be a positive number')
+        else:
+            budget = float(budget)
+            if ceiling is not None and budget > ceiling:
+                raise BadRequest(
+                    f"this runtime caps submitted tasks at ${ceiling:.4f}; "
+                    f"${budget:.4f} was requested"
+                )
+
     planner = LLMAgent(
         role=str(body.get("role") or "Planner"),
         goal=goal,
@@ -131,7 +159,7 @@ def _task_request(daemon, body: dict) -> tuple[dict, list[str]]:
     spec = spec_of(planner)
     if priority is not None:
         spec["priority"] = priority
-    return spec, list(tools)
+    return spec, list(tools), budget
 
 
 def _task_tree(store, pid: int) -> dict | None:
@@ -290,11 +318,13 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
                     )
                     self._json(200, {"pid": pid})
                 elif parts == ["task"]:
-                    spec, grant = _task_request(daemon, body)
-                    pid = daemon.call(lambda: kernel.submit_spec(spec, grant=grant))
+                    spec, grant, budget = _task_request(daemon, body)
+                    pid = daemon.call(lambda: kernel.submit_spec(
+                        spec, grant=grant, budget_usd=budget))
                     self._json(200, {
                         "pid": pid,
                         "granted": grant,
+                        "budget_usd": budget,
                         "poll": f"/task/{pid}",
                     })
                 elif len(parts) == 3 and parts[0] == "agents":
