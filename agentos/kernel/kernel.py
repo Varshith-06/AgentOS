@@ -1260,7 +1260,16 @@ class Kernel:
         only when every live agent is wired and none names the event. The
         waiter gets an error naming the real cause, instead of sitting until
         the stall detector declares the whole runtime stuck.
+
+        Guarded, because this runs on every exit and the proof walks the
+        whole process table: if nobody is blocked on an event at all, there
+        is nothing an exit could possibly orphan. Most runtimes never wait on
+        an event, and the guard keeps them paying a dict scan rather than a
+        table walk per exit.
         """
+        prefix = f"{dg.EVENT}:"
+        if not any(key.startswith(prefix) for key in self.deps.blocked_on):
+            return
         for pid, w in list(self.deps.waiting.items()):
             waiter = self.table.get(pid)
             if not waiter.alive:
