@@ -534,13 +534,27 @@ What to be honest about before leaving it unattended:
 - **Something must submit the work.** There's no cron inside; pair it with
   whatever already schedules things in your shop.
 
-### Origin
+### The manual
 
-The project began as a design document — `AgentOS.pdf`, still in the repo —
-whose eight-phase plan is fully implemented and audited, and whose claims
-the benchmarks above measure rather than assert. What grew past the
-document: runtime-invented agents, capability attenuation, parent-named
-event wiring, the task API, and authentication.
+`AgentOS.pdf` is the full reference — 27 pages covering every component, why
+it exists, how it behaves at the edges, and what it deliberately does not do.
+It assumes you know roughly what a process and a scheduler are, and nothing
+about this project. If you want to understand the system rather than run it,
+start there.
+
+It is generated from `docs/manual.py`, so the document and the code are
+edited together rather than drifting apart:
+
+```bash
+pip install reportlab
+python docs/build_manual.py
+```
+
+The project began as a design document whose eight-phase plan was fully
+implemented and audited; that document has been replaced by this manual, and
+remains in git history. What grew past the original plan: runtime-invented
+agents, capability attenuation, parent-named event wiring, the task API,
+budgets, and authentication.
 
 ---
 
@@ -616,5 +630,7 @@ examples/     tree pipeline deadlock deploy finance memory assistant crash
 benchmarks/   bench.py             # recovery, approval latency, multi-app cost
               compare.py           # vs LangGraph / CrewAI / AutoGen / Temporal
               attenuate.py         # the capability ceiling, under attack
+docs/         manual.py            # the text of AgentOS.pdf
+              build_manual.py      # renders it; run after changing the system
 tests/        199 of them          # including what the API and kernel refuse
 ```
