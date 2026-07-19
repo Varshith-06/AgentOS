@@ -123,8 +123,13 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         pid = k.spawn(Deploy())
         run = asyncio.create_task(k.run())
         await self._blocked(k, pid)
+        # The watcher is a separate process; approving before it has reached
+        # its wait_event call would fire the event into an empty room. Wait
+        # for it to actually be listening, which is the Waiting state.
+        await self._until(
+            lambda: k.table.get(watcher).state is AgentState.WAITING, timeout=30)
         k.approve(pid, "Senior Engineer")
-        await asyncio.wait_for(run, timeout=5)
+        await asyncio.wait_for(run, timeout=30)
         self.assertEqual(k.table.get(watcher).result, "Senior Engineer")
 
     async def test_killing_a_blocked_agent_does_not_hang(self):

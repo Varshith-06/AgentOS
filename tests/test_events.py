@@ -30,6 +30,22 @@ class Publisher(Agent):
         return "published"
 
 
+class Stream(Agent):
+    """Publishes three ticks, after the counter is already waiting on the first."""
+
+    async def run(self, ctx):
+        await ctx.sleep(0.05)
+        for n in range(3):
+            await ctx.publish("Tick", n=n)
+        return "streamed"
+
+
+class TickCounter(Agent):
+    async def run(self, ctx):
+        await ctx.subscribe("Tick")
+        return [(await ctx.wait_event("Tick"))["n"] for _ in range(3)]
+
+
 class Subscriber(Agent):
     async def run(self, ctx):
         await ctx.subscribe("ResearchCompleted")
@@ -147,18 +163,9 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         """A subscriber alternating between waiting (dependency path) and
         busy (buffer path) must see every event exactly once — a publish that
         resolves a wait must also consume the buffered copy it just made."""
-
-        class Stream(Agent):
-            async def run(self, ctx):
-                await ctx.sleep(0.05)  # the counter is already waiting on #0
-                for n in range(3):
-                    await ctx.publish("Tick", n=n)
-                return "streamed"
-
-        class TickCounter(Agent):
-            async def run(self, ctx):
-                await ctx.subscribe("Tick")
-                return [(await ctx.wait_event("Tick"))["n"] for _ in range(3)]
+        # Stream and TickCounter are module-level: a child process rebuilds an
+        # agent by importing it, so a class defined in here would have no name
+        # it could be found by.
 
         k = self.kernel()
         counter = k.spawn(TickCounter())
@@ -177,13 +184,21 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
     # -- the dependency graph (p.5) --------------------------------------
     async def test_wait_all_resolves_agents_events_and_timer_together(self):
         k = self.kernel()
-        pub = k.spawn(Publisher(delay=0.02))
+        # The publisher's delay has to outlast a child process starting up,
+        # or it announces before the waiter is listening and the event is
+        # simply missed. Generous on purpose: this test is about the three
+        # dependency kinds resolving together, not about timing.
+        pub = k.spawn(Publisher(delay=1.0))
         waiter = k.spawn(
             Waiter(agents=[pub], events=["ResearchCompleted"], timer=0.05)
         )
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=30)
         result = k.table.get(waiter).result
-        self.assertEqual(result["agents"], {pub: "published"})
+        # The waiter itself saw an int pid — Context normalises that. What we
+        # are reading here is its *result*, which travelled back from another
+        # process as JSON, and JSON object keys are strings. Both facts are
+        # real; this is the far side of the boundary.
+        self.assertEqual(result["agents"], {str(pub): "published"})
         self.assertEqual(result["events"]["ResearchCompleted"]["topic"], "vectors")
         self.assertTrue(result["timer"])
 

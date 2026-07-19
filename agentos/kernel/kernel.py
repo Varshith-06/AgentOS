@@ -51,7 +51,6 @@ from typing import Any
 
 from ..agents.base import Agent, agent_from_spec, spec_of
 from ..drivers import REGISTRY, ToolError
-from ..runtime.executor import Executor
 from ..runtime.subproc import ProcessExecutor, SocketExecutor
 from . import depgraph as dg
 from . import gpu
@@ -93,7 +92,6 @@ class Kernel:
         tools: dict[str, dict[str, Any]] | None = None,
         models: Any = None,
         recover: bool = False,
-        isolation: str = "task",
         transport: str = "socket",
         retries: int = 0,
         daemon: bool = False,
@@ -136,20 +134,16 @@ class Kernel:
         self.bus = EventBus()
         self.deps = DependencyGraph()
 
-        # Phase 7: agents as asyncio tasks or as real OS subprocesses. The
-        # kernel cannot tell the difference — that is the message boundary.
-        # With process isolation the syscall transport is itself swappable:
-        # a loopback TCP socket (default) or stdio pipes.
-        if isolation not in ("task", "process"):
-            raise ValueError(f"isolation must be 'task' or 'process', not {isolation!r}")
+        # An agent is always a real OS process: its own interpreter, its own
+        # address space, syscalls crossing a socket as JSON. There is no
+        # in-process mode, deliberately — a runtime whose tests exercise a
+        # different execution model from the one it deploys is testing
+        # something it does not ship. What remains swappable is only how the
+        # syscalls travel: a loopback TCP socket, or the child's stdio.
         if transport not in ("socket", "pipe"):
             raise ValueError(f"transport must be 'socket' or 'pipe', not {transport!r}")
-        self.isolation = isolation
-        self.transport = transport if isolation == "process" else None
-        if isolation == "process":
-            executor_cls = SocketExecutor if transport == "socket" else ProcessExecutor
-        else:
-            executor_cls = Executor
+        self.transport = transport
+        executor_cls = SocketExecutor if transport == "socket" else ProcessExecutor
         self.executor = executor_cls(self.mailbox, self._on_finish, self._on_fail)
         #: Daemon mode: the runtime outlives its work. Never exit on quiescence,
         #: and never declare a stall a deadlock — new work can always arrive.
@@ -444,7 +438,6 @@ class Kernel:
         return {
             "policy": self.policy.name,
             "slots": self.slots,
-            "isolation": self.isolation,
             "transport": self.transport,
             "gpu": gpu.summary(),  # None on a machine without one
             "running": sorted(self.running),

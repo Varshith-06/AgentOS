@@ -82,6 +82,21 @@ class Idle(Agent):
         return "ok"
 
 
+class Napper(Agent):
+    """Module level, like every agent must be: a child process re-creates it
+    from its spec by importing it, and a class defined inside a test method
+    has no importable name."""
+
+    async def run(self, ctx):
+        await ctx.sleep(self.params.get("nap", 60))
+
+
+class ModelCaller(Agent):
+    async def run(self, ctx):
+        await ctx.request_model(self.params.get("need", "fast"), prompt="hello")
+        return "done"
+
+
 class ProcessCardTest(Base):
     async def test_permissions_appear_on_the_process(self):
         k = self.kernel(permissions={"Idle": ["sql", "http"]})
@@ -93,12 +108,7 @@ class ProcessCardTest(Base):
         k = self.kernel(models={"classes": {"fast": [
             {"provider": "mock", "model": "mock-fast", "cost_per_mtok": [1, 1]}]}})
 
-        class Caller(Agent):
-            async def run(self, ctx):
-                await ctx.request_model("fast", prompt="hello")
-                return "done"
-
-        pid = k.spawn(Caller())
+        pid = k.spawn(ModelCaller())
         await asyncio.wait_for(k.run(), timeout=30)
         self.assertEqual(k.table.get(pid).row()["model"], "mock-fast")
 
@@ -112,27 +122,30 @@ class ProcessCardTest(Base):
 # -- p.4: retries are a scheduler responsibility ----------------------------
 
 class FlakyAgent(Agent):
-    """Fails the first N times it is started, then succeeds."""
+    """Fails the first N times it is started, then succeeds.
 
-    _attempts: dict[str, int] = {}
+    The attempt counter is a file rather than class state, because a restart
+    is a brand-new OS process: anything held in memory died with the attempt
+    that failed. That is the point of the retry — and the reason a counter
+    has to live somewhere both processes can see.
+    """
 
     async def run(self, ctx):
-        tag = self.params["tag"]
-        n = FlakyAgent._attempts.get(tag, 0) + 1
-        FlakyAgent._attempts[tag] = n
+        counter = Path(self.params["counter"])
+        n = int(counter.read_text()) + 1 if counter.exists() else 1
+        counter.write_text(str(n))
         if n <= self.params["fail_times"]:
             raise RuntimeError(f"attempt {n} fails on purpose")
         return {"attempts": n}
 
 
 class RetryTest(Base):
-    def setUp(self):
-        super().setUp()
-        FlakyAgent._attempts.clear()
+    def counter(self, tag: str) -> str:
+        return str(Path(self.tmp.name) / f"attempts-{tag}.txt")
 
     async def test_a_failing_agent_is_restarted_up_to_its_budget(self):
         k = self.kernel(retries=2)
-        pid = k.spawn(FlakyAgent(tag="a", fail_times=1))
+        pid = k.spawn(FlakyAgent(counter=self.counter("a"), fail_times=1))
         await asyncio.wait_for(k.run(), timeout=30)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FINISHED)
@@ -140,7 +153,7 @@ class RetryTest(Base):
 
     async def test_retries_are_bounded(self):
         k = self.kernel(retries=1)
-        pid = k.spawn(FlakyAgent(tag="b", fail_times=99))
+        pid = k.spawn(FlakyAgent(counter=self.counter("b"), fail_times=99))
         await asyncio.wait_for(k.run(), timeout=30)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FAILED)
@@ -148,19 +161,14 @@ class RetryTest(Base):
 
     async def test_retries_are_off_by_default(self):
         k = self.kernel()
-        pid = k.spawn(FlakyAgent(tag="c", fail_times=1))
+        pid = k.spawn(FlakyAgent(counter=self.counter("c"), fail_times=1))
         await asyncio.wait_for(k.run(), timeout=30)
         self.assertEqual(k.table.get(pid).state, AgentState.FAILED)
 
     async def test_a_killed_agent_is_never_retried(self):
         """A human said stop. Restarting would be the kernel overruling them."""
         k = self.kernel(retries=5)
-
-        class Napper(Agent):
-            async def run(self, ctx):
-                await ctx.sleep(60)
-
-        pid = k.spawn(Napper())
+        pid = k.spawn(Napper(nap=60))
         run = asyncio.create_task(k.run())
         while k.table.get(pid).state is not AgentState.SLEEPING:
             await asyncio.sleep(0.01)
@@ -289,12 +297,7 @@ class UsageAccountingTest(Base):
         k = self.kernel(models={"classes": {"fast": [
             {"provider": "mock", "model": "mock-fast", "cost_per_mtok": [1, 1]}]}})
 
-        class Caller(Agent):
-            async def run(self, ctx):
-                await ctx.request_model("fast", prompt="hello")
-                return "done"
-
-        await asyncio.wait_for(k.run_until_done(Caller()), timeout=30)
+        await asyncio.wait_for(k.run_until_done(ModelCaller()), timeout=30)
         usage = self.store.model_usage()
         self.assertEqual(usage["mock-fast"]["calls"], 1)
 

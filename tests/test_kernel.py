@@ -166,7 +166,13 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         k = self.kernel()
         root = k.spawn(Nester(depth=0))
         runner = asyncio.create_task(k.run())
-        await asyncio.sleep(0.1)
+        # Each generation is a real interpreter starting up, so wait for the
+        # tree to exist rather than guessing how long three spawns take.
+        async def three_deep():
+            while len(k.table.all()) < 3:
+                await asyncio.sleep(0.02)
+
+        await asyncio.wait_for(three_deep(), timeout=30)
         self.assertEqual(len(k.table.all()), 3)  # root -> child -> grandchild
 
         k.kill(2)  # the middle one

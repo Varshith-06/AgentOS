@@ -287,7 +287,6 @@ def cmd_daemon(args, store: Store) -> int:
         port=args.port,
         policy=args.policy,
         slots=args.slots,
-        isolation=args.isolation,
         transport=args.transport,
         task_tools=[t.strip() for t in args.task_tools.split(",") if t.strip()],
         task_budget_usd=args.task_budget,
@@ -296,9 +295,8 @@ def cmd_daemon(args, store: Store) -> int:
         recover=recover,
     )
     print(f"agentos daemon at {daemon.url}  "
-          f"(policy={args.policy}, slots={args.slots}, isolation={args.isolation}"
-          + (f", transport={args.transport}" if args.isolation == "process" else "")
-          + ")")
+          f"(policy={args.policy}, slots={args.slots}, "
+          f"transport={args.transport})")
     print(f"dashboard: {daemon.url}/")
     if recover:
         print("recovering the previous run's agents from their journals")
@@ -427,10 +425,6 @@ def build_parser() -> argparse.ArgumentParser:
     daemon.add_argument("--port", type=int, default=7070)
     daemon.add_argument("--slots", type=int, default=4)
     daemon.add_argument("--policy", default="fifo")
-    daemon.add_argument(
-        "--isolation", choices=["process", "task"], default="process",
-        help="agents as real OS subprocesses (default) or asyncio tasks",
-    )
     daemon.add_argument(
         "--token", default="",
         help="bearer token every API request must present. Falls back to "

@@ -37,7 +37,7 @@ TOC = [
         "15. The journal and crash recovery", "16. The store",
     ]),
     ("Part III — Running agents", [
-        "17. Executors and isolation", "18. The syscall transport",
+        "17. How an agent actually runs", "18. The syscall transport",
     ]),
     ("Part IV — The runtime as a service", [
         "19. The daemon and the HTTP API", "20. Authentication",
@@ -721,32 +721,35 @@ $ python -m agentos.cli recover
     # =====================================================================
     ("h1", "Part III — Running agents"),
 
-    ("h2", "17. Executors and isolation"),
+    ("h2", "17. How an agent actually runs"),
     ("body",
-     "&ldquo;Agents are processes&rdquo; means the <i>kernel's</i> sense of "
-     "process: a PID, a lifecycle, a place in the scheduler, a journal. What "
-     "actually executes the agent's code underneath is a separate choice, and "
-     "there are two."),
-    ("table", (
-        ["Setting", "What runs the agent", "Concurrency", "Default for"],
-        [
-            ["<font face='Courier'>isolation=\"process\"</font>", "Its own operating-system process — own interpreter, own memory", "True parallelism across CPU cores", "The daemon"],
-            ["<font face='Courier'>isolation=\"task\"</font>", "An asyncio task inside the kernel's own loop", "Interleaved, one core", "Embedded use, tests, examples"],
-        ],
-        [0.22, 0.36, 0.24, 0.18])),
+     "&ldquo;Agents are processes&rdquo; is meant literally. Every agent runs "
+     "in its own operating-system process: its own Python interpreter, its own "
+     "memory, its own entry in the operating system's process table as well as "
+     "the kernel's. Two agents with unrelated work genuinely execute at the "
+     "same time on different CPU cores, and "
+     "<font face='Courier'>agent kill</font> terminates something the operating "
+     "system agrees is a process."),
+    ("note",
+     "<b>There is no in-process mode.</b> An earlier version could also run "
+     "agents as asyncio tasks inside the kernel's own loop — faster to start "
+     "and convenient for tests. It was removed deliberately: a runtime whose "
+     "tests exercise a different execution model from the one it deploys is "
+     "testing something it does not ship. Every test in this project now "
+     "spawns real processes, which is slower and is the point."),
     ("body",
-     "The two executors present an identical interface; the kernel cannot tell "
-     "which one it is driving. Slots, pause-at-syscall, kill, and journal replay "
-     "behave the same on both. Task isolation exists because it is deterministic "
-     "and cheap, which is what tests and benchmarks want. Process isolation is "
-     "the deployment mode: two agents with unrelated work genuinely run at the "
-     "same time on different cores, and "
-     "<font face='Courier'>agent kill</font> terminates a real process."),
+     "What that costs is worth stating plainly. Starting a process takes "
+     "roughly 100 milliseconds and tens of megabytes, so a durable step here "
+     "costs about 10.6ms against roughly 6ms for frameworks whose steps are "
+     "function calls in one process (§24). That is the isolation being paid "
+     "for rather than overhead being wasted — but it does mean this system "
+     "suits agents whose real work is model calls, not a fan-out of thousands "
+     "of trivial ones."),
     ("h3", "Where asyncio actually sits"),
     ("body",
      "This trips people up, because &ldquo;async&rdquo; and "
-     "&ldquo;parallel&rdquo; are easy to confuse. Under process isolation, "
-     "asyncio appears in two places doing two <i>different</i> jobs:"),
+     "&ldquo;parallel&rdquo; are easy to confuse. Asyncio appears in two "
+     "places, doing two <i>different</i> jobs:"),
     ("bullets", [
         "<b>In the kernel process</b>, asyncio is an input/output multiplexer. "
         "Per agent it runs a supervisor task and two pump tasks that shuttle "
@@ -765,7 +768,7 @@ $ python -m agentos.cli recover
 
     ("h2", "18. The syscall transport"),
     ("body",
-     "With process isolation, syscalls and replies have to travel between two "
+     "Syscalls and replies have to travel between two separate "
      "operating-system processes. They cross as JSON lines, over one of two "
      "transports."),
     ("table", (
@@ -823,7 +826,7 @@ $ python -m agentos.cli ps                    # everyone's agents, one table
         [
             ["<font face='Courier'>GET /</font>", "The live dashboard"],
             ["<font face='Courier'>GET /state</font>", "Scheduler snapshot: who is running, ready, and waiting on whom"],
-            ["<font face='Courier'>GET /health</font>", "Version, isolation mode, transport, runtime info"],
+            ["<font face='Courier'>GET /health</font>", "Version, transport, runtime info"],
             ["<font face='Courier'>GET /ps</font>", "Processes, costs, memory, model usage, tool usage"],
             ["<font face='Courier'>GET /agents/&lt;pid&gt;</font>", "One agent's row, including its result once finished"],
             ["<font face='Courier'>GET /task/&lt;pid&gt;</font>", "A task's status and result, plus every agent it created"],
@@ -1001,7 +1004,7 @@ $ curl -H "Authorization: Bearer $TOKEN" host:7070/task/1
     ]),
     ("h3", "What is not"),
     ("bullets", [
-        "<b>Agent code is not sandboxed.</b> Process isolation gives a separate "
+        "<b>Agent code is not sandboxed.</b> A separate process gives a separate "
         "address space — an agent cannot reach kernel objects in memory — but it "
         "is a real Python interpreter. An agent that <font face='Courier'>import "
         "subprocess</font> and runs a command never asked the kernel. For "
@@ -1046,18 +1049,19 @@ $ curl -H "Authorization: Bearer $TOKEN" host:7070/task/1
         [
             ["Steps re-executed after recovery", "<b>0</b>"],
             ["Journaled syscalls replayed", "24"],
-            ["Recovery wall time (replay plus all remaining work)", "0.25s"],
+            ["Recovery wall time (replay plus all remaining work)", "0.67s"],
         ],
         [0.62, 0.38])),
     ("h3", "Human-in-the-loop latency"),
     ("body",
      "From <font face='Courier'>approve()</font> to the agent having "
      "<i>finished</i> — the full path: dependency resolved, agent re-queued, "
-     "scheduled, run to completion. Median <b>1.2ms</b>, worst 1.6ms."),
+     "scheduled, run to completion. Median <b>2.2ms</b>, worst 2.6ms."),
     ("h3", "Cost accounting under load"),
     ("body",
      "Three independent applications submit five agents each to one daemon, "
-     "every agent making two model calls. Throughput <b>44.6 agents/s</b>; the "
+     "every agent making two model calls. Throughput <b>10.5 agents/s</b> -- "
+     "fifteen real operating-system processes started; the "
      "ledger total for all thirty concurrent billed calls is "
      "<b>exact to the token</b> against an independently computed expectation."),
     ("h3", "The capability ceiling, under attack"),
@@ -1131,11 +1135,11 @@ control, with shell granted: shell.run -> detector works
     ("table", (
         ["Framework", "Per durable step", "Approve &rarr; finished"],
         [
-            ["<b>AgentOS</b>", "<b>3.4ms</b>", "<b>1.2ms</b>"],
-            ["AutoGen", "4.1ms", "no durable primitive"],
-            ["LangGraph", "5.4ms", "3.2ms"],
-            ["CrewAI Flows", "15.2ms", "no durable primitive"],
-            ["Temporal", "68.6ms", "6.2ms"],
+            ["<b>AgentOS</b>", "10.6ms <i>(crosses a process)</i>", "<b>2.2ms</b>"],
+            ["AutoGen", "5.4ms", "no durable primitive"],
+            ["LangGraph", "6.3ms", "3.5ms"],
+            ["CrewAI Flows", "19.2ms", "no durable primitive"],
+            ["Temporal", "68.7ms", "7.3ms"],
         ],
         [0.34, 0.33, 0.33])),
     ("note",
@@ -1180,7 +1184,6 @@ control, with shell granted: shell.run -> detector works
      "Useful daemon flags: <font face='Courier'>--host</font>, "
      "<font face='Courier'>--port</font>, <font face='Courier'>--slots</font>, "
      "<font face='Courier'>--policy</font>, "
-     "<font face='Courier'>--isolation</font>, "
      "<font face='Courier'>--transport</font>, "
      "<font face='Courier'>--token</font>, "
      "<font face='Courier'>--task-tools</font>, "

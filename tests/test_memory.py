@@ -20,6 +20,32 @@ from agentos import Agent, Kernel  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
 
+class Stranger(Agent):
+    """Reads the same key as Recipient, but was never named in the share.
+
+    A separate class rather than a subclass defined in the test: the two need
+    different agent *names*, and a child process rebuilds an agent by
+    importing it, so it must exist at module level.
+    """
+
+    async def run(self, ctx):
+        await ctx.subscribe("KeycodeShared")
+        await ctx.wait_event("KeycodeShared")
+        return {"read": await ctx.memory.retrieve("keycode", kind="shared")}
+
+
+class RoundTrip(Agent):
+    """store -> retrieve one -> retrieve all -> delete -> confirm gone."""
+
+    async def run(self, ctx):
+        await ctx.memory.store("k", {"nested": [1, 2, 3]})
+        everything = await ctx.memory.retrieve()  # no key: everything of mine
+        one = await ctx.memory.retrieve("k")
+        await ctx.memory.delete("k")
+        gone = await ctx.memory.retrieve("k")
+        return {"one": one, "all": everything, "gone": gone}
+
+
 class Stasher(Agent):
     """Stores into its own working memory, then lingers."""
 
@@ -116,15 +142,6 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
         return Kernel(store=self.store, tick=0.01, **kw)
 
     async def test_store_and_retrieve_round_trip(self):
-        class RoundTrip(Agent):
-            async def run(self, ctx):
-                await ctx.memory.store("k", {"nested": [1, 2, 3]})
-                everything = await ctx.memory.retrieve()  # no key: all of mine
-                one = await ctx.memory.retrieve("k")
-                await ctx.memory.delete("k")
-                gone = await ctx.memory.retrieve("k")
-                return {"one": one, "all": everything, "gone": gone}
-
         result = await asyncio.wait_for(
             self.kernel().run_until_done(RoundTrip()), timeout=5
         )
@@ -151,10 +168,6 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
     async def test_share_grants_access_to_exactly_who_was_named(self):
         k = self.kernel()
         friend = k.spawn(Recipient())
-
-        class Stranger(Recipient):
-            pass
-
         stranger = k.spawn(Stranger())
         k.spawn(SelectiveSharer(friend=friend))
         await asyncio.wait_for(k.run(), timeout=5)

@@ -67,7 +67,7 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.store.close)
 
     async def _daemon(self, **kw):
-        kw.setdefault("isolation", "task")
+        
         kw.setdefault("models", {"classes": {"fast": [
             {"provider": "mock", "model": "mock-1",
              "cost_per_mtok": [1_000_000, 1_000_000]},  # $1/token: visible cost
@@ -205,7 +205,7 @@ class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
 
     def kernel(self, **kw):
         kw.setdefault("transport", "socket")
-        return Kernel(store=self.store, tick=0.01, isolation="process", **kw)
+        return Kernel(store=self.store, tick=0.01, **kw)
 
     async def test_agents_run_in_a_different_address_space(self):
         result = await asyncio.wait_for(
@@ -261,7 +261,7 @@ class SocketAuthTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.store.close)
 
     async def test_a_connection_with_a_bogus_token_is_dropped(self):
-        k = Kernel(store=self.store, tick=0.01, isolation="process")
+        k = Kernel(store=self.store, tick=0.01)
         pid = k.spawn(Napper(app="sock", nap=0.1))
         run = asyncio.create_task(k.run())
 

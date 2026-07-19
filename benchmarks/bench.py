@@ -150,7 +150,7 @@ async def bench_approval(rounds: int = 5) -> dict:
 async def bench_load(apps: int = 3, agents_per_app: int = 5, calls: int = 2) -> dict:
     tmp = tempfile.TemporaryDirectory()
     store = Store(tmp.name)
-    daemon = Daemon(store=store, port=0, isolation="task", tick=TICK, models=MOCK)
+    daemon = Daemon(store=store, port=0, tick=TICK, models=MOCK)
     task = asyncio.create_task(daemon.start())
     await asyncio.sleep(0.05)
 

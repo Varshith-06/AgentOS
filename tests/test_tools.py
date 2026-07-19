@@ -24,6 +24,15 @@ from agentos.kernel.states import AgentState  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
 
+class TwoTicks(Agent):
+    """Two calls to a rate-limited driver; returns the gap between them."""
+
+    async def run(self, ctx):
+        first = await ctx.request_tool("metronome", "tick")
+        second = await ctx.request_tool("metronome", "tick")
+        return second - first
+
+
 class ToolUser(Agent):
     """Makes one tool call and reports what happened, denial included."""
 
@@ -267,12 +276,6 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_rate_limit_spaces_out_calls(self):
         self.register("metronome", Metronome)
-
-        class TwoTicks(Agent):
-            async def run(self, ctx):
-                first = await ctx.request_tool("metronome", "tick")
-                second = await ctx.request_tool("metronome", "tick")
-                return second - first
 
         k = self.kernel(permissions={"TwoTicks": ["metronome"]})
         gap = await asyncio.wait_for(k.run_until_done(TwoTicks()), timeout=5)

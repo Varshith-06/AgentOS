@@ -145,6 +145,26 @@ class ProcessExecutor:
                     await asyncio.shield(child.wait())
                 except asyncio.CancelledError:
                     pass
+                self._close_pipes(child)
+
+    @staticmethod
+    def _close_pipes(child) -> None:
+        """Close the child's pipe transports explicitly.
+
+        Left to the garbage collector, Windows' proactor loop complains about
+        unclosed transports at interpreter shutdown — and its warning path
+        itself raises on an already-closed pipe, so every run ends in a wall
+        of ValueError tracebacks that look like a crash and are not. Closing
+        here is the fix; the try is because a transport that has already gone
+        is exactly the state we want.
+        """
+        transport = getattr(child, "_transport", None)
+        if transport is None:
+            return
+        try:
+            transport.close()
+        except (OSError, ValueError, AttributeError):
+            pass
 
     async def _feed_replies(self, proc: AgentProcess, writer) -> None:
         """Kernel replies land on proc.inbox exactly as they always did; this

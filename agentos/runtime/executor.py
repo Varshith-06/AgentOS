@@ -1,18 +1,20 @@
-"""The executor: runs agent code and mediates every syscall it makes.
+"""Context: the only handle an agent has on the world.
 
-The kernel decides *what* runs; the executor is *how* it runs. Today that means
-an asyncio task per agent. In Phase 7 it can mean an OS subprocess, and nothing
-in agents/ or kernel/ has to change — because the only thing an agent ever
-touches is the Context below, and the only thing a Context does is put a
-serializable Syscall on a queue and wait for a Reply.
+An agent runs in its own OS process. It cannot see the kernel, the process
+table, or another agent — the entire surface available to it is the Context
+class below, and every method on it does the same thing: put a
+JSON-serializable Syscall on a queue and wait for a Reply.
+
+That the queue's far end is a socket to another process is invisible from
+here, which is the point. runtime/child.py constructs this same class inside
+the agent's process; runtime/subproc.py drives the other side.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from typing import Any
 
-from ..agents.base import _RUNNING
 from ..kernel.messages import Reply, Syscall
 from ..kernel.process import AgentProcess
 
@@ -267,36 +269,6 @@ class Context:
         return result
 
 
-class Executor:
-    """Owns the asyncio tasks. The kernel never creates one directly."""
-
-    def __init__(
-        self,
-        mailbox: asyncio.Queue,
-        on_finish: Callable[[AgentProcess, Any], None],
-        on_fail: Callable[[AgentProcess, BaseException], None],
-    ) -> None:
-        self._mailbox = mailbox
-        self._on_finish = on_finish
-        self._on_fail = on_fail
-
-    def start(self, proc: AgentProcess, agent: Any) -> asyncio.Task:
-        ctx = Context(proc, self._mailbox)
-        task = asyncio.create_task(self._run(proc, agent, ctx), name=f"agent-{proc.pid}")
-        proc.task = task
-        return task
-
-    async def _run(self, proc: AgentProcess, agent: Any, ctx: Context) -> None:
-        # Each asyncio task gets its own context, so this token identifies
-        # exactly one running agent and cannot leak into another's.
-        _RUNNING.set(id(agent))
-        try:
-            result = await agent.run(ctx)
-        except asyncio.CancelledError:
-            # Killed by the kernel. Reported, not swallowed.
-            self._on_fail(proc, asyncio.CancelledError("killed"))
-            raise
-        except Exception as exc:  # agent bug: the kernel survives it
-            self._on_fail(proc, exc)
-        else:
-            self._on_finish(proc, result)
+# There is no in-process executor. An agent runs in its own OS process and
+# reaches the kernel over a socket — see runtime/subproc.py, which drives the
+# child, and runtime/child.py, which builds the Context above on the far side.

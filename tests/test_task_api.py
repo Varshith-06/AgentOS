@@ -53,7 +53,7 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
         self.root = Path(self.tmp.name) / "fs"
         self.root.mkdir()
         self.daemon = Daemon(
-            store=self.store, port=0, tick=0.01, isolation="task",
+            store=self.store, port=0, tick=0.01,
             models=MODELS, permissions={},
             tools={"filesystem": {"root": str(self.root)}},
             task_tools=["filesystem"],   # what the operator allows
@@ -214,7 +214,7 @@ class BudgetCeilingTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.tmp.cleanup)
         self.store = Store(self.tmp.name)
         self.daemon = Daemon(store=self.store, port=0, tick=0.01,
-                             isolation="task", models=MODELS, permissions={},
+                             models=MODELS, permissions={},
                              task_budget_usd=0.10)
         self.task = asyncio.create_task(self.daemon.start())
         await asyncio.sleep(0.15)
@@ -269,7 +269,7 @@ class NoToolsAllowedTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.tmp.cleanup)
         self.store = Store(self.tmp.name)
         self.daemon = Daemon(store=self.store, port=0, tick=0.01,
-                             isolation="task", models=MODELS, permissions={})
+                             models=MODELS, permissions={})
         self.task = asyncio.create_task(self.daemon.start())
         await asyncio.sleep(0.15)
 

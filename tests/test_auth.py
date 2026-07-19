@@ -51,7 +51,7 @@ class AuthenticatedDaemonTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.tmp.cleanup)
         self.store = Store(self.tmp.name)
         self.daemon = Daemon(store=self.store, port=0, tick=0.01,
-                             isolation="task", permissions={}, token=TOKEN)
+                             permissions={}, token=TOKEN)
         self.task = asyncio.create_task(self.daemon.start())
         await asyncio.sleep(0.15)
         self.url = self.daemon.url
@@ -147,7 +147,7 @@ class UnauthenticatedDaemonTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.tmp.cleanup)
         self.store = Store(self.tmp.name)
         self.daemon = Daemon(store=self.store, port=0, tick=0.01,
-                             isolation="task", permissions={})
+                             permissions={})
         self.task = asyncio.create_task(self.daemon.start())
         await asyncio.sleep(0.15)
 
@@ -178,7 +178,7 @@ class ExposureGuardTest(unittest.TestCase):
     def daemon(self, **kw):
         store = Store(self.tmp.name)
         self.addCleanup(store.close)
-        return Daemon(store=store, port=0, tick=0.01, isolation="task", **kw)
+        return Daemon(store=store, port=0, tick=0.01, **kw)
 
     def test_serving_all_interfaces_without_a_token_is_refused(self):
         for host in ("0.0.0.0", "", "192.168.1.50", "::"):

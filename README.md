@@ -54,8 +54,9 @@ config at a real one and the same code runs live.
 | | |
 |---|---|
 | **Crash recovery** | the only runtime measured that repeats **0** work after a hard kill |
-| **Approval latency** | 1.2ms, approve → agent finished — lowest of the five |
-| **Durable step overhead** | 3.4ms — lowest of the five |
+| **Isolation** | every agent is a real OS process — not a mode, the only mode |
+| **Approval latency** | 2.2ms, approve → agent finished — lowest of the five |
+| **Durable step overhead** | 10.6ms, every step crossing a real process boundary |
 | **Multi-app cost ledger** | one ledger, exact to the token, across every application |
 | **Capability ceiling** | **0 escapes** in 10 adversarial attacks — a real model actively trying |
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
@@ -103,10 +104,12 @@ trade, in both directions.
 - **Ecosystem.** LangGraph has hundreds of integrations, streaming UIs, and a
   hosted platform. This has six drivers, four model providers, and no
   streaming. Zero dependencies cuts both ways.
-- **One box, one writer.** A single kernel over SQLite. It profiles
-  disk-bound at ~3.4ms/step, so one machine absorbs a lot of agents whose
-  real work is model calls — but there is no failover and no horizontal
-  scale.
+- **A process per agent.** Not a mode — the only mode. Starting one costs
+  around 100ms and tens of megabytes, so ten thousand simultaneous agents is
+  not this system. Agents whose real work is model calls absorb that easily;
+  a fan-out of thousands of trivial ones would not.
+- **One box, one writer.** A single kernel over SQLite. No failover, no
+  horizontal scale.
 
 ---
 
@@ -132,15 +135,15 @@ through the full path (dependency resolved, re-queued, scheduled, run):
 
 | metric | result |
 |---|---|
-| median | **1.2ms** |
-| worst | 1.6ms |
+| median | **2.2ms** |
+| worst | 2.6ms |
 
 **One runtime accounts for every application, exactly.** Three apps × five
 agents × two model calls against one daemon:
 
 | metric | result |
 |---|---|
-| throughput | **44.6 agents/s** |
+| throughput | **10.5 agents/s** (15 real OS processes started) |
 | ledger, 30 concurrent billed calls | $0.001380 — **exact to the token** |
 
 The two *claims* — zero re-execution and an exact ledger — are deterministic
@@ -217,21 +220,28 @@ gives it to code written the obvious way.
 
 **Overhead — one durable step, no real work:**
 
-| framework | per step |
-|---|---|
-| **AgentOS** | **3.4ms** |
-| AutoGen | 4.1ms |
-| LangGraph | 5.4ms |
-| CrewAI Flows | 15.2ms |
-| Temporal | 68.6ms |
+| framework | per step | what a step crosses |
+|---|---|---|
+| AutoGen | 5.4ms | a function call, same process |
+| LangGraph | 6.3ms | a function call, same process |
+| **AgentOS** | **10.6ms** | **a socket, into another address space** |
+| CrewAI Flows | 19.2ms | a function call, same process |
+| Temporal | 68.7ms | a gRPC round trip to a server |
+
+Read that third column before the second. AgentOS is slower per step than
+two of these, and it should be: their steps are function calls inside one
+process, and every AgentOS step crosses into a separate operating-system
+process. That is the isolation being paid for, not overhead being wasted.
+Temporal is the honest comparison — it also crosses a real boundary — and
+costs six times more to do it.
 
 **Human-in-the-loop — approve → finished:**
 
 | framework | median | worst |
 |---|---|---|
-| **AgentOS** | **1.2ms** | **2.3ms** |
-| LangGraph | 3.2ms | 17.7ms |
-| Temporal | 6.2ms | 11.0ms |
+| **AgentOS** | **2.2ms** | **2.5ms** |
+| LangGraph | 3.5ms | 5.2ms |
+| Temporal | 7.3ms | 8.9ms |
 | CrewAI / AutoGen | — | no durable wait-for-a-human primitive to time |
 
 **Cost under multi-application load** (3 apps × 5 agents × 2 billed calls):
@@ -245,11 +255,12 @@ gives it to code written the obvious way.
 Everyone does the work; the difference is who can answer "what did all of
 that cost." Libraries can't, structurally: each app owns its own state.
 
-**With real work in the steps** (600ms each, one modest model call), every
-framework lands within a few points of the floor — AutoGen +1.5%, LangGraph
-+1.7%, **AgentOS +2.4%**, Temporal +2.8%, CrewAI +3.3%. That column is a
-wash: the ranking would not survive a different machine, and most of
-AgentOS's gap is a Windows timer quantum that largely disappears on Linux.
+**With real work in the steps** (600ms each, one modest model call), the
+per-step gap stops mattering — AutoGen +1.2%, LangGraph +1.5%, Temporal
++3.4%, **AgentOS +3.5%**, CrewAI +3.6%. A process boundary costs single-digit
+milliseconds; a model call costs hundreds. This is the column that reflects
+what a real workload feels like, and in it everything is within a few points
+of the floor.
 
 ---
 
@@ -267,10 +278,12 @@ features:
   so the kernel journals every reply. Replay hands back recorded answers
   instead of re-executing; the agent fast-forwards to where it died and goes
   live. Every completed syscall is a checkpoint.
-- **Real process isolation** — anything that survives `json.dumps` survives a
-  socket. The daemon runs each agent as its **own OS process**, syscalls
-  crossing a token-authenticated loopback TCP connection as JSON lines (or
-  stdio pipes with `--transport pipe`). Not a line of agent code knows which.
+- **Real process isolation, always** — anything that survives `json.dumps`
+  survives a socket. Every agent is its **own OS process**, syscalls crossing
+  a token-authenticated loopback TCP connection as JSON lines (or stdio pipes
+  with `--transport pipe`). There is no in-process mode: a runtime whose
+  tests exercise a different execution model from the one it deploys is
+  testing something it does not ship.
 - **Invented agents** — an agent whose identity is its parameters can be
   *constructed by a model*, and still journals, recovers, and isolates like
   anything hand-written.

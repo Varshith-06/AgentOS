@@ -496,7 +496,7 @@ def load_agentos() -> tuple[float, int, bool]:
         tally = os.path.join(tmp, "tally.db")
         tally_init(tally)
         store = Store(os.path.join(tmp, "run"))
-        daemon = Daemon(store=store, port=0, tick=TICK, isolation="task",
+        daemon = Daemon(store=store, port=0, tick=TICK,
                         models=MOCK)
         task = asyncio.create_task(daemon.start())
         await asyncio.sleep(0.1)
