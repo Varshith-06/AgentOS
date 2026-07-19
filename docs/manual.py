@@ -1131,17 +1131,25 @@ control, with shell granted: shell.run -> detector works
      "kill returns its recorded reply. LangGraph can approach this — if you "
      "restructure your program into one node per side effect. AgentOS gives it "
      "to code written the obvious way."),
-    ("h3", "Overhead and latency"),
+    ("h3", "Overhead and latency: against Temporal only"),
+    ("body",
+     "The recovery table above is a fair fight, because checkpoint "
+     "granularity has nothing to do with where code executes. Timing tables "
+     "are not. LangGraph, CrewAI and AutoGen run a step as a function call "
+     "inside a single process; every AgentOS step crosses into a separate "
+     "operating-system process. Putting those figures in one column would "
+     "mislead in both directions, so only Temporal appears here — it also "
+     "crosses a real boundary on every step."),
     ("table", (
-        ["Framework", "Per durable step", "Approve &rarr; finished"],
+        ["", "AgentOS", "Temporal"],
         [
-            ["<b>AgentOS</b>", "10.6ms <i>(crosses a process)</i>", "<b>2.2ms</b>"],
-            ["AutoGen", "5.4ms", "no durable primitive"],
-            ["LangGraph", "6.3ms", "3.5ms"],
-            ["CrewAI Flows", "19.2ms", "no durable primitive"],
-            ["Temporal", "68.7ms", "7.3ms"],
+            ["Per durable step", "<b>10.6ms</b> — a socket into another address space", "68.7ms — gRPC to a server"],
+            ["Approve &rarr; finished", "<b>2.2ms</b> (worst 2.5ms)", "7.3ms (worst 8.9ms)"],
+            ["Repeated after a kill", "<b>0</b>", "1 (at-least-once, as documented)"],
+            ["What it needs", "one process, zero dependencies", "a server cluster"],
+            ["Durability boundary", "this machine", "many machines"],
         ],
-        [0.34, 0.33, 0.33])),
+        [0.26, 0.40, 0.34])),
     ("note",
      "<b>Read this fairly.</b> Temporal's single repeat is its documented "
      "at-least-once contract working exactly as intended, and its overhead buys "

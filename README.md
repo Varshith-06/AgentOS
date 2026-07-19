@@ -55,8 +55,8 @@ config at a real one and the same code runs live.
 |---|---|
 | **Crash recovery** | the only runtime measured that repeats **0** work after a hard kill |
 | **Isolation** | every agent is a real OS process — not a mode, the only mode |
-| **Approval latency** | 2.2ms, approve → agent finished — lowest of the five |
-| **Durable step overhead** | 10.6ms, every step crossing a real process boundary |
+| **Approval latency** | 2.2ms, approve → agent finished — 3× faster than Temporal |
+| **Durable step overhead** | 10.6ms per step, each crossing a real process boundary — 6× cheaper than Temporal |
 | **Multi-app cost ledger** | one ledger, exact to the token, across every application |
 | **Capability ceiling** | **0 escapes** in 10 adversarial attacks — a real model actively trying |
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
@@ -218,49 +218,110 @@ the kill returns its recorded reply instead of running twice. LangGraph can
 approach this — if you restructure into one node per side effect. AgentOS
 gives it to code written the obvious way.
 
-**Overhead — one durable step, no real work:**
+### Why every agent is its own process
 
-| framework | per step | what a step crosses |
+This is the decision the timing numbers are paying for, so it deserves the
+argument rather than an assertion. Nine things follow from it that an
+in-process agent cannot have:
+
+**1. A crash is one agent, not the runtime.** A segfault in a C extension, a
+`sys.exit()` in a library, a runaway allocation — in a shared process any of
+these take down the kernel and every other agent with it. Here the operating
+system reaps one process, the kernel notices the pipe close, and the other
+agents never learn about it.
+
+**2. `kill` actually kills.** `agent kill 3` terminates something the OS
+agrees is a process. A cooperative cancel cannot stop an agent stuck in a
+tight loop or blocked on a C call that ignores signals; `TerminateProcess`
+and `SIGKILL` can.
+
+**3. Memory is reclaimed, completely.** An agent that leaks — a growing cache,
+an unclosed handle, a C library that never frees — gives all of it back when
+it exits. In one shared process those leaks accumulate across every agent
+that ever ran, and the only cure is restarting the runtime.
+
+**4. Real parallelism, no GIL.** Two agents doing CPU work genuinely run at
+once on different cores. Inside one interpreter they would take turns no
+matter how many cores the machine has.
+
+**5. An agent cannot reach kernel memory.** Not "should not" — *cannot*. The
+process table, the permission matrix, the journal, other agents' state and
+other tenants' results are in an address space it has no pointer into. In a
+shared process, capability enforcement is a check an agent might find a way
+around; here it is a boundary the hardware maintains.
+
+**6. One agent cannot corrupt another's state.** No shared mutable globals, no
+monkey-patched module leaking between agents, no `sys.modules` collision when
+two agents import different versions of something.
+
+**7. Blocking code cannot stall the scheduler.** An agent that calls a
+synchronous library, sleeps, or spins does so in its own process. In a shared
+event loop, one badly-behaved `time.sleep()` freezes the kernel and every
+other agent — the classic asyncio footgun, structurally impossible here.
+
+**8. The operating system's tools work.** Task Manager, `Get-Process`, `top`,
+`perf`, a debugger attached to one misbehaving agent, per-process memory
+limits, CPU affinity, cgroups. Agents are visible to everything already built
+for looking at processes.
+
+**9. It is the same boundary as the network.** Syscalls already cross a socket
+as JSON, so an agent on another machine is the same code path with a
+different address. In-process agents would be a special case that has to be
+maintained forever and would block that door.
+
+**And a tenth, about this codebase specifically:** the tests exercise what
+ships. Removing the in-process mode immediately exposed seven tests that only
+passed because the agent shared memory with the kernel — including a retry
+test whose attempt counter could never survive the restart it was testing. A
+mode that only tests use is a mode whose bugs only users find.
+
+The bill for all of this is roughly 100ms and tens of megabytes per agent,
+and the ~4ms per step in the table below. Worth it when agents do real work;
+the wrong architecture for a fan-out of thousands of trivial ones.
+
+### Speed: against Temporal only
+
+The recovery table above is a fair fight — checkpoint granularity has nothing
+to do with where code executes. **Timing tables are not.** LangGraph, CrewAI
+and AutoGen run a step as a function call inside one process; AgentOS crosses
+into a separate operating-system process every time. Putting those numbers in
+one column would flatter nobody and inform no one, so they are gone.
+
+That leaves **Temporal**, which is the honest peer: it also crosses a real
+boundary on every step, and it also survives the machine its caller is on.
+
+| | AgentOS | Temporal |
 |---|---|---|
-| AutoGen | 5.4ms | a function call, same process |
-| LangGraph | 6.3ms | a function call, same process |
-| **AgentOS** | **10.6ms** | **a socket, into another address space** |
-| CrewAI Flows | 19.2ms | a function call, same process |
-| Temporal | 68.7ms | a gRPC round trip to a server |
+| per durable step | **10.6ms** — a socket into another address space | 68.7ms — gRPC to a server |
+| approve → agent finished | **2.2ms** (worst 2.5ms) | 7.3ms (worst 8.9ms) |
+| calls repeated after a hard kill | **0** | 1 (at-least-once, as documented) |
+| what it needs to run | one process, zero dependencies | a server cluster |
+| durability boundary | this machine | many machines |
 
-Read that third column before the second. AgentOS is slower per step than
-two of these, and it should be: their steps are function calls inside one
-process, and every AgentOS step crosses into a separate operating-system
-process. That is the isolation being paid for, not overhead being wasted.
-Temporal is the honest comparison — it also crosses a real boundary — and
-costs six times more to do it.
+Roughly six times cheaper per step and three times faster to wake an agent
+from a human decision — while Temporal buys something AgentOS does not
+attempt: durability that survives the whole machine, coordinated across
+hosts. If you need that, the trade is worth it and you should use Temporal.
 
-**Human-in-the-loop — approve → finished:**
+**With real work in the steps** — 600ms each, about one modest model call —
+the gap disappears entirely: **AgentOS +3.5%** over the floor against
+Temporal's +3.4%. A process boundary costs single-digit milliseconds; a model
+call costs hundreds. That is the column reflecting what a real workload feels
+like, and there is nothing between them in it.
 
-| framework | median | worst |
-|---|---|---|
-| **AgentOS** | **2.2ms** | **2.5ms** |
-| LangGraph | 3.5ms | 5.2ms |
-| Temporal | 7.3ms | 8.9ms |
-| CrewAI / AutoGen | — | no durable wait-for-a-human primitive to time |
+### One ledger across applications
 
-**Cost under multi-application load** (3 apps × 5 agents × 2 billed calls):
+Not a race, and not something a library can do at all. Three independent
+applications, five agents each, two billed calls per agent — all thirty calls
+land in one place:
 
-| framework | calls seen | ledger |
-|---|---|---|
-| **AgentOS** | 30/30 | **one ledger, exact to the token** |
-| LangGraph | 30/30 | per-app only |
-| CrewAI Flows | 30/30 | per-app only |
+| | can answer "what did all of that cost?" |
+|---|---|
+| **AgentOS** | **yes — one ledger, exact to the token** |
+| any library | no — each application owns its own state |
 
-Everyone does the work; the difference is who can answer "what did all of
-that cost." Libraries can't, structurally: each app owns its own state.
-
-**With real work in the steps** (600ms each, one modest model call), the
-per-step gap stops mattering — AutoGen +1.2%, LangGraph +1.5%, Temporal
-+3.4%, **AgentOS +3.5%**, CrewAI +3.6%. A process boundary costs single-digit
-milliseconds; a model call costs hundreds. This is the column that reflects
-what a real workload feels like, and in it everything is within a few points
-of the floor.
+`compare.py` still runs all five frameworks; the README simply stops
+publishing the numbers that cannot be read fairly.
 
 ---
 
