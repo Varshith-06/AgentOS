@@ -209,19 +209,6 @@ framework lands within a few points of the floor — AutoGen +1.5%, LangGraph
 wash: the ranking would not survive a different machine, and most of
 AgentOS's gap is a Windows timer quantum that largely disappears on Linux.
 
-**On reproducing these.** Absolute figures move a lot with machine state —
-across one day the same benchmark gave AgentOS between 3.4ms and 5.7ms per
-step, and every comparator moved with it in lockstep. What does *not* move is
-the ordering, because `compare.py` measures all five inside one process under
-identical conditions. Expect different numbers on your machine; expect the
-same ranking. The recovery column is deterministic by construction and was
-identical in every run.
-
-Scope, honestly: one machine, one workload family, and Temporal's single
-repeat is its documented at-least-once contract working as designed — it
-buys multi-host durability AgentOS does not attempt. This measures runtime
-overhead and recovery granularity, not ecosystems or agent quality.
-
 ---
 
 ## How it works
