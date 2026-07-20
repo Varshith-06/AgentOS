@@ -146,8 +146,14 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         """No subscribe/publish race: an event fired while asleep still lands."""
         k = self.kernel()
         pid = k.spawn(BusySubscriber())
+        run = asyncio.create_task(k.run())
+        # Subscribed-then-sleeping is the state this test needs the publish to
+        # land in; wait for it rather than trusting two subprocess startups to
+        # order themselves on a loaded machine.
+        while k.table.get(pid).state is not AgentState.SLEEPING:
+            await asyncio.sleep(0.01)
         k.spawn(Publisher(delay=0.02))  # fires long before the subscriber waits
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(run, timeout=30)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
         self.assertEqual(k.table.get(pid).result, "buffered: vectors")
 

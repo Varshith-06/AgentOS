@@ -106,7 +106,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
     def kernel(self, **kw):
         return Kernel(store=self.store, tick=0.01, **kw)
 
-    async def _until(self, predicate, timeout=5.0):
+    async def _until(self, predicate, timeout=30.0):
         async def poll():
             while not predicate():
                 await asyncio.sleep(0.01)
@@ -219,13 +219,23 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
     async def test_events_buffered_at_crash_time_are_redelivered(self):
         k1 = self.kernel()
         listener = k1.spawn(Listener())
-        k1.spawn(Announcer())
         run1 = asyncio.create_task(k1.run())
+        # The listener must be subscribed before the news breaks, or the
+        # publish lands nowhere and there is nothing to buffer. Its Sleeping
+        # state is the proof: the subscribe syscall precedes the sleep. On an
+        # idle machine the announcer's 0.1s head start made this ordering
+        # automatic; under the parallel runner's load it has to be waited for.
+        await self._until(
+            lambda: k1.table.get(listener).state is AgentState.SLEEPING,
+            timeout=30,
+        )
+        k1.spawn(Announcer())
         await self._until(
             lambda: any(
                 p.name == "Announcer" and p.state is AgentState.FINISHED
                 for p in k1.table.all()
-            )
+            ),
+            timeout=30,
         )
         await self._crash(k1, run1)  # the listener never consumed BigNews
 

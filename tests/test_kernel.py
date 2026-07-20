@@ -62,6 +62,17 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
     def kernel(self, **kw):
         return Kernel(store=self.store, tick=0.01, **kw)
 
+    async def _until(self, predicate, timeout=30.0):
+        """Wait for a condition instead of a clock: on a loaded machine (the
+        parallel runner puts thirteen files' worth of subprocesses on every
+        core) a fixed sleep asserts about the scheduler's speed, not its
+        behaviour."""
+        async def poll():
+            while not predicate():
+                await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(poll(), timeout)
+
     # -- lifecycle -------------------------------------------------------
     def test_illegal_transition_raises(self):
         table = ProcessTable()
@@ -154,8 +165,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.05)
 
         k.kill(child)
-        await asyncio.sleep(0.05)
-        self.assertIs(k.table.get(child).state, AgentState.FAILED)
+        await self._until(lambda: k.table.get(child).state is AgentState.FAILED)
         self.assertEqual(k.table.get(child).exit_reason, "killed")
         self.assertTrue(k.table.get(parent).alive)
 
@@ -176,10 +186,11 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(k.table.all()), 3)  # root -> child -> grandchild
 
         k.kill(2)  # the middle one
-        await asyncio.sleep(0.05)
+        await self._until(
+            lambda: k.table.get(2).state is AgentState.FAILED
+            and k.table.get(3).state is AgentState.FAILED  # descendant taken
+        )
         self.assertTrue(k.table.get(1).alive)  # ancestor untouched
-        self.assertIs(k.table.get(2).state, AgentState.FAILED)
-        self.assertIs(k.table.get(3).state, AgentState.FAILED)  # descendant taken
 
         k.kill(1)
         await runner
@@ -191,8 +202,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         runner = asyncio.create_task(k.run())
 
         self.store.send_command("pause", pid=pid)
-        await asyncio.sleep(0.15)
-        self.assertIs(k.table.get(pid).state, AgentState.SUSPENDED)
+        await self._until(lambda: k.table.get(pid).state is AgentState.SUSPENDED)
 
         self.store.send_command("resume", pid=pid)
         await asyncio.wait_for(runner, timeout=2)

@@ -697,7 +697,8 @@ No installs, no API keys — deterministic agents, so a bug reproduces the
 same way twice:
 
 ```bash
-python -m unittest discover tests -v          # 194 tests
+python tests/run.py                           # 194 tests, files in parallel, ~30s
+python -m unittest discover tests -v          # the same tests, serially
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
@@ -768,4 +769,5 @@ benchmarks/   bench.py             # recovery, approval latency, multi-app cost
 docs/         manual.py            # the text of AgentOS.pdf
               build_manual.py      # renders it; run after changing the system
 tests/        194 of them          # including what the API and kernel refuse
+              run.py               # parallel runner: one interpreter per file
 ```
