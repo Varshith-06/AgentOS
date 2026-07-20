@@ -6,17 +6,17 @@ mailbox and inbox just end at a transport now instead of the kernel's queues.
 An agent cannot tell which side of a fork it is running on, because its
 entire world was always a serializable message boundary.
 
-Two transports, one protocol (JSON lines):
+The protocol (JSON lines over a loopback TCP socket):
+    child  -> parent: {"token": ...}                           (handshake, once)
     parent -> child:  {"pid":..., "name":..., "spec":...}      (header, once)
     child  -> parent: {"type": "syscall", "op", "req_id", "args"}
     parent -> child:  {"req_id":..., "value":..., "error":...}
     child  -> parent: {"type": "finished", "result"} | {"type": "failed", "error"}
 
-stdio (default): the child's real stdout is the channel; stdin carries replies.
-socket: AGENTOS_CONNECT=host:port and AGENTOS_TOKEN are in the environment.
-The child dials the executor, sends {"token": ...} as its first line, and the
-same lines flow over TCP. Either way, sys.stdout is pointed at stderr first,
-so an agent that print()s can never corrupt the framing.
+AGENTOS_CONNECT=host:port and AGENTOS_TOKEN arrive in the environment. The
+child dials the executor and authenticates before anything else is said.
+sys.stdout is pointed at stderr on the way in, so an agent that print()s
+cannot be mistaken for the runtime.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ import asyncio
 import json
 import os
 import sys
-import threading
 from types import SimpleNamespace
 
 from agentos.agents.base import _RUNNING, agent_from_spec
@@ -34,7 +33,7 @@ from agentos.runtime.executor import Context
 
 
 def _wire(header: dict) -> tuple[SimpleNamespace, asyncio.Queue, Context]:
-    """The same Context, fed by the same shapes — only the transport differs."""
+    """The same Context the kernel would build, fed by the same shapes."""
     proc = SimpleNamespace(
         pid=header["pid"], name=header["name"], inbox=asyncio.Queue()
     )
@@ -43,8 +42,8 @@ def _wire(header: dict) -> tuple[SimpleNamespace, asyncio.Queue, Context]:
 
 
 async def _execute(agent, ctx: Context, emit) -> int:
-    """Run the agent; report finished/failed on the channel. Shared by both
-    transports — `emit` is the only thing that knows where bytes go."""
+    """Run the agent; report finished/failed on the channel. `emit` is the
+    only thing here that knows where bytes go."""
     _RUNNING.set(id(agent))
     try:
         result = await agent.run(ctx)
@@ -70,43 +69,7 @@ def _reply_of(msg: dict) -> Reply:
     )
 
 
-async def _stdio_main() -> int:
-    # Claim the real stdout for the protocol, then point sys.stdout at stderr:
-    # an agent that print()s must not be able to corrupt the framing.
-    protocol = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8")
-    sys.stdout = sys.stderr
-
-    header = json.loads(sys.stdin.readline())
-    agent = agent_from_spec(header["spec"])
-    proc, mailbox, ctx = _wire(header)
-    loop = asyncio.get_running_loop()
-
-    async def emit(payload: dict) -> None:
-        protocol.write(json.dumps(payload) + "\n")
-        protocol.flush()
-
-    async def uplink() -> None:  # Context puts Syscalls here; ship them out
-        while True:
-            await emit(_syscall_line(await mailbox.get()))
-
-    def downlink() -> None:  # kernel replies come back on stdin (daemon thread)
-        while True:
-            line = sys.stdin.readline()
-            if not line:
-                os._exit(1)  # the runtime died; there is nobody left to talk to
-            loop.call_soon_threadsafe(
-                proc.inbox.put_nowait, _reply_of(json.loads(line))
-            )
-
-    up = asyncio.create_task(uplink())
-    threading.Thread(target=downlink, daemon=True).start()
-    try:
-        return await _execute(agent, ctx, emit)
-    finally:
-        up.cancel()
-
-
-async def _socket_main(endpoint: str, token: str) -> int:
+async def _main(endpoint: str, token: str) -> int:
     sys.stdout = sys.stderr  # stdout is a dead end here; prints go to stderr
 
     host, _, port = endpoint.rpartition(":")
@@ -144,9 +107,14 @@ async def _socket_main(endpoint: str, token: str) -> int:
 
 async def main() -> int:
     endpoint = os.environ.get("AGENTOS_CONNECT")
-    if endpoint:
-        return await _socket_main(endpoint, os.environ.get("AGENTOS_TOKEN", ""))
-    return await _stdio_main()
+    if not endpoint:
+        print(
+            "agentos.runtime.child is spawned by the kernel, not run by hand "
+            "(no AGENTOS_CONNECT in the environment)",
+            file=sys.stderr,
+        )
+        return 2
+    return await _main(endpoint, os.environ.get("AGENTOS_TOKEN", ""))
 
 
 if __name__ == "__main__":

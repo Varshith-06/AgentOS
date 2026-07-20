@@ -2,7 +2,7 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 199 passing](https://img.shields.io/badge/tests-199%20passing-brightgreen)
+![Tests: 196 passing](https://img.shields.io/badge/tests-196%20passing-brightgreen)
 ![Model: gpt--oss--120b](https://img.shields.io/badge/default%20model-gpt--oss--120b-orange)
 
 **An operating system for AI agents — a kernel, not a framework.**
@@ -55,13 +55,13 @@ config at a real one and the same code runs live.
 |---|---|
 | **Crash recovery** | the only runtime measured that repeats **0** work after a hard kill |
 | **Isolation** | every agent is a real OS process — not a mode, the only mode |
-| **Approval latency** | 2.2ms, approve → agent finished — 3× faster than Temporal |
+| **Approval latency** | 1.9ms, approve → agent finished — 3× faster than Temporal |
 | **Durable step overhead** | 10.6ms per step, each crossing a real process boundary — 6× cheaper than Temporal |
 | **Multi-app cost ledger** | one ledger, exact to the token, across every application |
 | **Capability ceiling** | **0 escapes** in 10 adversarial attacks — a real model actively trying |
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
 | **Auth** | bearer token on every route; refuses to bind non-loopback without one |
-| **Test suite** | 199 tests, zero dependencies, fully offline |
+| **Test suite** | 196 tests, zero dependencies, fully offline |
 
 ---
 
@@ -127,27 +127,86 @@ the code actually costs. A busy machine will read higher.
 | metric | result |
 |---|---|
 | steps re-executed after recovery | **0** |
+| steps completed before the kill | 9 of 18 |
 | journaled syscalls replayed | 24 |
-| recovery wall time (replay + all remaining work) | 0.25s |
+| recovery wall time (replay + all remaining work) | 0.53s |
 
 **Humans wake agents at scheduler speed** — `approve()` to *agent finished*,
 through the full path (dependency resolved, re-queued, scheduled, run):
 
 | metric | result |
 |---|---|
-| median | **2.2ms** |
-| worst | 2.6ms |
+| median | **1.9ms** |
+| worst | 2.5ms |
 
 **One runtime accounts for every application, exactly.** Three apps × five
 agents × two model calls against one daemon:
 
 | metric | result |
 |---|---|
-| throughput | **10.5 agents/s** (15 real OS processes started) |
+| throughput | **10.6 agents/s** (15 real OS processes started) |
 | ledger, 30 concurrent billed calls | $0.001380 — **exact to the token** |
 
 The two *claims* — zero re-execution and an exact ledger — are deterministic
 and held in every run, idle machine or not.
+
+### Which scheduler, and what it buys
+
+Everything above runs on `fifo`, the default. `python
+benchmarks/schedulers.py` runs all three policies against three workloads,
+because a scheduling policy is a claim about *which work matters* and there is
+no single number that settles it.
+
+**Independent agents** — 24 agents that need nothing from each other, 4 slots.
+Nothing to optimise here, so this measures what a policy *costs*:
+
+| policy | throughput |
+|---|---|
+| `fifo` | 13.3 agents/s |
+| `priority` | 12.8 agents/s |
+| `dependency` | 12.9 agents/s |
+
+Picking is O(ready) for the two smart policies instead of O(1), and at these
+queue depths that is inside the noise. **A policy you don't need is close to
+free.**
+
+**Mixed urgency** — 5 High / 5 Normal / 5 Low, 2 slots, every High agent
+submitted *last* so it starts behind all the routine work. Mean time from
+submit to finish:
+
+| policy | High mean | High worst | Low mean |
+|---|---|---|---|
+| `fifo` | 2.04s | 2.25s | 1.97s |
+| `priority` | **1.55s** | **1.88s** | 2.04s |
+| `dependency` | **1.55s** | **1.88s** | 2.04s |
+
+Urgent work finishes **24% sooner**, and the whole cost is 0.07s on the Low
+band — a preference, not starvation, which is what the ageing guard in
+`Priority` is there to keep true. `dependency` matches it because it falls
+back to priority when nothing is blocked, so it is never *worse* than
+`priority` on a priority workload.
+
+**A bottleneck** — 2 agents that 3 others each are blocked on, plus 20 filler
+agents nobody is waiting for, 2 slots. An agent that sleeps re-queues at the
+*back*, so under FIFO the bottleneck waits behind a full cycle of filler for
+every step it takes:
+
+| policy | bottleneck cleared | blocked agents done | makespan |
+|---|---|---|---|
+| `fifo` | 3.86s | 3.99s | 4.14s |
+| `priority` | 3.85s | 4.00s | 4.13s |
+| `dependency` | **1.47s** | 3.86s | 4.09s |
+
+The bottleneck clears **2.6× sooner** — this is the policy a CPU scheduler
+cannot have, since it turns on knowing that six agents are blocked on pid 12.
+
+Read the third column honestly, though: the agents it unblocks finish only
+0.13s earlier, and the makespan is unchanged. Once freed they still queue
+behind 20 filler agents on 2 slots, and no scheduler creates capacity. What
+`dependency` buys is **latency on the critical path**, not throughput — the
+downstream work becomes *runnable* 2.4s sooner, which is what matters when
+something outside the runtime is waiting on it, and nothing at all when the
+machine is saturated regardless.
 
 ### The ceiling, under attack
 
@@ -341,10 +400,10 @@ features:
   live. Every completed syscall is a checkpoint.
 - **Real process isolation, always** — anything that survives `json.dumps`
   survives a socket. Every agent is its **own OS process**, syscalls crossing
-  a token-authenticated loopback TCP connection as JSON lines (or stdio pipes
-  with `--transport pipe`). There is no in-process mode: a runtime whose
-  tests exercise a different execution model from the one it deploys is
-  testing something it does not ship.
+  a token-authenticated loopback TCP connection as JSON lines. There is one
+  execution path and no in-process mode: a runtime whose tests exercise a
+  different execution model from the one it deploys is testing something it
+  does not ship.
 - **Invented agents** — an agent whose identity is its parameters can be
   *constructed by a model*, and still journals, recovers, and isolates like
   anything hand-written.
@@ -638,7 +697,7 @@ No installs, no API keys — deterministic agents, so a bug reproduces the
 same way twice:
 
 ```bash
-python -m unittest discover tests -v          # 199 tests
+python -m unittest discover tests -v          # 196 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
@@ -657,6 +716,7 @@ python examples/app_support.py                            # app 2, another termi
 # dashboard: http://127.0.0.1:7070/
 
 python benchmarks/bench.py                                # the numbers above
+python benchmarks/schedulers.py                           # all three policies
 python benchmarks/compare.py                              # vs the field
 python benchmarks/attenuate.py                            # the ceiling under attack
 ```
@@ -702,9 +762,10 @@ examples/     tree pipeline deadlock deploy finance memory assistant crash
               app_research app_support software_company research_assistant
               customer_support
 benchmarks/   bench.py             # recovery, approval latency, multi-app cost
+              schedulers.py        # fifo vs priority vs dependency
               compare.py           # vs LangGraph / CrewAI / AutoGen / Temporal
               attenuate.py         # the capability ceiling, under attack
 docs/         manual.py            # the text of AgentOS.pdf
               build_manual.py      # renders it; run after changing the system
-tests/        199 of them          # including what the API and kernel refuse
+tests/        196 of them          # including what the API and kernel refuse
 ```

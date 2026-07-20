@@ -289,6 +289,21 @@ PID  NAME      PARENT  CHILDREN  STATUS    PRIORITY  WAITING ON     MODEL      P
      "CPU scheduler has no idea that six processes are all waiting on process "
      "12. This kernel knows exactly that, because agents declare what they are "
      "waiting for (§9) — so it can run the agent that frees the most work."),
+    ("body",
+     "<font face='Courier'>benchmarks/schedulers.py</font> measures all three. "
+     "On work with no structure to exploit the policies are within noise of one "
+     "another, which is the point: a policy you do not need is close to free. "
+     "On a queue of mixed urgency, <b>priority</b> finishes the urgent band 24% "
+     "sooner at a cost of 0.07s on the low band. On a bottleneck — a few agents "
+     "that many others are blocked on, buried in filler work — <b>dependency</b> "
+     "clears the bottleneck 2.6x sooner (1.47s against 3.86s)."),
+    ("note",
+     "<b>Read that last number honestly.</b> The bottleneck clears far sooner, "
+     "but the agents it unblocks finish only marginally sooner and the total "
+     "makespan does not move. Once freed they still queue behind everything "
+     "else, and no scheduler creates capacity. What the policy buys is "
+     "<i>latency on the critical path</i> — the downstream work becomes runnable "
+     "much sooner — not throughput."),
     ("h3", "The loop, and why it is event-driven"),
     ("body",
      "The kernel runs a loop: drain incoming syscalls, hand out slots, check "
@@ -769,22 +784,25 @@ $ python -m agentos.cli recover
     ("h2", "18. The syscall transport"),
     ("body",
      "Syscalls and replies have to travel between two separate "
-     "operating-system processes. They cross as JSON lines, over one of two "
-     "transports."),
-    ("table", (
-        ["Transport", "Channel", "Default"],
-        [
-            ["<font face='Courier'>socket</font>", "A loopback TCP connection, one per agent", "Yes"],
-            ["<font face='Courier'>pipe</font>", "The child's standard input and output", "Select with <font face='Courier'>--transport pipe</font>"],
-        ],
-        [0.18, 0.62, 0.20])),
+     "operating-system processes. They cross as JSON lines over a loopback TCP "
+     "connection, and there is exactly one such path — the runtime deploys what "
+     "its tests exercise."),
     ("body",
-     "The socket transport works like this. The executor opens one listening "
-     "socket on the loopback interface the first time it spawns an agent. Each "
-     "child is handed the address and a <b>single-use token</b> in its "
-     "environment, dials back, sends the token as its first line, and from then "
-     "on the wire format is byte-identical to the pipe version. A connection "
-     "with an unknown, reused, or missing token is dropped."),
+     "It works like this. The executor opens one listening socket on the "
+     "loopback interface the first time it spawns an agent, bound to an "
+     "ephemeral port the operating system chooses. Each child is handed that "
+     "address and a <b>single-use token</b> in its environment, dials back, and "
+     "sends the token as its first line before anything else is said. The "
+     "executor looks the token up and removes it in the same step, so a replayed "
+     "token finds nothing; a connection with an unknown, reused, or missing "
+     "token is dropped without ever receiving a header."),
+    ("note",
+     "<b>Why the kernel listens and the child dials.</b> The reverse cannot "
+     "work: a child that bound its own port would have to announce which one "
+     "over a channel that does not exist yet. It also scales the right way — one "
+     "listening socket serves every agent — and it generalises, because a child "
+     "that dials a known address does not care whether that address is on this "
+     "machine."),
     ("note",
      "<b>Why this is not HTTP.</b> The channel is a persistent two-way stream, "
      "deliberately. A reply arrives when the <i>scheduler</i> grants the agent a "
@@ -1048,19 +1066,20 @@ $ curl -H "Authorization: Bearer $TOKEN" host:7070/task/1
         ["Metric", "Result"],
         [
             ["Steps re-executed after recovery", "<b>0</b>"],
+            ["Steps completed before the kill", "9 of 18"],
             ["Journaled syscalls replayed", "24"],
-            ["Recovery wall time (replay plus all remaining work)", "0.67s"],
+            ["Recovery wall time (replay plus all remaining work)", "0.53s"],
         ],
         [0.62, 0.38])),
     ("h3", "Human-in-the-loop latency"),
     ("body",
      "From <font face='Courier'>approve()</font> to the agent having "
      "<i>finished</i> — the full path: dependency resolved, agent re-queued, "
-     "scheduled, run to completion. Median <b>2.2ms</b>, worst 2.6ms."),
+     "scheduled, run to completion. Median <b>1.9ms</b>, worst 2.5ms."),
     ("h3", "Cost accounting under load"),
     ("body",
      "Three independent applications submit five agents each to one daemon, "
-     "every agent making two model calls. Throughput <b>10.5 agents/s</b> -- "
+     "every agent making two model calls. Throughput <b>10.6 agents/s</b> -- "
      "fifteen real operating-system processes started; the "
      "ledger total for all thirty concurrent billed calls is "
      "<b>exact to the token</b> against an independently computed expectation."),
@@ -1144,7 +1163,7 @@ control, with shell granted: shell.run -> detector works
         ["", "AgentOS", "Temporal"],
         [
             ["Per durable step", "<b>10.6ms</b> — a socket into another address space", "68.7ms — gRPC to a server"],
-            ["Approve &rarr; finished", "<b>2.2ms</b> (worst 2.5ms)", "7.3ms (worst 8.9ms)"],
+            ["Approve &rarr; finished", "<b>1.9ms</b> (worst 2.5ms)", "7.3ms (worst 8.9ms)"],
             ["Repeated after a kill", "<b>0</b>", "1 (at-least-once, as documented)"],
             ["What it needs", "one process, zero dependencies", "a server cluster"],
             ["Durability boundary", "this machine", "many machines"],
@@ -1192,7 +1211,6 @@ control, with shell granted: shell.run -> detector works
      "Useful daemon flags: <font face='Courier'>--host</font>, "
      "<font face='Courier'>--port</font>, <font face='Courier'>--slots</font>, "
      "<font face='Courier'>--policy</font>, "
-     "<font face='Courier'>--transport</font>, "
      "<font face='Courier'>--token</font>, "
      "<font face='Courier'>--task-tools</font>, "
      "<font face='Courier'>--task-budget</font>, "
@@ -1216,12 +1234,12 @@ control, with shell granted: shell.run -> detector works
             ["<font face='Courier'>kernel/models.py</font>", "Routing, providers, ranking, the ledger", "§14"],
             ["<font face='Courier'>kernel/store.py</font>", "Every durable table; the read model", "§16"],
             ["<font face='Courier'>drivers/base.py</font>", "Timeout, rate limit, retry, cache — written once", "§12"],
-            ["<font face='Courier'>runtime/executor.py</font>", "The Context object; the asyncio executor", "§4, §17"],
-            ["<font face='Courier'>runtime/subproc.py</font>, <font face='Courier'>child.py</font>", "Agents as OS processes; both transports", "§17, §18"],
+            ["<font face='Courier'>runtime/executor.py</font>", "The Context object agents are handed", "§4, §17"],
+            ["<font face='Courier'>runtime/subproc.py</font>, <font face='Courier'>child.py</font>", "Agents as OS processes; the syscall channel", "§17, §18"],
             ["<font face='Courier'>runtime/daemon.py</font>", "The long-running server", "§19"],
             ["<font face='Courier'>api/server.py</font>", "HTTP routes, authentication, task validation", "§19, §20"],
             ["<font face='Courier'>agents/llm.py</font>", "The agent whose parameters are its identity", "§21"],
-            ["<font face='Courier'>benchmarks/</font>", "bench, compare, attenuate", "§23, §24"],
+            ["<font face='Courier'>benchmarks/</font>", "bench, schedulers, compare, attenuate", "§23, §24"],
         ],
         [0.32, 0.50, 0.18])),
 

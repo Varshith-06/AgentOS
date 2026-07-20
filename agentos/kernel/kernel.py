@@ -35,9 +35,9 @@ twice, a model is not billed twice, a child is not spawned twice), so the
 agent fast-forwards to where it died and goes live from there. A crash costs
 the work since the last completed syscall and nothing more.
 
-Phase 7 cashes in the boundary: agents can run as real OS subprocesses
-(isolation="process"), with Syscall and Reply crossing an actual pipe instead
-of an asyncio queue — the kernel cannot tell the difference. In daemon mode
+Phase 7 cashes in the boundary: every agent is a real OS subprocess, with
+Syscall and Reply crossing a loopback socket instead of an asyncio queue —
+the kernel cannot tell the difference. In daemon mode
 the runtime outlives any application; thin clients submit agents as specs
 over HTTP and one process table shows everyone's work.
 """
@@ -51,7 +51,7 @@ from typing import Any
 
 from ..agents.base import Agent, agent_from_spec, spec_of
 from ..drivers import REGISTRY, ToolError
-from ..runtime.subproc import ProcessExecutor, SocketExecutor
+from ..runtime.subproc import ProcessExecutor
 from . import depgraph as dg
 from . import gpu
 from .depgraph import DependencyGraph
@@ -92,7 +92,6 @@ class Kernel:
         tools: dict[str, dict[str, Any]] | None = None,
         models: Any = None,
         recover: bool = False,
-        transport: str = "socket",
         retries: int = 0,
         daemon: bool = False,
     ) -> None:
@@ -135,16 +134,12 @@ class Kernel:
         self.deps = DependencyGraph()
 
         # An agent is always a real OS process: its own interpreter, its own
-        # address space, syscalls crossing a socket as JSON. There is no
-        # in-process mode, deliberately — a runtime whose tests exercise a
-        # different execution model from the one it deploys is testing
-        # something it does not ship. What remains swappable is only how the
-        # syscalls travel: a loopback TCP socket, or the child's stdio.
-        if transport not in ("socket", "pipe"):
-            raise ValueError(f"transport must be 'socket' or 'pipe', not {transport!r}")
-        self.transport = transport
-        executor_cls = SocketExecutor if transport == "socket" else ProcessExecutor
-        self.executor = executor_cls(self.mailbox, self._on_finish, self._on_fail)
+        # address space, syscalls crossing a loopback socket as JSON. There is
+        # exactly one execution path, deliberately — a runtime whose tests
+        # exercise a different execution model from the one it deploys is
+        # testing something it does not ship.
+        self.transport = ProcessExecutor.transport
+        self.executor = ProcessExecutor(self.mailbox, self._on_finish, self._on_fail)
         #: Daemon mode: the runtime outlives its work. Never exit on quiescence,
         #: and never declare a stall a deadlock — new work can always arrive.
         self.daemon_mode = daemon

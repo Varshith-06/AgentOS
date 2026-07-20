@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .drivers import REGISTRY
 from .kernel.permissions import Permissions
+from .kernel.scheduler import POLICIES
 from .kernel.store import Store
 
 STALE_AFTER = 3.0  # seconds without a heartbeat before a runtime looks dead
@@ -287,7 +288,6 @@ def cmd_daemon(args, store: Store) -> int:
         port=args.port,
         policy=args.policy,
         slots=args.slots,
-        transport=args.transport,
         task_tools=[t.strip() for t in args.task_tools.split(",") if t.strip()],
         task_budget_usd=args.task_budget,
         token=args.token or None,
@@ -295,8 +295,7 @@ def cmd_daemon(args, store: Store) -> int:
         recover=recover,
     )
     print(f"agentos daemon at {daemon.url}  "
-          f"(policy={args.policy}, slots={args.slots}, "
-          f"transport={args.transport})")
+          f"(policy={args.policy}, slots={args.slots})")
     print(f"dashboard: {daemon.url}/")
     if recover:
         print("recovering the previous run's agents from their journals")
@@ -410,21 +409,29 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="run an example or app module")
     run.add_argument("target")
     run.add_argument("--slots", type=int, default=4)
-    run.add_argument("--policy", default="fifo")
+    run.add_argument("--policy", choices=sorted(POLICIES), default="fifo")
 
     recover = sub.add_parser(
         "recover", help="resume agents from their journals after a crash (p.7-8)"
     )
     recover.add_argument("--slots", type=int, default=None)
-    recover.add_argument("--policy", default=None)
+    recover.add_argument("--policy", choices=sorted(POLICIES), default=None)
 
     daemon = sub.add_parser(
         "daemon", help="run the shared runtime that outlives applications (p.8)"
     )
     daemon.add_argument("--host", default="127.0.0.1")
     daemon.add_argument("--port", type=int, default=7070)
-    daemon.add_argument("--slots", type=int, default=4)
-    daemon.add_argument("--policy", default="fifo")
+    daemon.add_argument(
+        "--slots", type=int, default=4,
+        help="how many agents may run at once (default 4)",
+    )
+    daemon.add_argument(
+        "--policy", choices=sorted(POLICIES), default="fifo",
+        help="which Ready agent gets the next slot: 'fifo' oldest first "
+             "(default), 'priority' High before Low with an ageing guard, "
+             "'dependency' whoever unblocks the most other agents",
+    )
     daemon.add_argument(
         "--token", default="",
         help="bearer token every API request must present. Falls back to "
@@ -445,11 +452,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated capabilities POST /task may grant, e.g. "
              "'filesystem,http'. Empty (the default) means submitted tasks "
              "get no tools; this is the ceiling for everything they create",
-    )
-    daemon.add_argument(
-        "--transport", choices=["socket", "pipe"], default="socket",
-        help="syscall channel to subprocess agents: loopback TCP (default) "
-             "or stdio pipes; ignored with --isolation task",
     )
     daemon.add_argument(
         "--recover", action="store_true",

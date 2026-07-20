@@ -188,11 +188,11 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
 
 
 class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
-    """The executor swap (p.17): real OS subprocesses, same kernel, same agents.
+    """The executor (p.17): real OS subprocesses, same kernel, same agents.
 
-    Runs on the default transport — the loopback TCP socket. The pipe
-    subclass below re-runs every test with stdio pipes carrying the syscalls;
-    the tests cannot tell, which is the point.
+    Syscalls cross a loopback TCP socket. Nothing in these tests can tell —
+    they are written against the agent API, which is identical either side of
+    the process boundary. That is the point.
     """
 
     def setUp(self):
@@ -204,7 +204,6 @@ class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
         self.tmp.cleanup()
 
     def kernel(self, **kw):
-        kw.setdefault("transport", "socket")
         return Kernel(store=self.store, tick=0.01, **kw)
 
     async def test_agents_run_in_a_different_address_space(self):
@@ -243,16 +242,8 @@ class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("killed", proc.exit_reason)
 
 
-class PipeTransportTest(ProcessIsolationTest):
-    """Same guarantees when the syscall channel is stdio pipes, not TCP."""
-
-    def kernel(self, **kw):
-        kw["transport"] = "pipe"
-        return super().kernel(**kw)
-
-
 class SocketAuthTest(unittest.IsolatedAsyncioTestCase):
-    """The socket transport's door policy: no valid token, no channel."""
+    """The syscall channel's door policy: no valid token, no channel."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

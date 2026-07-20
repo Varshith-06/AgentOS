@@ -77,7 +77,20 @@ async def bench_recovery(agents: int = 3, steps: int = 6) -> dict:
     for a in range(agents):
         k1.spawn(StepWorker(tag=f"w{a}", steps=steps))
     run1 = asyncio.create_task(k1.run())
-    await asyncio.sleep(steps * 0.05 / 2)  # die roughly halfway through
+
+    # Die roughly halfway through — but "halfway" has to be measured, not
+    # guessed at with a sleep. Every agent is a real interpreter starting up,
+    # and a fixed delay short enough to be mid-run on a fast machine is one
+    # that kills an empty runtime on a slow one: nothing journaled, nothing
+    # replayed, and a recovery benchmark that proves nothing by measuring
+    # nothing. So watch the work itself and pull the plug at the halfway mark.
+    halfway = agents * steps // 2
+
+    async def until_halfway() -> None:
+        while _steps_done(store) < halfway:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(until_halfway(), timeout=120)
 
     # kill -9, in effect: swap the store for a scratch one so the death throes
     # cannot touch persisted state, then cancel every task with no cleanup.
