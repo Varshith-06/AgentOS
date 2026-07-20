@@ -45,10 +45,13 @@ class Checkpointer(Agent):
 
 
 class CheckpointTest(Base):
-    async def test_explicit_checkpoint_returns_its_number(self):
+    async def test_explicit_checkpoint_returns_its_number_and_is_journaled(self):
         result = await asyncio.wait_for(
             self.kernel().run_until_done(Checkpointer()), timeout=30)
         self.assertGreater(result["checkpoint"], 0)
+        ops = [e["op"] for entries in self.store.load_journals().values()
+               for e in entries]
+        self.assertIn("checkpoint", ops)
 
     async def test_checkpointing_state_is_actually_entered(self):
         """p.3 lists Checkpointing as a lifecycle state. Before this it was
@@ -65,13 +68,6 @@ class CheckpointTest(Base):
         k.table.on_transition = spy
         await asyncio.wait_for(k.run_until_done(Checkpointer()), timeout=30)
         self.assertIn(AgentState.CHECKPOINTING.value, seen)
-
-    async def test_checkpoint_is_journaled_and_not_replayed(self):
-        k = self.kernel()
-        await asyncio.wait_for(k.run_until_done(Checkpointer()), timeout=30)
-        ops = [e["op"] for entries in self.store.load_journals().values()
-               for e in entries]
-        self.assertIn("checkpoint", ops)
 
 
 # -- p.3: the process card carries Model and Permissions --------------------

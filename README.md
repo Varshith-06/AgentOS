@@ -2,7 +2,7 @@
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 196 passing](https://img.shields.io/badge/tests-196%20passing-brightgreen)
+![Tests: 194 passing](https://img.shields.io/badge/tests-194%20passing-brightgreen)
 ![Model: gpt--oss--120b](https://img.shields.io/badge/default%20model-gpt--oss--120b-orange)
 
 **An operating system for AI agents — a kernel, not a framework.**
@@ -61,7 +61,7 @@ config at a real one and the same code runs live.
 | **Capability ceiling** | **0 escapes** in 10 adversarial attacks — a real model actively trying |
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
 | **Auth** | bearer token on every route; refuses to bind non-loopback without one |
-| **Test suite** | 196 tests, zero dependencies, fully offline |
+| **Test suite** | 194 tests, zero dependencies, fully offline |
 
 ---
 
@@ -697,7 +697,7 @@ No installs, no API keys — deterministic agents, so a bug reproduces the
 same way twice:
 
 ```bash
-python -m unittest discover tests -v          # 196 tests
+python -m unittest discover tests -v          # 194 tests
 
 python -m agentos.cli run examples/tree.py --slots 2      # processes + scheduling
 python -m agentos.cli run examples/pipeline.py            # events + dependencies
@@ -767,5 +767,5 @@ benchmarks/   bench.py             # recovery, approval latency, multi-app cost
               attenuate.py         # the capability ceiling, under attack
 docs/         manual.py            # the text of AgentOS.pdf
               build_manual.py      # renders it; run after changing the system
-tests/        196 of them          # including what the API and kernel refuse
+tests/        194 of them          # including what the API and kernel refuse
 ```

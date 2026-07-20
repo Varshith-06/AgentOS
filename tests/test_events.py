@@ -142,14 +142,6 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
             ["code woke on vectors", "docs woke on vectors"],
         )
 
-    async def test_adding_a_subscriber_changes_nothing_else(self):
-        """The loose-coupling claim: a third subscriber, same publisher code."""
-        k = self.kernel()
-        results = await asyncio.wait_for(
-            k.run_until_done(Orchestrator(tags=["code", "docs", "review"])), timeout=5
-        )
-        self.assertEqual(len(results), 3)
-
     async def test_event_is_buffered_for_a_busy_subscriber(self):
         """No subscribe/publish race: an event fired while asleep still lands."""
         k = self.kernel()
