@@ -257,7 +257,20 @@ class ProcessExecutor:
     async def aclose(self) -> None:
         """Stop listening. Running channels are unaffected; only new spawns
         would need the server, and the kernel is shutting down."""
-        if self._server is not None:
-            self._server.close()
-            await self._server.wait_closed()
-            self._server = None
+        if self._server is None:
+            return
+        self._server.close()
+        # close() is what stops new spawns being accepted, and is the whole of
+        # what this method promises. wait_closed() used to return as soon as
+        # the listening socket was down; since 3.12.1 it also waits for every
+        # open connection's handler to finish. An agent that is still up is
+        # still connected, so on 3.12+ awaiting it unbounded means waiting for
+        # the very channels the docstring says are unaffected — shutdown hung
+        # here on a loaded CI runner until the caller's timeout fired. Wait
+        # briefly so the socket is normally released in an orderly way, then
+        # stop; whatever is left goes down with the loop.
+        try:
+            await asyncio.wait_for(self._server.wait_closed(), timeout=5)
+        except asyncio.TimeoutError:  # not CancelledError: that must propagate
+            pass
+        self._server = None
