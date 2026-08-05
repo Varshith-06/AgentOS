@@ -186,8 +186,14 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         runner = asyncio.create_task(k.run())
         # Each generation is a real interpreter starting up, so wait for the
         # tree to exist rather than guessing how long three spawns take.
+        # Existing is not enough: the table row appears when a generation is
+        # spawned, and killing a process whose interpreter has not reached its
+        # first syscall leaves nothing to transition. Every one of them has to
+        # be parked in its sleep before the kill means anything.
         async def three_deep():
-            while len(k.table.all()) < 3:
+            while not (len(k.table.all()) == 3 and all(
+                p.state is AgentState.SLEEPING for p in k.table.all()
+            )):
                 await asyncio.sleep(0.02)
 
         await asyncio.wait_for(three_deep(), timeout=LIMIT)
