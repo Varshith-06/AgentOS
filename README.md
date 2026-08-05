@@ -1,9 +1,11 @@
 # AgentOS
 
-![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+[![CI](https://github.com/Varshith-06/AgentOS/actions/workflows/ci.yml/badge.svg)](https://github.com/Varshith-06/AgentOS/actions/workflows/ci.yml)
+![Python 3.11 – 3.14](https://img.shields.io/badge/python-3.11%20%E2%80%93%203.14-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
 ![Tests: 194 passing](https://img.shields.io/badge/tests-194%20passing-brightgreen)
 ![Model: gpt--oss--120b](https://img.shields.io/badge/default%20model-gpt--oss--120b-orange)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 **An operating system for AI agents — a kernel, not a framework.**
 
@@ -62,6 +64,7 @@ config at a real one and the same code runs live.
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
 | **Auth** | bearer token on every route; refuses to bind non-loopback without one |
 | **Test suite** | 194 tests, zero dependencies, fully offline |
+| **Verified** | the correctness claims above are re-checked on every push — Linux, macOS, Windows × Python 3.11–3.14. Timings are reported, never asserted |
 
 ---
 
@@ -717,6 +720,7 @@ python examples/app_support.py                            # app 2, another termi
 # dashboard: http://127.0.0.1:7070/
 
 python benchmarks/bench.py                                # the numbers above
+python benchmarks/bench.py --check                        # ...as a pass/fail gate
 python benchmarks/schedulers.py                           # all three policies
 python benchmarks/compare.py                              # vs the field
 python benchmarks/attenuate.py                            # the ceiling under attack
@@ -735,6 +739,33 @@ python -m agentos.cli approve 1 --as "Senior Engineer"
 python -m agentos.cli grant Finance sql
 python -m agentos.cli revoke Finance sql   # applies to a running system
 ```
+
+### What CI enforces
+
+A README can claim anything. [The pipeline](.github/workflows/ci.yml) re-runs
+the checks above on every push, so the claims either hold on three operating
+systems or the badge goes red:
+
+| Job | What fails it |
+|---|---|
+| `tests` | any of the 194 tests, on Linux / macOS / Windows × Python 3.11–3.14 |
+| `benchmark claims` | a step re-executed after the hard kill, an agent that didn't finish, or a ledger that drifted off the token |
+| `capability ceiling` | any of `shell`, `python`, `http`, `sql` actually executing during the ten attacks |
+| `packaging` | the wheel failing to build, or `import agentos` failing from outside the source tree |
+
+The suite runs on all three platforms for a reason: the central claim is that
+an agent is a real OS process, and process creation, signal delivery, and
+socket teardown are exactly where platforms disagree. Passing on one machine
+would be the weakest possible version of that claim.
+
+Two deliberate omissions. **Timings are not asserted** — a shared runner's
+wall clock is noise, and a threshold that failed under a noisy neighbour would
+be evidence about GitHub's infrastructure, not this code. `bench.py --check`
+prints them and gates only on correctness. **`compare.py` is not in CI** — it
+needs LangGraph, CrewAI, AutoGen, and a Temporal server, and pinning four
+competing frameworks' versions would make the comparison a test of my
+lockfile rather than of the runtimes. Run it locally; it skips whatever isn't
+installed.
 
 ---
 
@@ -770,4 +801,5 @@ docs/         manual.py            # the text of AgentOS.pdf
               build_manual.py      # renders it; run after changing the system
 tests/        194 of them          # including what the API and kernel refuse
               run.py               # parallel runner: one interpreter per file
+.github/      workflows/ci.yml     # the suite on 3 OSes, plus the claim gates
 ```

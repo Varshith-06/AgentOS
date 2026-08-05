@@ -18,6 +18,7 @@ approval gate, N clients x M agents), not AgentOS-shaped.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import statistics
 import sys
@@ -210,7 +211,7 @@ def row(label: str, value, note: str = "") -> None:
     print(f"  {label:<38} {value:>14}   {note}")
 
 
-async def main() -> int:
+async def main(check: bool = False) -> int:
     print("AgentOS benchmark (offline, mock models, tick=10ms)\n")
 
     r = await bench_recovery()
@@ -237,8 +238,34 @@ async def main() -> int:
     row("throughput", f"{l['agents_per_s']:.1f} agents/s")
     row("ledger total", f"${l['ledger_usd']:.6f}")
     row("ledger exact to the token", str(l["ledger_exact"]), "<- the claim")
+
+    if not check:
+        return 0
+
+    # --check gates on the *correctness* claims only. The timings above are
+    # deliberately not asserted: they are machine-dependent by nature, and a
+    # shared CI runner under noisy-neighbour load would fail a threshold that
+    # says nothing about the code. What must never regress is the behaviour
+    # the numbers are there to illustrate.
+    failures = []
+    if r["re_executed"] != 0:
+        failures.append(f"{r['re_executed']} step(s) re-executed after recovery, expected 0")
+    if not r["all_finished"]:
+        failures.append("not every agent finished after recovery")
+    if not l["ledger_exact"]:
+        failures.append("cost ledger did not match the token-exact expectation")
+
+    print()
+    if failures:
+        for f in failures:
+            print(f"  FAIL  {f}")
+        return 1
+    print("  claims hold: 0 work re-executed, all agents finished, ledger exact.")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--check", action="store_true",
+                    help="exit non-zero if a correctness claim regressed (timings are not asserted)")
+    raise SystemExit(asyncio.run(main(ap.parse_args().check)))

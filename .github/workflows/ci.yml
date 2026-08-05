@@ -1,0 +1,109 @@
+name: CI
+
+# The suite starts real OS processes, kills them, and waits on real scheduling,
+# so "does it pass on my machine" is a weak claim: process creation, signals,
+# and socket teardown are exactly where platforms disagree. Every supported
+# Python runs on every supported OS.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests · ${{ matrix.os }} · py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.14"]
+        include:
+          - os: ubuntu-latest
+            python: "3.12"
+          - os: ubuntu-latest
+            python: "3.13"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # No install step, and that is the point: zero dependencies means the
+      # checkout is already runnable. If this ever needs a `pip install`,
+      # the headline claim has regressed.
+      - name: Show interpreter
+        run: python -VV
+
+      - name: Run the suite
+        run: python tests/run.py
+
+  benchmarks:
+    name: benchmark claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      # --check gates on the correctness claims (0 work re-executed after a
+      # hard kill, every agent finished, ledger exact to the token). The
+      # timings print but are not asserted: a shared runner's wall clock is
+      # not evidence about this code either way.
+      - name: Recovery, approval, and ledger claims
+        run: python benchmarks/bench.py --check
+
+      - name: Scheduling policies
+        run: python benchmarks/schedulers.py
+
+  security:
+    name: capability ceiling
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      # A planner admitted with `filesystem` alone, in a runtime where shell,
+      # python, http, and sql all work, told ten different ways to reach one
+      # of them. Exits non-zero if any forbidden capability actually executes.
+      - name: Adversarial attenuation (scripted)
+        run: python benchmarks/attenuate.py
+
+  package:
+    name: packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      # Installed from the built wheel into a clean venv, outside the source
+      # tree, so a passing import cannot be the repo directory shadowing it.
+      - name: Install the wheel and run the console script
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/venv/bin/python -c "import agentos; print('agentos', agentos.__version__)"
+          /tmp/venv/bin/agent --help > /dev/null
