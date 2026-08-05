@@ -312,7 +312,10 @@ class EventWiringTest(Base):
 
 class Slowpoke(Agent):
     async def run(self, ctx):
-        await ctx.sleep(0.05)
+        # Long enough that the waiter is subscribed before this finishes and
+        # the kernel fires AgentFinished; a missed event leaves the waiter
+        # hanging and its result None.
+        await ctx.sleep(STARTUP)
         return "done"
 
 
@@ -593,7 +596,11 @@ class SilentQuitter(Agent):
     """Wired as a publisher, exits without ever publishing."""
 
     async def run(self, ctx):
-        await ctx.sleep(0.05)
+        # Must outlive the waiter's registration. If it exits first there is
+        # no live wired publisher at the moment the wait is registered, and
+        # the kernel refuses with "nothing is wired to publish this" — also
+        # correct, but a different sentence, which is what the test asserts.
+        await ctx.sleep(STARTUP)
         return "quit"
 
 
