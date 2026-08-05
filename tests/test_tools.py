@@ -23,6 +23,8 @@ from agentos.drivers import REGISTRY  # noqa: E402
 from agentos.kernel.states import AgentState  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 
 class TwoTicks(Agent):
     """Two calls to a rate-limited driver; returns the gap between them."""
@@ -140,7 +142,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
         REGISTRY[name] = cls
         self.addCleanup(REGISTRY.pop, name, None)
 
-    async def _until(self, predicate, timeout=5.0):
+    async def _until(self, predicate, timeout=LIMIT):
         async def poll():
             while not predicate():
                 await asyncio.sleep(0.01)
@@ -154,7 +156,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
             k.run_until_done(
                 ToolUser(capability="sql", op="query", args={"query": "SELECT 1"})
             ),
-            timeout=5,
+            timeout=LIMIT,
         )
         self.assertIn("does not hold capability 'sql'", result["denied"])
         self.assertTrue(
@@ -164,7 +166,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_the_p7_matrix_sql_yes_browser_no(self):
         k = self.kernel(permissions={"Finance": ["sql"]})
-        result = await asyncio.wait_for(k.run_until_done(Finance()), timeout=5)
+        result = await asyncio.wait_for(k.run_until_done(Finance()), timeout=LIMIT)
         self.assertEqual(result, {"answer": 42, "browser": "denied"})
 
     async def test_wildcard_grants(self):
@@ -173,7 +175,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
             k.run_until_done(
                 ToolUser(capability="sql", op="query", args={"query": "SELECT 1 AS x"})
             ),
-            timeout=5,
+            timeout=LIMIT,
         )
         self.assertIsNone(result["denied"])
 
@@ -188,13 +190,13 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
             lambda: any(e["kind"] == "tool" for e in self.store.logs())
         )  # the first call went through
         perms_path.write_text(json.dumps({}))  # the human revokes it, mid-run
-        await asyncio.wait_for(run, timeout=10)
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "revoked mid-run")
 
     async def test_unknown_capability_is_an_error_not_a_crash(self):
         k = self.kernel(permissions={"ToolUser": ["teleport"]})
         result = await asyncio.wait_for(
-            k.run_until_done(ToolUser(capability="teleport", op="go")), timeout=5
+            k.run_until_done(ToolUser(capability="teleport", op="go")), timeout=LIMIT
         )
         self.assertIn("no driver for capability 'teleport'", result["denied"])
 
@@ -209,7 +211,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
                     args={"query": "SELECT ? + ? AS total", "params": [40, 2]},
                 )
             ),
-            timeout=5,
+            timeout=LIMIT,
         )
         self.assertEqual(result["value"], [{"total": 42}])
 
@@ -219,7 +221,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
                 permissions={"FsAgent": ["filesystem"]},
                 tools={"filesystem": {"root": root}},
             )
-            result = await asyncio.wait_for(k.run_until_done(FsAgent()), timeout=5)
+            result = await asyncio.wait_for(k.run_until_done(FsAgent()), timeout=LIMIT)
         self.assertEqual(result["text"], "hello")
         self.assertIn("escapes the sandbox root", result["escape"])
         self.assertIn("FileCreated", [e.type for e in k.bus.history])  # p.5
@@ -230,7 +232,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
             k.run_until_done(
                 ToolUser(capability="shell", op="run", args={"command": "echo hi"})
             ),
-            timeout=15,
+            timeout=LIMIT,
         )
         self.assertIn("hi", shell["value"]["stdout"])
         self.assertEqual(shell["value"]["returncode"], 0)
@@ -240,7 +242,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
             k2.run_until_done(
                 ToolUser(capability="python", op="run", args={"code": "print(6 * 7)"})
             ),
-            timeout=15,
+            timeout=LIMIT,
         )
         self.assertEqual(py["value"]["stdout"].strip(), "42")
 
@@ -261,7 +263,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
             lambda: k.table.get(pid).state is AgentState.WAITING
             and k.table.get(pid).waiting_on == "tool python"
         )
-        await asyncio.wait_for(run, timeout=15)  # would deadlock-fail if broken
+        await asyncio.wait_for(run, timeout=LIMIT)  # would deadlock-fail if broken
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
         self.assertIn("ToolCompleted", [e.type for e in k.bus.history])
 
@@ -270,7 +272,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
         self.register("flaky", Flaky)
         k = self.kernel(permissions={"ToolUser": ["flaky"]})
         result = await asyncio.wait_for(
-            k.run_until_done(ToolUser(capability="flaky", op="go")), timeout=5
+            k.run_until_done(ToolUser(capability="flaky", op="go")), timeout=LIMIT
         )
         self.assertEqual(result["value"], "ok after 3 attempts")
 
@@ -278,7 +280,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
         self.register("metronome", Metronome)
 
         k = self.kernel(permissions={"TwoTicks": ["metronome"]})
-        gap = await asyncio.wait_for(k.run_until_done(TwoTicks()), timeout=5)
+        gap = await asyncio.wait_for(k.run_until_done(TwoTicks()), timeout=LIMIT)
         self.assertGreaterEqual(gap, 0.1)
 
     async def test_a_non_serializable_tool_result_is_refused(self):
@@ -286,7 +288,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
         self.register("rude", Rude)
         k = self.kernel(permissions={"ToolUser": ["rude"]})
         result = await asyncio.wait_for(
-            k.run_until_done(ToolUser(capability="rude", op="leak")), timeout=5
+            k.run_until_done(ToolUser(capability="rude", op="leak")), timeout=LIMIT
         )
         self.assertIn("not JSON-serializable", result["denied"])
 

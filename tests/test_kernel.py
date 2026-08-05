@@ -16,6 +16,8 @@ from agentos.kernel.process import ProcessTable  # noqa: E402
 from agentos.kernel.states import AgentState, InvalidTransition  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT, STARTUP  # noqa: E402
+
 
 class Sleeper(Agent):
     async def run(self, ctx):
@@ -62,7 +64,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
     def kernel(self, **kw):
         return Kernel(store=self.store, tick=0.01, **kw)
 
-    async def _until(self, predicate, timeout=30.0):
+    async def _until(self, predicate, timeout=LIMIT):
         """Wait for a condition instead of a clock: on a loaded machine (the
         parallel runner puts thirteen files' worth of subprocesses on every
         core) a fixed sleep asserts about the scheduler's speed, not its
@@ -162,7 +164,13 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         parent = k.spawn(Immortal())
         child = k.spawn(Immortal(), parent=parent)
         runner = asyncio.create_task(k.run())
-        await asyncio.sleep(0.05)
+        # Both are real interpreters starting up. Killing on a 50ms timer can
+        # land before the child process exists at all, and the kill is then
+        # aimed at nothing; wait for it to be genuinely asleep instead.
+        await self._until(
+            lambda: k.table.get(child).state is AgentState.SLEEPING
+            and k.table.get(parent).state is AgentState.SLEEPING
+        )
 
         k.kill(child)
         await self._until(lambda: k.table.get(child).state is AgentState.FAILED)
@@ -182,7 +190,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
             while len(k.table.all()) < 3:
                 await asyncio.sleep(0.02)
 
-        await asyncio.wait_for(three_deep(), timeout=30)
+        await asyncio.wait_for(three_deep(), timeout=LIMIT)
         self.assertEqual(len(k.table.all()), 3)  # root -> child -> grandchild
 
         k.kill(2)  # the middle one
@@ -198,14 +206,17 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
     async def test_pause_and_resume_via_control_queue(self):
         """The CLI path: commands arrive through the store, not the API."""
         k = self.kernel(slots=1)
-        pid = k.spawn(Sleeper(duration=0.05))
+        # Long enough that the pause below lands while it is still asleep: the
+        # command travels through the store, and a 50ms life could be over
+        # before it arrives on a loaded machine, leaving nothing to suspend.
+        pid = k.spawn(Sleeper(duration=STARTUP))
         runner = asyncio.create_task(k.run())
 
         self.store.send_command("pause", pid=pid)
         await self._until(lambda: k.table.get(pid).state is AgentState.SUSPENDED)
 
         self.store.send_command("resume", pid=pid)
-        await asyncio.wait_for(runner, timeout=2)
+        await asyncio.wait_for(runner, timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
 
     # -- the message boundary --------------------------------------------

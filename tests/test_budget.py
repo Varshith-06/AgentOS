@@ -22,6 +22,8 @@ from agentos.agents.llm import LLMAgent  # noqa: E402
 from agentos.kernel.states import AgentState  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 # 1000 tokens in + 1000 out at these rates is $0.002 a call, so a $0.005
 # budget buys two calls and refuses the third.
 PRICED = {"classes": {"m": [{
@@ -70,14 +72,14 @@ class BudgetTest(Base):
     async def test_an_unmetered_task_is_not_stopped(self):
         k = self.kernel()
         result = await asyncio.wait_for(
-            k.run_until_done(Caller(calls=4)), timeout=30)
+            k.run_until_done(Caller(calls=4)), timeout=LIMIT)
         self.assertEqual(result["made"], 4)
         self.assertIsNone(result["refused"])
 
     async def test_a_budget_stops_the_calls(self):
         k = self.kernel()
         pid = k.submit_spec(spec_of(Caller(calls=10)), budget_usd=0.005)
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         result = k.table.get(pid).result
         self.assertGreater(result["made"], 0, "it should get some calls")
         self.assertLess(result["made"], 10, "it should not get all of them")
@@ -88,7 +90,7 @@ class BudgetTest(Base):
         one. What the second agent may spend depends on the first."""
         k = self.kernel(slots=1)
         pid = k.submit_spec(spec_of(Spawner()), budget_usd=0.005)
-        await asyncio.wait_for(k.run(), timeout=60)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         result = k.table.get(pid).result
         spent_first = result["first"]["made"]
         spent_second = result["second"]["made"]
@@ -100,7 +102,7 @@ class BudgetTest(Base):
     async def test_children_inherit_the_root_of_their_task(self):
         k = self.kernel()
         pid = k.submit_spec(spec_of(Spawner()), budget_usd=0.005)
-        await asyncio.wait_for(k.run(), timeout=60)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         for proc in k.table.all():
             self.assertEqual(proc.root, pid, f"pid {proc.pid} escaped the tree")
 
@@ -111,7 +113,7 @@ class BudgetTest(Base):
         budget = 0.05
         k = self.kernel()
         pid = k.submit_spec(spec_of(Caller(calls=20)), budget_usd=budget)
-        await asyncio.wait_for(k.run(), timeout=60)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
 
         ledger = self.store.model_costs()
         spent = sum(c["cost"] for c in ledger.values())
@@ -128,7 +130,7 @@ class BudgetTest(Base):
     async def test_the_refusal_names_the_numbers(self):
         k = self.kernel()
         pid = k.submit_spec(spec_of(Caller(calls=10)), budget_usd=0.005)
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         refused = k.table.get(pid).result["refused"]
         self.assertIn("$", refused)
         self.assertIn("0.005", refused)
@@ -151,7 +153,7 @@ class BudgetTest(Base):
         pid = k.submit_spec(
             spec_of(LLMAgent(role="Spender", goal="g", model="m", max_steps=20)),
             budget_usd=0.005)
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FINISHED)
         self.assertTrue(proc.result["incomplete"])

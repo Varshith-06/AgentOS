@@ -23,6 +23,8 @@ from agentos import RuntimeClient  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 from agentos.runtime.daemon import Daemon  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 
 def scripted(*replies: object) -> list:
     return [{"provider": "mock", "model": "scripted", "cost_per_mtok": [0, 0],
@@ -64,7 +66,7 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.daemon.stop()
-        await asyncio.wait_for(self.task, timeout=20)
+        await asyncio.wait_for(self.task, timeout=LIMIT)
         self.store.close()
 
     def post(self, path: str, body: dict) -> tuple[int, dict]:
@@ -221,7 +223,7 @@ class BudgetCeilingTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.daemon.stop()
-        await asyncio.wait_for(self.task, timeout=20)
+        await asyncio.wait_for(self.task, timeout=LIMIT)
         self.store.close()
 
     def post(self, body):
@@ -275,7 +277,7 @@ class NoToolsAllowedTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.daemon.stop()
-        await asyncio.wait_for(self.task, timeout=20)
+        await asyncio.wait_for(self.task, timeout=LIMIT)
         self.store.close()
 
     async def test_the_default_is_no_tools_at_all(self):

@@ -19,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agentos import Agent, Kernel  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT, STARTUP  # noqa: E402
+
 
 class Stranger(Agent):
     """Reads the same key as Recipient, but was never named in the share.
@@ -65,7 +67,7 @@ class Snoop(Agent):
 
 class SharedWriter(Agent):
     async def run(self, ctx):
-        await ctx.sleep(0.05)  # let readers subscribe
+        await ctx.sleep(STARTUP)  # the reader must be subscribed before this lands
         await ctx.memory.store("finding", {"total": 42}, kind="shared")
         return "shared"
 
@@ -81,7 +83,7 @@ class SelectiveSharer(Agent):
     """Shares a working key with exactly one pid, then announces."""
 
     async def run(self, ctx):
-        await ctx.sleep(0.05)
+        await ctx.sleep(STARTUP)  # both readers must be subscribed before this fires
         await ctx.memory.store("keycode", "1234")
         await ctx.memory.share("keycode", with_agent=self.params["friend"])
         await ctx.publish("KeycodeShared")
@@ -143,7 +145,7 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_store_and_retrieve_round_trip(self):
         result = await asyncio.wait_for(
-            self.kernel().run_until_done(RoundTrip()), timeout=5
+            self.kernel().run_until_done(RoundTrip()), timeout=LIMIT
         )
         self.assertEqual(result["one"], {"nested": [1, 2, 3]})
         self.assertEqual(result["all"], {"k": {"nested": [1, 2, 3]}})
@@ -153,7 +155,7 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
         k = self.kernel()
         k.spawn(Stasher())
         snoop = k.spawn(Snoop())
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(snoop).result, {"stolen": None})
 
     async def test_shared_memory_crosses_agents_through_the_kernel(self):
@@ -161,7 +163,7 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
         k = self.kernel()
         reader = k.spawn(SharedReader())
         k.spawn(SharedWriter())
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(reader).result, {"total": 42})
         self.assertIn("MemoryUpdated", [e.type for e in k.bus.history])
 
@@ -170,18 +172,18 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
         friend = k.spawn(Recipient())
         stranger = k.spawn(Stranger())
         k.spawn(SelectiveSharer(friend=friend))
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(friend).result, {"read": "1234"})
         self.assertEqual(k.table.get(stranger).result, {"read": None})
 
     async def test_longterm_memory_survives_a_restart(self):
         first = await asyncio.wait_for(
-            self.kernel().run_until_done(Counter()), timeout=5
+            self.kernel().run_until_done(Counter()), timeout=LIMIT
         )
         self.assertEqual(first["runs"], 1)
 
         second = await asyncio.wait_for(
-            self.kernel().run_until_done(Counter()), timeout=5  # a fresh runtime
+            self.kernel().run_until_done(Counter()), timeout=LIMIT  # a fresh runtime
         )
         self.assertEqual(second["runs"], 2, "longterm memory must survive")
         self.assertIsNone(
@@ -190,20 +192,20 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_semantic_retrieval_ranks_by_similarity(self):
         result = await asyncio.wait_for(
-            self.kernel().run_until_done(Librarian()), timeout=5
+            self.kernel().run_until_done(Librarian()), timeout=LIMIT
         )
         self.assertEqual(result[0], "scheduler")
 
     async def test_episodic_memory_is_the_agents_own_history(self):
         result = await asyncio.wait_for(
-            self.kernel().run_until_done(Diarist()), timeout=5
+            self.kernel().run_until_done(Diarist()), timeout=LIMIT
         )
         self.assertTrue(result)
 
     async def test_private_memory_is_freed_at_exit(self):
         k = self.kernel()
         pid = k.spawn(Stasher(value="ephemeral"))
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         rows = self.store.db.execute(
             "SELECT * FROM memory WHERE mtype = 'working' AND owner = ?", (str(pid),)
         ).fetchall()

@@ -25,6 +25,8 @@ from agentos.kernel.permissions import PermissionDenied  # noqa: E402
 from agentos.kernel.states import AgentState  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT, STARTUP  # noqa: E402
+
 
 def scripted(*replies: object) -> dict:
     """A model class that answers with these replies, in order."""
@@ -77,7 +79,7 @@ class AttenuationTest(Base):
         k = self.kernel(permissions={"Delegator": ["filesystem"]})
         result = await asyncio.wait_for(
             k.run_until_done(Delegator(grant=["filesystem"], probe="filesystem")),
-            timeout=30)
+            timeout=LIMIT)
         self.assertTrue(result["reached"])
 
     async def test_a_parent_cannot_delegate_what_it_lacks(self):
@@ -85,7 +87,7 @@ class AttenuationTest(Base):
         were never given."""
         k = self.kernel(permissions={"Delegator": ["http"]})
         pid = k.spawn(Delegator(grant=["filesystem"], probe="filesystem"))
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FAILED)
         self.assertIn("cannot grant filesystem", proc.exit_reason)
@@ -93,7 +95,7 @@ class AttenuationTest(Base):
     async def test_a_child_granted_nothing_reaches_nothing(self):
         k = self.kernel(permissions={"Delegator": ["filesystem"]})
         result = await asyncio.wait_for(
-            k.run_until_done(Delegator(grant=[], probe="filesystem")), timeout=30)
+            k.run_until_done(Delegator(grant=[], probe="filesystem")), timeout=LIMIT)
         self.assertFalse(result["reached"])
         self.assertIn("permission denied", result["why"].lower())
 
@@ -102,21 +104,21 @@ class AttenuationTest(Base):
         k = self.kernel(permissions={"Delegator": ["filesystem"],
                                      "Probe": ["filesystem"]})
         result = await asyncio.wait_for(
-            k.run_until_done(Delegator(grant=[], probe="filesystem")), timeout=30)
+            k.run_until_done(Delegator(grant=[], probe="filesystem")), timeout=LIMIT)
         self.assertFalse(result["reached"])
 
     async def test_submit_spec_grant_sets_the_ceiling(self):
         k = self.kernel(permissions={})
         pid = k.submit_spec(spec_of(Probe(capability="filesystem")),
                             grant=["filesystem"])
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertTrue(k.table.get(pid).result["reached"])
 
     async def test_grants_do_not_outlive_the_process(self):
         k = self.kernel(permissions={"Delegator": ["filesystem"]})
         await asyncio.wait_for(
             k.run_until_done(Delegator(grant=["filesystem"], probe="filesystem")),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(k.perms.pid_grants, {})
 
 
@@ -128,7 +130,7 @@ class LLMAgentTest(Base):
                                                            "result": 42})}})
         result = await asyncio.wait_for(
             k.run_until_done(LLMAgent(role="R", goal="g", tools=[], model="m")),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(result, 42)
 
     async def test_it_uses_a_tool_and_reports_the_result(self):
@@ -142,7 +144,7 @@ class LLMAgentTest(Base):
             spec_of(LLMAgent(role="Reader", goal="read", tools=["filesystem"],
                              model="m")),
             grant=["filesystem"])
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "read it")
 
     async def test_flattened_tool_params_are_accepted(self):
@@ -156,7 +158,7 @@ class LLMAgentTest(Base):
         pid = k.submit_spec(
             spec_of(LLMAgent(role="R", goal="g", tools=["filesystem"], model="m")),
             grant=["filesystem"])
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "ok")
 
     async def test_a_tool_outside_its_set_is_refused_without_calling_it(self):
@@ -168,7 +170,7 @@ class LLMAgentTest(Base):
         result = await asyncio.wait_for(
             k.run_until_done(LLMAgent(role="R", goal="g", tools=["filesystem"],
                                       model="m")),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(result, "gave up")
 
     async def test_it_spawns_a_team_and_waits_for_it(self):
@@ -186,7 +188,7 @@ class LLMAgentTest(Base):
                              model="planner", child_model="worker",
                              may_spawn=True)),
             grant=["filesystem"])
-        await asyncio.wait_for(k.run(), timeout=60)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "team finished")
         names = {p.name for p in k.table.all()}
         self.assertIn("Worker", names)  # the role, not the class, in ps
@@ -202,7 +204,7 @@ class LLMAgentTest(Base):
         result = await asyncio.wait_for(
             k.run_until_done(LLMAgent(role="P", goal="g", tools=["filesystem"],
                                       model="planner", may_spawn=True)),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(result, "backed off")
         self.assertEqual(len([p for p in k.table.all()]), 1)  # no child created
 
@@ -213,7 +215,7 @@ class LLMAgentTest(Base):
         )}})
         result = await asyncio.wait_for(
             k.run_until_done(LLMAgent(role="W", goal="g", tools=[], model="m")),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(result, "could not")
 
     async def test_it_gives_up_rather_than_looping_forever(self):
@@ -221,7 +223,7 @@ class LLMAgentTest(Base):
         result = await asyncio.wait_for(
             k.run_until_done(LLMAgent(role="R", goal="g", tools=[], model="m",
                                       max_steps=3)),
-            timeout=30)
+            timeout=LIMIT)
         self.assertTrue(result["incomplete"])
 
     async def test_the_spec_of_a_dynamic_agent_round_trips(self):
@@ -272,7 +274,7 @@ class EventWiringTest(Base):
         result = await asyncio.wait_for(
             self.kernel().run_until_done(
                 Wirer(publishes=["Ready"], says=["Ready"])),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(result["said"], ["Ready"])
         self.assertEqual(result["refused"], [])
 
@@ -282,14 +284,14 @@ class EventWiringTest(Base):
         result = await asyncio.wait_for(
             self.kernel().run_until_done(
                 Wirer(publishes=["Ready"], says=["Redy"])),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(result["said"], [])
         self.assertIn("was not wired to publish 'Redy'", result["refused"][0])
 
     async def test_a_child_wired_for_nothing_publishes_nothing(self):
         result = await asyncio.wait_for(
             self.kernel().run_until_done(Wirer(publishes=[], says=["Any"])),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(result["said"], [])
 
     async def test_a_hand_written_agent_is_unrestricted(self):
@@ -297,13 +299,13 @@ class EventWiringTest(Base):
         not wired decides its own events, as every example always has."""
         k = self.kernel()
         result = await asyncio.wait_for(
-            k.run_until_done(Announcer(events=["Whatever", "IWant"])), timeout=30)
+            k.run_until_done(Announcer(events=["Whatever", "IWant"])), timeout=LIMIT)
         self.assertEqual(result["said"], ["Whatever", "IWant"])
 
     async def test_the_wiring_shows_up_on_the_process(self):
         k = self.kernel()
         pid = k.spawn(Wirer(publishes=["Ready"], says=["Ready"]))
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         child = [p for p in k.table.all() if p.parent == pid][0]
         self.assertEqual(child.row()["publishes"], ["Ready"])
 
@@ -318,7 +320,7 @@ class LateAnnouncer(Agent):
     """Publishes after a beat, so a waiter is listening when it does."""
 
     async def run(self, ctx):
-        await ctx.sleep(0.05)
+        await ctx.sleep(STARTUP)
         await ctx.publish(self.params["event"], note="hi")
         return "announced"
 
@@ -342,7 +344,7 @@ class UnsatisfiableWaitTest(Base):
         k.table.get(pid).publishes = ["Ready"]  # wire the root too
         hopeful = k.spawn(Hopeful(event="NeverComes"))
         k.table.get(hopeful).publishes = []
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIn("no live agent is wired to publish",
                       k.table.get(hopeful).result["refused"])
 
@@ -356,7 +358,7 @@ class UnsatisfiableWaitTest(Base):
         # finishes and the kernel fires AgentFinished. Without the sleep the
         # test races on which of the two reaches its syscall first.
         k.spawn(Slowpoke())
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIsNone(k.table.get(pid).result["refused"])
 
     async def test_an_unwired_agent_keeps_the_wait_open(self):
@@ -365,7 +367,7 @@ class UnsatisfiableWaitTest(Base):
         pid = k.spawn(Hopeful(event="Maybe"))
         k.table.get(pid).publishes = []
         k.spawn(LateAnnouncer(event="Maybe"))  # unwired: may publish anything
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIsNone(k.table.get(pid).result["refused"])
 
 
@@ -393,7 +395,7 @@ class LLMEventTest(Base):
         pid = k.submit_spec(
             spec_of(LLMAgent(role="Planner", goal="g", tools=[],
                              model="planner", may_spawn=True)))
-        await asyncio.wait_for(k.run(), timeout=60)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "pipeline finished")
         flowed = {e["type"]: e["subscribers"] for e in self.store.events()}
         self.assertIn("DataReady", flowed)
@@ -415,7 +417,7 @@ class LLMEventTest(Base):
         pid = k.submit_spec(
             spec_of(LLMAgent(role="P", goal="g", tools=[], model="planner",
                              may_spawn=True)))
-        await asyncio.wait_for(k.run(), timeout=60)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "finished anyway")
         worker = [p for p in k.table.all() if p.name == "W"][0]
         self.assertEqual(worker.result, "corrected")
@@ -491,7 +493,7 @@ class MemoryIntegrationTest(Base):
         )}})
         result = await asyncio.wait_for(
             k.run_until_done(LLMAgent(role="Surveyor", goal="g", model="m")),
-            timeout=30)
+            timeout=LIMIT)
         self.assertEqual(result, "noted")
         import json as _json
         row = self.store.db.execute(
@@ -512,7 +514,7 @@ class ApprovalActionTest(Base):
             await asyncio.sleep(0.01)
         self.assertIn("Operator", k.table.get(pid).waiting_on or "")
         k.approve(pid, "Operator")
-        await asyncio.wait_for(run, timeout=30)
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "released")
 
 
@@ -553,7 +555,7 @@ class RetryReplayTest(Base):
     async def test_a_retried_failure_reexecutes_instead_of_replaying(self):
         k = self.kernel(retries=1, permissions={"*": ["flaky"]})
         pid = k.spawn(UsesFlaky())
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FINISHED)
         self.assertEqual(proc.result, "second call works")
@@ -579,7 +581,7 @@ class SpawnExtrasTest(Base):
         pid = k.submit_spec(
             spec_of(LLMAgent(role="P", goal="g", tools=[], model="planner",
                              may_spawn=True)))
-        await asyncio.wait_for(k.run(), timeout=60)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         child = [p for p in k.table.all() if p.name == "Rush"][0]
         self.assertEqual(child.priority, "High")
         self.assertEqual(child.spec["params"]["retries"], 3)  # clamped
@@ -602,7 +604,7 @@ class OrphanedWaitTest(Base):
         k.table.get(hopeful).publishes = []
         quitter = k.spawn(SilentQuitter())
         k.table.get(quitter).publishes = ["NeverSaid"]
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         refused = k.table.get(hopeful).result["refused"]
         self.assertIn("exited without publishing", refused)
 
@@ -615,7 +617,7 @@ class DecisionLogTest(Base):
         )}})
         await asyncio.wait_for(
             k.run_until_done(LLMAgent(role="R", goal="g", model="m")),
-            timeout=30)
+            timeout=LIMIT)
         decisions = [l["message"] for l in self.store.logs()
                      if l["message"].startswith("decided:")]
         self.assertTrue(any("remember: k" in d for d in decisions))

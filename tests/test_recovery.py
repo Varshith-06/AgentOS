@@ -24,6 +24,8 @@ from agentos.kernel.memory import MemoryManager  # noqa: E402
 from agentos.kernel.states import AgentState  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 
 class Journaled(Agent):
     """Does one irreversible thing, naps, then checks it happened once."""
@@ -106,7 +108,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
     def kernel(self, **kw):
         return Kernel(store=self.store, tick=0.01, **kw)
 
-    async def _until(self, predicate, timeout=30.0):
+    async def _until(self, predicate, timeout=LIMIT):
         async def poll():
             while not predicate():
                 await asyncio.sleep(0.01)
@@ -143,7 +145,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
         await self._crash(k1, run1)
 
         k2 = self.kernel(recover=True)
-        await asyncio.wait_for(k2.run(), timeout=5)
+        await asyncio.wait_for(k2.run(), timeout=LIMIT)
         result = k2.table.get(pid).result
         self.assertEqual(
             result, {"before": 0, "after": 1},
@@ -171,7 +173,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
         await self._crash(k1, run1)
 
         k2 = self.kernel(recover=True)
-        await asyncio.wait_for(k2.run(), timeout=5)
+        await asyncio.wait_for(k2.run(), timeout=LIMIT)
         results = k2.table.get(parent).result
         self.assertIn({"ran": 1}, results.values())  # the pre-crash result, served
         self.assertIn("slow done", results.values())
@@ -187,11 +189,11 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
         pid = k1.spawn(ToolWorker(path=str(side_effect)))
         run1 = asyncio.create_task(k1.run())
         await self._until(lambda: k1.table.get(pid).state is AgentState.SLEEPING,
-                          timeout=15)
+                          timeout=LIMIT)
         await self._crash(k1, run1)
 
         k2 = self.kernel(recover=True)
-        await asyncio.wait_for(k2.run(), timeout=15)
+        await asyncio.wait_for(k2.run(), timeout=LIMIT)
         self.assertEqual(k2.table.get(pid).result, "done")
         self.assertEqual(
             side_effect.read_text().count("ran"), 1,
@@ -213,7 +215,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
             "recovery must re-attach to the same approval, not ask twice",
         )
         k2.approve(pid, "Operator")
-        await asyncio.wait_for(run2, timeout=5)
+        await asyncio.wait_for(run2, timeout=LIMIT)
         self.assertEqual(k2.table.get(pid).result, "Operator")
 
     async def test_events_buffered_at_crash_time_are_redelivered(self):
@@ -227,7 +229,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
         # automatic; under the parallel runner's load it has to be waited for.
         await self._until(
             lambda: k1.table.get(listener).state is AgentState.SLEEPING,
-            timeout=30,
+            timeout=LIMIT,
         )
         k1.spawn(Announcer())
         await self._until(
@@ -235,20 +237,20 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
                 p.name == "Announcer" and p.state is AgentState.FINISHED
                 for p in k1.table.all()
             ),
-            timeout=30,
+            timeout=LIMIT,
         )
         await self._crash(k1, run1)  # the listener never consumed BigNews
 
         k2 = self.kernel(recover=True)
-        await asyncio.wait_for(k2.run(), timeout=5)
+        await asyncio.wait_for(k2.run(), timeout=LIMIT)
         self.assertEqual(k2.table.get(listener).result, "it works")
 
     async def test_recovering_a_finished_world_is_a_no_op(self):
         k1 = self.kernel()
-        await asyncio.wait_for(k1.run_until_done(QuickChild()), timeout=5)
+        await asyncio.wait_for(k1.run_until_done(QuickChild()), timeout=LIMIT)
 
         k2 = self.kernel(recover=True)
-        await asyncio.wait_for(k2.run(), timeout=5)  # returns immediately
+        await asyncio.wait_for(k2.run(), timeout=LIMIT)  # returns immediately
         self.assertEqual(len(k2.table.all()), 1)
         self.assertIs(k2.table.all()[0].state, AgentState.FINISHED)
 
@@ -256,7 +258,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
     async def test_a_non_serializable_result_fails_the_agent(self):
         k = self.kernel()
         pid = k.spawn(BadReturn())
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertIs(proc.state, AgentState.FAILED)
         self.assertIn("serializable", proc.exit_reason)

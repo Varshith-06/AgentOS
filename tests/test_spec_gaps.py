@@ -22,6 +22,8 @@ from agentos.kernel.models import ModelManager  # noqa: E402
 from agentos.kernel.states import AgentState  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 
 class Base(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -47,7 +49,7 @@ class Checkpointer(Agent):
 class CheckpointTest(Base):
     async def test_explicit_checkpoint_returns_its_number_and_is_journaled(self):
         result = await asyncio.wait_for(
-            self.kernel().run_until_done(Checkpointer()), timeout=30)
+            self.kernel().run_until_done(Checkpointer()), timeout=LIMIT)
         self.assertGreater(result["checkpoint"], 0)
         ops = [e["op"] for entries in self.store.load_journals().values()
                for e in entries]
@@ -66,7 +68,7 @@ class CheckpointTest(Base):
                 original(proc, frm, to)
 
         k.table.on_transition = spy
-        await asyncio.wait_for(k.run_until_done(Checkpointer()), timeout=30)
+        await asyncio.wait_for(k.run_until_done(Checkpointer()), timeout=LIMIT)
         self.assertIn(AgentState.CHECKPOINTING.value, seen)
 
 
@@ -105,7 +107,7 @@ class ProcessCardTest(Base):
             {"provider": "mock", "model": "mock-fast", "cost_per_mtok": [1, 1]}]}})
 
         pid = k.spawn(ModelCaller())
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(pid).row()["model"], "mock-fast")
 
     async def test_row_stays_serializable(self):
@@ -142,7 +144,7 @@ class RetryTest(Base):
     async def test_a_failing_agent_is_restarted_up_to_its_budget(self):
         k = self.kernel(retries=2)
         pid = k.spawn(FlakyAgent(counter=self.counter("a"), fail_times=1))
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FINISHED)
         self.assertEqual(proc.retries, 1)
@@ -150,7 +152,7 @@ class RetryTest(Base):
     async def test_retries_are_bounded(self):
         k = self.kernel(retries=1)
         pid = k.spawn(FlakyAgent(counter=self.counter("b"), fail_times=99))
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FAILED)
         self.assertEqual(proc.retries, 1)  # one restart, then give up
@@ -158,7 +160,7 @@ class RetryTest(Base):
     async def test_retries_are_off_by_default(self):
         k = self.kernel()
         pid = k.spawn(FlakyAgent(counter=self.counter("c"), fail_times=1))
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(pid).state, AgentState.FAILED)
 
     async def test_a_killed_agent_is_never_retried(self):
@@ -169,7 +171,7 @@ class RetryTest(Base):
         while k.table.get(pid).state is not AgentState.SLEEPING:
             await asyncio.sleep(0.01)
         k.kill(pid)
-        await asyncio.wait_for(run, timeout=30)
+        await asyncio.wait_for(run, timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FAILED)
         self.assertEqual(proc.retries, 0)
@@ -283,7 +285,7 @@ class UsageAccountingTest(Base):
     async def test_tool_calls_are_recorded_for_the_whole_runtime(self):
         k = self.kernel(permissions={"*": ["filesystem"]},
                         tools={"filesystem": {"root": self.tmp.name}})
-        await asyncio.wait_for(k.run_until_done(ToolUser()), timeout=30)
+        await asyncio.wait_for(k.run_until_done(ToolUser()), timeout=LIMIT)
         usage = self.store.tool_usage()
         self.assertIn("filesystem", usage)
         self.assertEqual(usage["filesystem"]["calls"], 2)
@@ -293,7 +295,7 @@ class UsageAccountingTest(Base):
         k = self.kernel(models={"classes": {"fast": [
             {"provider": "mock", "model": "mock-fast", "cost_per_mtok": [1, 1]}]}})
 
-        await asyncio.wait_for(k.run_until_done(ModelCaller()), timeout=30)
+        await asyncio.wait_for(k.run_until_done(ModelCaller()), timeout=LIMIT)
         usage = self.store.model_usage()
         self.assertEqual(usage["mock-fast"]["calls"], 1)
 

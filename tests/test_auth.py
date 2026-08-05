@@ -24,6 +24,8 @@ from agentos import RuntimeClient  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 from agentos.runtime.daemon import Daemon, _is_loopback  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 TOKEN = "s3cret-token-value"
 
 
@@ -58,7 +60,7 @@ class AuthenticatedDaemonTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.daemon.stop()
-        await asyncio.wait_for(self.task, timeout=20)
+        await asyncio.wait_for(self.task, timeout=LIMIT)
         self.store.close()
 
     # -- nothing gets through unauthenticated --------------------------------
@@ -153,7 +155,7 @@ class UnauthenticatedDaemonTest(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.daemon.stop()
-        await asyncio.wait_for(self.task, timeout=20)
+        await asyncio.wait_for(self.task, timeout=LIMIT)
         self.store.close()
 
     async def test_loopback_without_a_token_still_serves(self):

@@ -20,6 +20,8 @@ from agentos import Agent, Kernel  # noqa: E402
 from agentos.kernel.states import AgentState  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 
 class Deploy(Agent):
     async def run(self, ctx):
@@ -50,7 +52,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
     def kernel(self, **kw):
         return Kernel(store=self.store, tick=0.01, **kw)
 
-    async def _until(self, predicate, timeout=5.0):
+    async def _until(self, predicate, timeout=LIMIT):
         async def poll():
             while not predicate():
                 await asyncio.sleep(0.01)
@@ -82,7 +84,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(k.table.get(pid).state, AgentState.BLOCKED)
 
         k.approve(pid, "Senior Engineer")
-        await asyncio.wait_for(run, timeout=5)
+        await asyncio.wait_for(run, timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertIs(proc.state, AgentState.FINISHED)
         self.assertEqual(proc.result, {"deployed": True, "by": "Senior Engineer"})
@@ -98,7 +100,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(k.table.get(pid).state, AgentState.BLOCKED)
 
         k.approve(pid, "Senior Engineer")
-        await asyncio.wait_for(run, timeout=5)
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
 
     async def test_each_live_request_needs_its_own_grant(self):
@@ -115,7 +117,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(k.table.get(b).state, AgentState.BLOCKED)
 
         k.approve(b, "Senior Engineer")
-        await asyncio.wait_for(run, timeout=5)
+        await asyncio.wait_for(run, timeout=LIMIT)
 
     async def test_approval_publishes_a_human_approved_event(self):
         k = self.kernel()
@@ -127,9 +129,9 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         # its wait_event call would fire the event into an empty room. Wait
         # for it to actually be listening, which is the Waiting state.
         await self._until(
-            lambda: k.table.get(watcher).state is AgentState.WAITING, timeout=30)
+            lambda: k.table.get(watcher).state is AgentState.WAITING, timeout=LIMIT)
         k.approve(pid, "Senior Engineer")
-        await asyncio.wait_for(run, timeout=30)
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertEqual(k.table.get(watcher).result, "Senior Engineer")
 
     async def test_killing_a_blocked_agent_does_not_hang(self):
@@ -138,7 +140,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         run = asyncio.create_task(k.run())
         await self._blocked(k, pid)
         k.kill(pid)
-        await asyncio.wait_for(run, timeout=5)
+        await asyncio.wait_for(run, timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertIs(proc.state, AgentState.FAILED)
         self.assertIn("killed", proc.exit_reason)
@@ -166,7 +168,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(adopted[0]["id"], original["id"])
 
         k2.approve(pid2, "Senior Engineer")
-        await asyncio.wait_for(run2, timeout=5)
+        await asyncio.wait_for(run2, timeout=LIMIT)
         self.assertEqual(k2.table.get(pid2).result["deployed"], True)
 
     async def test_a_grant_issued_while_down_is_honored_on_restart(self):
@@ -179,7 +181,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         self.store.approve(pid1, "Senior Engineer")  # the CLI path: runtime is dead
 
         k2 = self.kernel()
-        result = await asyncio.wait_for(k2.run_until_done(Deploy()), timeout=5)
+        result = await asyncio.wait_for(k2.run_until_done(Deploy()), timeout=LIMIT)
         self.assertEqual(result, {"deployed": True, "by": "Senior Engineer"})
         self.assertEqual(self.store.approvals(), [])  # granted, consumed, done
 
@@ -197,7 +199,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(k.table.get(pid).state, AgentState.SUSPENDED)
 
         k.resume(pid)
-        await asyncio.wait_for(run, timeout=5)
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
 
     async def test_resume_before_approval_keeps_it_suspended(self):
@@ -214,7 +216,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         k.approve(pid, "Senior Engineer")
         await asyncio.sleep(0.05)
         k.resume(pid)
-        await asyncio.wait_for(run, timeout=5)
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
 
 

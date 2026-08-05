@@ -22,6 +22,8 @@ from agentos import Agent, Kernel, RemoteAgentFailed, RuntimeClient  # noqa: E40
 from agentos.kernel.store import Store  # noqa: E402
 from agentos.runtime.daemon import Daemon  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 
 class Napper(Agent):
     async def run(self, ctx):
@@ -77,7 +79,7 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
 
         async def stop():
             d.stop()
-            await asyncio.wait_for(task, timeout=10)
+            await asyncio.wait_for(task, timeout=LIMIT)
 
         self.addAsyncCleanup(stop)
         await asyncio.sleep(0.05)  # let the kernel loop spin up
@@ -208,7 +210,7 @@ class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_agents_run_in_a_different_address_space(self):
         result = await asyncio.wait_for(
-            self.kernel().run_until_done(WhoAmI()), timeout=60
+            self.kernel().run_until_done(WhoAmI()), timeout=LIMIT
         )
         self.assertNotEqual(result["os_pid"], os.getpid())
 
@@ -234,9 +236,9 @@ class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
             ):
                 await asyncio.sleep(0.02)
 
-        await asyncio.wait_for(until_running(), timeout=60)
+        await asyncio.wait_for(until_running(), timeout=LIMIT)
         k.kill(pid)
-        await asyncio.wait_for(run, timeout=30)
+        await asyncio.wait_for(run, timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertEqual(proc.state.value, "Failed")
         self.assertIn("killed", proc.exit_reason)
@@ -260,15 +262,15 @@ class SocketAuthTest(unittest.IsolatedAsyncioTestCase):
             while getattr(k.executor, "_port", None) is None:
                 await asyncio.sleep(0.02)
 
-        await asyncio.wait_for(server_up(), timeout=60)
+        await asyncio.wait_for(server_up(), timeout=LIMIT)
         reader, writer = await asyncio.open_connection("127.0.0.1", k.executor._port)
         writer.write(b'{"token": "bogus"}\n')
         await writer.drain()
         # The executor hangs up without ever sending a header line.
-        self.assertEqual(await asyncio.wait_for(reader.readline(), timeout=30), b"")
+        self.assertEqual(await asyncio.wait_for(reader.readline(), timeout=LIMIT), b"")
         writer.close()
         # The impostor cost the real agent nothing.
-        await asyncio.wait_for(run, timeout=60)
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertEqual(k.table.get(pid).state.value, "Finished")
 
 

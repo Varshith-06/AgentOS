@@ -22,10 +22,12 @@ from agentos.kernel.scheduler import (  # noqa: E402
 from agentos.kernel.states import AgentState  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT, STARTUP  # noqa: E402
+
 
 class Publisher(Agent):
     async def run(self, ctx):
-        await ctx.sleep(self.params.get("delay", 0.02))
+        await ctx.sleep(self.params.get("delay", STARTUP))
         await ctx.publish("ResearchCompleted", topic="vectors", findings="3 sources")
         return "published"
 
@@ -34,7 +36,7 @@ class Stream(Agent):
     """Publishes three ticks, after the counter is already waiting on the first."""
 
     async def run(self, ctx):
-        await ctx.sleep(0.05)
+        await ctx.sleep(STARTUP)
         for n in range(3):
             await ctx.publish("Tick", n=n)
         return "streamed"
@@ -135,7 +137,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
     async def test_publisher_wakes_subscribers_it_never_names(self):
         k = self.kernel()
         results = await asyncio.wait_for(
-            k.run_until_done(Orchestrator(tags=["code", "docs"])), timeout=5
+            k.run_until_done(Orchestrator(tags=["code", "docs"])), timeout=LIMIT
         )
         self.assertEqual(
             sorted(results.values()),
@@ -153,7 +155,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         while k.table.get(pid).state is not AgentState.SLEEPING:
             await asyncio.sleep(0.01)
         k.spawn(Publisher(delay=0.02))  # fires long before the subscriber waits
-        await asyncio.wait_for(run, timeout=30)
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
         self.assertEqual(k.table.get(pid).result, "buffered: vectors")
 
@@ -168,12 +170,12 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         k = self.kernel()
         counter = k.spawn(TickCounter())
         k.spawn(Stream())
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(counter).result, [0, 1, 2])
 
     async def test_kernel_publishes_agent_lifecycle_events(self):
         k = self.kernel()
-        await asyncio.wait_for(k.run_until_done(Publisher()), timeout=5)
+        await asyncio.wait_for(k.run_until_done(Publisher()), timeout=LIMIT)
         types = [e.type for e in k.bus.history]
         self.assertIn("TimerExpired", types)
         self.assertIn("ResearchCompleted", types)
@@ -186,11 +188,11 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         # or it announces before the waiter is listening and the event is
         # simply missed. Generous on purpose: this test is about the three
         # dependency kinds resolving together, not about timing.
-        pub = k.spawn(Publisher(delay=1.0))
+        pub = k.spawn(Publisher(delay=STARTUP))
         waiter = k.spawn(
             Waiter(agents=[pub], events=["ResearchCompleted"], timer=0.05)
         )
-        await asyncio.wait_for(k.run(), timeout=30)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         result = k.table.get(waiter).result
         # The waiter itself saw an int pid — Context normalises that. What we
         # are reading here is its *result*, which travelled back from another
@@ -202,9 +204,9 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_waiter_wakes_only_after_every_dependency(self):
         k = self.kernel()
-        slow = k.spawn(Publisher(delay=0.1))
+        slow = k.spawn(Publisher(delay=STARTUP))
         waiter = k.spawn(Waiter(agents=[slow], events=["ResearchCompleted"]))
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         # It cannot have finished before the thing it depended on.
         self.assertGreaterEqual(
             k.table.get(waiter).ended_at, k.table.get(slow).ended_at
@@ -213,14 +215,14 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
     async def test_wait_all_with_no_dependencies_is_rejected(self):
         k = self.kernel()
         pid = k.spawn(Waiter())
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FAILED)
         self.assertIn("at least one dependency", k.table.get(pid).exit_reason)
 
     # -- deadlock --------------------------------------------------------
     async def test_wait_cycle_is_refused_not_hung(self):
         k = self.kernel()
-        await asyncio.wait_for(k.run_until_done(Circular()), timeout=5)
+        await asyncio.wait_for(k.run_until_done(Circular()), timeout=LIMIT)
         stubborn = k.table.get(2)
         self.assertIs(stubborn.state, AgentState.FINISHED)
         self.assertIn("deadlock", stubborn.result["refused"])
@@ -232,7 +234,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
     async def test_unsatisfiable_event_wait_is_detected_not_hung(self):
         k = self.kernel()
         pid = k.spawn(Hopeful())
-        await asyncio.wait_for(k.run(), timeout=5)  # would hang forever if broken
+        await asyncio.wait_for(k.run(), timeout=LIMIT)  # would hang forever if broken
         proc = k.table.get(pid)
         self.assertIs(proc.state, AgentState.FAILED)
         self.assertIn("deadlock", proc.exit_reason)
@@ -241,14 +243,14 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         """An agent asleep can still publish. Do not cry deadlock on it."""
         k = self.kernel()
         waiter = k.spawn(Waiter(events=["ResearchCompleted"]))
-        k.spawn(Publisher(delay=0.2))  # everyone is Waiting/Sleeping meanwhile
-        await asyncio.wait_for(k.run(), timeout=5)
+        k.spawn(Publisher(delay=STARTUP))  # everyone is Waiting/Sleeping meanwhile
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIs(k.table.get(waiter).state, AgentState.FINISHED)
 
     # -- p.5: agents never directly invoke other agents -------------------
     async def test_direct_agent_invocation_is_blocked(self):
         k = self.kernel()
-        result = await asyncio.wait_for(k.run_until_done(Rude()), timeout=5)
+        result = await asyncio.wait_for(k.run_until_done(Rude()), timeout=LIMIT)
         self.assertIn("Agents are processes, not functions", result["blocked"])
 
     # -- scheduling policies (p.4) ---------------------------------------
@@ -289,7 +291,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
             agent = Marker(tag=tag)
             agent.priority = prio
             k.spawn(agent)
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         order = [
             e["message"].removeprefix("ran ")
             for e in self.store.logs()

@@ -19,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agentos import Agent, Kernel, KernelError  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
+from tests._timing import LIMIT  # noqa: E402
+
 
 class ModelUser(Agent):
     async def run(self, ctx):
@@ -51,7 +53,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
                        "cost_per_mtok": [1_000_000, 1_000_000]}]}  # $1 per token
         )
         pid = k.spawn(ModelUser(prompt="six words are in this prompt"))
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         result = k.table.get(pid).result
         self.assertIsNone(result["error"])
         self.assertEqual(result["model"], "mock-1")
@@ -73,7 +75,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
                 {"provider": "mock", "model": "mock-fallback"},
             ]}
         )
-        result = await asyncio.wait_for(k.run_until_done(ModelUser()), timeout=5)
+        result = await asyncio.wait_for(k.run_until_done(ModelUser()), timeout=LIMIT)
         self.assertEqual(result["model"], "mock-fallback")
 
     async def test_a_failing_candidate_falls_through_to_the_next(self):
@@ -83,7 +85,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
                 {"provider": "mock", "model": "mock-solid"},
             ]}
         )
-        result = await asyncio.wait_for(k.run_until_done(ModelUser()), timeout=5)
+        result = await asyncio.wait_for(k.run_until_done(ModelUser()), timeout=LIMIT)
         self.assertEqual(result["model"], "mock-solid")
 
     async def test_no_available_model_is_an_error_not_a_crash(self):
@@ -92,7 +94,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
                        "api_key_env": "AGENTOS_TEST_KEY_THAT_IS_NOT_SET"}]}
         )
         pid = k.spawn(ModelUser())
-        await asyncio.wait_for(k.run(), timeout=5)
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         result = k.table.get(pid).result
         self.assertIn("no available model", result["error"])
         calls = self.store.model_calls()
@@ -102,7 +104,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
     async def test_an_unknown_need_lists_what_is_configured(self):
         k = self.kernel({"fast": [{"provider": "mock", "model": "m"}]})
         result = await asyncio.wait_for(
-            k.run_until_done(ModelUser(need="telepathy")), timeout=5
+            k.run_until_done(ModelUser(need="telepathy")), timeout=LIMIT
         )
         self.assertIn("telepathy", result["error"])
         self.assertIn("fast", result["error"])  # tells you what exists
@@ -115,13 +117,13 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
             ]}
         )
         result = await asyncio.wait_for(
-            k.run_until_done(ModelUser(prompt="long " * 200)), timeout=5
+            k.run_until_done(ModelUser(prompt="long " * 200)), timeout=LIMIT
         )
         self.assertEqual(result["model"], "mock-large")
 
     async def test_model_completion_is_an_event(self):
         k = self.kernel({"fast": [{"provider": "mock", "model": "m"}]})
-        await asyncio.wait_for(k.run_until_done(ModelUser()), timeout=5)
+        await asyncio.wait_for(k.run_until_done(ModelUser()), timeout=LIMIT)
         finished = [e for e in k.bus.history if e.type == "ModelFinished"]
         self.assertEqual(len(finished), 1)
         self.assertTrue(finished[0].payload["ok"])
@@ -134,7 +136,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
             {"fast": [{"provider": "mock", "model": "m", "latency": 0.3}]}
         )
         pid = k.spawn(ModelUser())
-        await asyncio.wait_for(k.run(), timeout=5)  # would fail fast if broken
+        await asyncio.wait_for(k.run(), timeout=LIMIT)  # would fail fast if broken
         self.assertIsNone(k.table.get(pid).result["error"])
 
 
