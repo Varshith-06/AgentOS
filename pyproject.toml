@@ -1,10 +1,14 @@
 [project]
 name = "agentos"
-version = "0.2.0"
+dynamic = ["version"]  # single source of truth: agentos/__init__.py
 description = "An operating system-inspired runtime for autonomous AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = []  # Phase 1 is stdlib-only, on purpose
+
+[tool.hatch.version]
+path = "agentos/__init__.py"
 
 [project.scripts]
 agent = "agentos.cli:main"
