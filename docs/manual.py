@@ -573,7 +573,7 @@ await ctx.spawn(Attacker(...), grant=["shell"])        # refused by the kernel
 
     ("h2", "13. Memory"),
     ("body",
-     "Six kinds of memory behind four verbs — "
+     "Four kinds of memory behind four verbs — "
      "<font face='Courier'>store</font>, <font face='Courier'>retrieve</font>, "
      "<font face='Courier'>share</font>, <font face='Courier'>delete</font>. The "
      "storage backend is invisible to agents; today it is SQLite, and swapping "
@@ -582,10 +582,8 @@ await ctx.spawn(Attacker(...), grant=["shell"])        # refused by the kernel
         ["Kind", "Who can read it", "How long it lives"],
         [
             ["<b>working</b>", "Only the agent that wrote it", "Freed when that agent exits"],
-            ["<b>scratchpad</b>", "Same as working, by convention for rough notes", "Freed when that agent exits"],
             ["<b>shared</b>", "Whoever the owner shared it with", "The run"],
             ["<b>longterm</b>", "Any agent with the same <i>name</i>", "Survives restarts"],
-            ["<b>semantic</b>", "Same as longterm, plus similarity search", "Survives restarts"],
             ["<b>episodic</b>", "The agent's own history; read-only", "Written by the kernel"],
         ],
         [0.18, 0.44, 0.38])),
@@ -596,12 +594,22 @@ await ctx.spawn(Attacker(...), grant=["shell"])        # refused by the kernel
      "event payload is fine for a notification, but a dataset has to go through "
      "shared memory."),
     ("body",
-     "Two subtleties. <b>longterm</b> and <b>semantic</b> are keyed by agent "
-     "<i>name</i>, not PID, which is why they survive restarts — a new agent "
-     "with the same name inherits what the last one learned. And the semantic "
-     "embedding is a deliberately humble stand-in (a hashed bag of words) that a "
-     "real embedding model can replace without any agent changing, because "
-     "agents only ever say <font face='Courier'>query=&hellip;</font>."),
+     "Two subtleties. <b>longterm</b> is keyed by agent <i>name</i>, not PID, "
+     "which is why it survives restarts — a new agent with the same name "
+     "inherits what the last one learned. And any text put into it is embedded "
+     "on the way in, so the same kind answers both "
+     "<font face='Courier'>key=&hellip;</font> and "
+     "<font face='Courier'>query=&hellip;</font>; the embedding is a "
+     "deliberately humble stand-in (a hashed bag of words) that a real model "
+     "can replace without any agent changing, because agents only ever ask a "
+     "question."),
+    ("body",
+     "The list used to run to six. <b>scratchpad</b> was working memory under a "
+     "second name — same owner, same lifetime, same table, and nothing in the "
+     "kernel ever branched on the difference — and <b>semantic</b> was longterm "
+     "with a vector attached, which describes how memory is <i>retrieved</i> "
+     "rather than what kind of memory it is. Both are gone; asking for either "
+     "one now fails with the name of its replacement."),
 
     ("h2", "14. Model routing"),
     ("body",

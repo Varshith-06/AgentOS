@@ -1,9 +1,9 @@
 """The research assistant (Phase 8, p.10) — memory doing the coordinating.
 
 Two Searchers investigate different aspects of a topic in parallel. Neither
-talks to anyone: each files what it finds into semantic memory (its own) and
-shared memory (everyone's). The Synthesizer waits on both, retrieves by
-*similarity* — it asks a question, not a key — and drafts the brief; the
+talks to anyone: each files what it finds into longterm memory (its own) and
+shared memory (everyone's). The Synthesizer waits on both, reads everything
+shared with it without naming a single key, and drafts the brief; the
 Critic reads the same shared memory and scores it. Kill a Searcher mid-run
 (`agent kill 2`) and the rest still completes with what remains.
 
@@ -29,7 +29,7 @@ class Searcher(Agent):
             "fast", prompt=f"One concrete fact about {aspect}, one sentence."
         )
         fact = reply["text"]
-        await ctx.memory.store(f"note-{aspect}", fact, kind="semantic")
+        await ctx.memory.store(f"note-{aspect}", fact, kind="longterm")
         await ctx.memory.store(f"finding-{aspect}", fact, kind="shared")
         await ctx.log(f"filed a finding on {aspect}")
         return {"aspect": aspect}

@@ -75,7 +75,7 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
                     "sub:" + ",".join(r["subscribes"]) if r.get("subscribes") else "",
                 ) if part
             ) or "-",
-            # private memory follows the pid; longterm/semantic follow the name
+            # private memory follows the pid; longterm memory follows the name
             _bytes_str(mem.get(str(r["pid"]), 0) + mem.get(r["name"], 0)),
             f"${costs[r['pid']]['cost']:.4f}" if r["pid"] in costs else "-",
             f"#{r['checkpoint']}" if r.get("checkpoint") else "-",

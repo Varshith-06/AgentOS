@@ -24,11 +24,11 @@ class KernelError(Exception):
 
 
 class Memory:
-    """The p.6 memory API: six kinds behind four verbs, backend invisible.
+    """The p.6 memory API: four kinds behind four verbs, backend invisible.
 
-    Kinds: working (private, dies with the process), scratchpad (same, for
-    throwaway notes), shared (cross-agent, through the kernel only), longterm
-    and semantic (keyed by agent name — they survive restarts), episodic
+    Kinds: working (private, dies with the process), shared (cross-agent,
+    through the kernel only), longterm (keyed by agent name — it survives
+    restarts, and text stored in it is searchable by meaning), episodic
     (your own history; read-only).
     """
 
@@ -37,7 +37,8 @@ class Memory:
 
     async def store(self, key: str, value: Any, kind: str = "working") -> None:
         """Store a JSON-serializable value. Storing to `shared` publishes a
-        MemoryUpdated event; `semantic` values must be text."""
+        MemoryUpdated event; text stored to `longterm` is embedded, so a later
+        retrieve(kind="longterm", query=...) can find it."""
         await self._ctx._syscall("memory", op="store", key=key, value=value, kind=kind)
 
     async def retrieve(
@@ -49,8 +50,9 @@ class Memory:
         limit: int = 20,
     ) -> Any:
         """Fetch a value (None if absent or not yours to read). With no key:
-        every key you can read, as a dict. kind="semantic" with query=... does
-        similarity search; kind="episodic" returns your own recent history."""
+        every key you can read, as a dict. kind="longterm" with query=... ranks
+        your text notes by similarity; kind="episodic" returns your own recent
+        history."""
         return await self._ctx._syscall(
             "memory", op="retrieve", key=key, kind=kind, query=query, top=top, limit=limit
         )

@@ -1,22 +1,29 @@
 """The memory manager (AgentOS.pdf p.6).
 
-Six kinds of memory behind four verbs — store, retrieve, share, delete — and
+Four kinds of memory behind four verbs — store, retrieve, share, delete — and
 the backend stays invisible to the agent. Today it is SQLite; swapping in
 Redis or a real vector database changes this file and nothing else.
 
 The kinds, and who a row belongs to:
 
-  working     private to one process; freed when it exits
-  scratchpad  same, by convention for throwaway notes
-  shared      one global namespace; readable by whoever the owner shared with
-  longterm    keyed by agent *name*, so it survives restarts and new pids
-  semantic    like longterm, plus a vector for similarity retrieval
-  episodic    the agent's own execution history; the kernel writes it, agents
-              may only read it
+  working   private to one process; freed when it exits
+  shared    one global namespace; readable by whoever the owner shared with
+  longterm  keyed by agent *name*, so it survives restarts and new pids; text
+            values are embedded on the way in, so one kind answers both
+            `key=...` and `query=...`
+  episodic  the agent's own execution history; the kernel writes it, agents
+            may only read it
 
-The semantic embedding is a deterministic hashed bag-of-words — deliberately
-humble, like the browser driver. A real embedding model can replace _embed()
-without any agent changing, because agents only ever say `query=...`.
+Two earlier kinds were names without mechanisms. `scratchpad` was working
+memory spelled differently — same owner, same lifetime, same table, and no
+code anywhere branched on it. `semantic` was longterm plus a vector column,
+which is a way of *retrieving* memory rather than a kind of it; the split also
+left a hole, since an LLM agent could recall by query but was never offered
+the kind that answered, so its own longterm notes were unsearchable.
+
+The embedding is a deterministic hashed bag-of-words — deliberately humble,
+like the browser driver. A real embedding model can replace _embed() without
+any agent changing, because agents only ever say `query=...`.
 """
 
 from __future__ import annotations
@@ -30,9 +37,16 @@ from typing import Any
 
 from .store import Store
 
-EPHEMERAL = ("working", "scratchpad", "shared")
-PERSISTENT = ("longterm", "semantic")
+EPHEMERAL = ("working", "shared")
+PERSISTENT = ("longterm",)
 KINDS = EPHEMERAL + PERSISTENT  # episodic is read-only and handled separately
+
+# Kinds that once existed. Naming them costs two lines and turns a puzzling
+# "unknown kind" into the one-line migration the caller actually needs.
+RETIRED = {
+    "scratchpad": "use 'working' — scratchpad had the same owner and lifetime",
+    "semantic": "use 'longterm' — it embeds text; search it with query=...",
+}
 
 _DIM = 128
 
@@ -68,6 +82,8 @@ class MemoryManager:
 
     @staticmethod
     def _check_kind(kind: str) -> None:
+        if kind in RETIRED:
+            raise MemoryError_(f"memory kind {kind!r} is gone: {RETIRED[kind]}")
         if kind not in KINDS:
             raise MemoryError_(
                 f"unknown memory kind {kind!r} (have: {', '.join(KINDS)}, episodic)"
@@ -75,17 +91,21 @@ class MemoryManager:
 
     # -- the four verbs ------------------------------------------------------
     def store_value(self, proc: Any, key: str, value: Any, kind: str = "working") -> None:
+        # Before _check_kind, which knows nothing of episodic: the caller asked
+        # for a real kind and deserves the real reason it is refused.
+        if kind == "episodic":
+            raise MemoryError_("episodic memory is written by the kernel, not agents")
         self._check_kind(kind)
         if not isinstance(key, str) or not key.strip():
             raise MemoryError_("memory keys must be non-empty strings")
-        if kind == "episodic":
-            raise MemoryError_("episodic memory is written by the kernel, not agents")
 
-        vector = None
-        if kind == "semantic":
-            if not isinstance(value, str):
-                raise MemoryError_("semantic memory stores text (str) values")
-            vector = json.dumps(_embed(value))
+        # Text bound for longterm memory is embedded on the way in, so the row
+        # answers a later query=... without the agent having said so up front.
+        vector = (
+            json.dumps(_embed(value))
+            if kind == "longterm" and isinstance(value, str)
+            else None
+        )
 
         if kind == "shared":
             existing = self._shared_row(key)
@@ -127,8 +147,8 @@ class MemoryManager:
             ]
         self._check_kind(kind)
 
-        if kind == "semantic" and query is not None:
-            return self._semantic_search(proc, query, top)
+        if kind == "longterm" and query is not None:
+            return self._search_by_meaning(proc, query, top)
 
         if kind == "shared":
             if key is None:
@@ -189,6 +209,8 @@ class MemoryManager:
         )
 
     def delete(self, proc: Any, key: str, kind: str = "working") -> bool:
+        if kind == "episodic":
+            raise MemoryError_("episodic memory belongs to the kernel; it is read-only")
         self._check_kind(kind)
         if kind == "shared":
             existing = self._shared_row(key)
@@ -211,8 +233,7 @@ class MemoryManager:
     def forget_process(self, pid: int) -> None:
         """A process exited: its private memory is freed, like any OS would."""
         self.db.execute(
-            "DELETE FROM memory WHERE mtype IN ('working', 'scratchpad') AND owner = ?",
-            (str(pid),),
+            "DELETE FROM memory WHERE mtype = 'working' AND owner = ?", (str(pid),)
         )
 
     # -- internals -----------------------------------------------------------
@@ -228,10 +249,10 @@ class MemoryManager:
         allowed = set(json.loads(row["shared_with"] or "[]"))
         return "*" in allowed or str(proc.pid) in allowed or proc.name in allowed
 
-    def _semantic_search(self, proc: Any, query: str, top: int) -> list[dict[str, Any]]:
+    def _search_by_meaning(self, proc: Any, query: str, top: int) -> list[dict[str, Any]]:
         needle = _embed(query)
         rows = self.db.execute(
-            "SELECT key, value, vector FROM memory WHERE mtype = 'semantic' AND owner = ?",
+            "SELECT key, value, vector FROM memory WHERE mtype = 'longterm' AND owner = ?",
             (proc.name,),
         ).fetchall()
         scored = [

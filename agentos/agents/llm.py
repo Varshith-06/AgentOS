@@ -46,14 +46,15 @@ The model is asked to reply with one JSON object per turn:
     {"action": "publish", "event": "...", "payload": {...}}
     {"action": "wait",  "events": [...]}      (or bare, for your own agents)
     {"action": "remember", "key": "...", "value": ..., "kind": "shared"}
-    {"action": "recall", "key": "..."}        (or {"query": "..."} for semantic)
+    {"action": "recall", "key": "..."}        (or {"query": "..."} to search)
     {"action": "ask_human", "role": "...", "reason": "..."}
     {"action": "done",  "result": ...}
 
 Memory is how invented agents hand each other real state: an event payload
 fits a notification, not a dataset. `remember` with kind "shared" is readable
 by the whole team; "longterm" survives into future tasks under this role's
-name. `ask_human` blocks on the kernel's durable approval object — the same
+name, and text remembered there comes back from `recall` with a query rather
+than an exact key. `ask_human` blocks on the kernel's durable approval object — the same
 one `agent approve` grants — so an invented agent can stop for a person
 exactly the way a hand-written one always could.
 
@@ -377,8 +378,7 @@ class LLMAgent(Agent):
         key = action.get("key")
         if not isinstance(key, str) or not key.strip():
             return 'Refused: "remember" needs a non-empty "key".'
-        kinds = {"shared": "shared", "private": "working",
-                 "longterm": "longterm", "semantic": "semantic"}
+        kinds = {"shared": "shared", "private": "working", "longterm": "longterm"}
         kind = kinds.get(action.get("kind", "shared"))
         if kind is None:
             return (
@@ -392,21 +392,21 @@ class LLMAgent(Agent):
         audience = {
             "shared": "your whole team can recall it",
             "working": "only you can recall it, and it dies with you",
-            "longterm": f"future agents named {self.name!r} will see it",
-            "semantic": "it is searchable by meaning with recall+query",
+            "longterm": f"future agents named {self.name!r} will see it, and "
+                        "text is searchable by meaning with recall+query",
         }[kind]
         return f"Remembered {key!r} ({audience})."
 
     async def _do_recall(self, ctx, action: dict) -> str:
         query = action.get("query")
         if isinstance(query, str) and query.strip():
-            hits = await ctx.memory.retrieve(kind="semantic", query=query)
+            hits = await ctx.memory.retrieve(kind="longterm", query=query)
             return f"Search for {query!r} found: " + _clip(hits, 2000)
         key = action.get("key")
         if not isinstance(key, str) or not key.strip():
             return 'Refused: "recall" needs a "key" or a "query".'
         # Team state first, then my own notes, then what past runs left behind.
-        for kind in ("shared", "working", "longterm", "semantic"):
+        for kind in ("shared", "working", "longterm"):
             value = await ctx.memory.retrieve(key, kind=kind)
             if value is not None:
                 return f"{key!r} = " + _clip(value, 2000)

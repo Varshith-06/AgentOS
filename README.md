@@ -447,12 +447,12 @@ error handling. Six ship: filesystem (sandboxed to a root), shell, python,
 sql, http, browser. Every dispatch is recorded — the runtime knows all tool
 usage, and shows it.
 
-**Memory.** Six kinds behind four verbs: working and scratchpad die with the
-process; shared crosses agents through the kernel with an access list;
-longterm and semantic are keyed by agent *name* and survive restarts;
-episodic is the kernel's own record, read-only. The semantic embedding is a
-deterministic stdlib placeholder a real model can replace without any agent
-changing.
+**Memory.** Four kinds behind four verbs: working dies with the process;
+shared crosses agents through the kernel with an access list; longterm is
+keyed by agent *name* and survives restarts, and text stored there is embedded
+on the way in so the same kind answers `key=` and `query=`; episodic is the
+kernel's own record, read-only. The embedding is a deterministic stdlib
+placeholder a real model can replace without any agent changing.
 
 **Models by capability class.** Agents ask for `"fast"` or `"reasoning"`,
 never a model name. The default chain is **gpt-oss-120b** four ways — Groq,

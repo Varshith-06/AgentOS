@@ -2,7 +2,7 @@
 
 The bar (AgentOS.pdf p.15): two agents share state through the kernel's memory
 API and never touch each other. Plus the p.6 kinds: working memory is private
-and dies with the process, longterm survives a restart, semantic retrieves by
+and dies with the process, longterm survives a restart and retrieves text by
 similarity, episodic is the agent's own history.
 """
 
@@ -109,19 +109,42 @@ class Counter(Agent):
 
 
 class Librarian(Agent):
+    """Files text into longterm memory and asks for it back by meaning.
+
+    Also stores a non-text value there: it has no vector, so it must stay
+    retrievable by key without ever surfacing in a search.
+    """
+
     async def run(self, ctx):
         await ctx.memory.store(
             "scheduler", "the scheduler picks which ready agent runs next",
-            kind="semantic",
+            kind="longterm",
         )
         await ctx.memory.store(
             "fruit", "bananas are a yellow fruit rich in potassium",
-            kind="semantic",
+            kind="longterm",
         )
+        await ctx.memory.store("tally", {"count": 3}, kind="longterm")
         hits = await ctx.memory.retrieve(
-            kind="semantic", query="which agent runs next on the scheduler", top=2
+            kind="longterm", query="which agent runs next on the scheduler", top=3
         )
-        return [h["key"] for h in hits]
+        return {
+            "ranked": [h["key"] for h in hits],
+            "by_key": await ctx.memory.retrieve("tally", kind="longterm"),
+        }
+
+
+class Antiquarian(Agent):
+    """Asks for the two kinds that used to exist, and reports the refusals."""
+
+    async def run(self, ctx):
+        errors = {}
+        for kind in ("scratchpad", "semantic"):
+            try:
+                await ctx.memory.store("k", "v", kind=kind)
+            except Exception as exc:  # KernelError, relayed from the kernel
+                errors[kind] = str(exc)
+        return errors
 
 
 class Diarist(Agent):
@@ -190,11 +213,25 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
             second["leftover_from_last_run"], "working memory must not"
         )
 
-    async def test_semantic_retrieval_ranks_by_similarity(self):
+    async def test_longterm_text_is_retrievable_by_meaning(self):
         result = await asyncio.wait_for(
             self.kernel().run_until_done(Librarian()), timeout=LIMIT
         )
-        self.assertEqual(result[0], "scheduler")
+        self.assertEqual(result["ranked"][0], "scheduler")
+        self.assertNotIn(
+            "tally", result["ranked"], "a value with no text has nothing to match"
+        )
+        self.assertEqual(
+            result["by_key"], {"count": 3}, "longterm still stores any JSON by key"
+        )
+
+    async def test_retired_kinds_name_their_replacement(self):
+        k = self.kernel()
+        pid = k.spawn(Antiquarian())
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
+        errors = k.table.get(pid).result
+        self.assertIn("working", errors["scratchpad"])
+        self.assertIn("longterm", errors["semantic"])
 
     async def test_episodic_memory_is_the_agents_own_history(self):
         result = await asyncio.wait_for(

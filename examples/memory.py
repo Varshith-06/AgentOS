@@ -1,10 +1,10 @@
 """The memory manager (AgentOS.pdf p.6).
 
-Six kinds of memory behind one API — store / retrieve / share / delete — and
+Four kinds of memory behind one API — store / retrieve / share / delete — and
 the backend is invisible to the agents.
 
 The Researcher keeps a private working draft, shares one finding into shared
-memory (which publishes MemoryUpdated), files facts into semantic memory, and
+memory (which publishes MemoryUpdated), files facts into longterm memory, and
 bumps a longterm counter. The Writer proves the boundaries: it is woken by the
 event, it CAN read the shared finding, it CANNOT read the Researcher's working
 draft, and it never touches the Researcher directly.
@@ -27,21 +27,23 @@ class Researcher(Agent):
         # Working memory: private to this process, freed when it exits.
         await ctx.memory.store("draft", {"hunch": "agents should be processes"})
 
-        # Semantic memory: text plus a vector, retrieved by similarity.
+        # Longterm memory: text is embedded on the way in, so it comes back
+        # by meaning as well as by key.
         facts = [
             "the scheduler hands execution slots to ready agents",
             "the event bus wakes subscribers the publisher never names",
             "a deadlock is refused the moment the wait would close a cycle",
         ]
         for i, fact in enumerate(facts):
-            await ctx.memory.store(f"fact-{i}", fact, kind="semantic")
+            await ctx.memory.store(f"fact-{i}", fact, kind="longterm")
 
         hits = await ctx.memory.retrieve(
-            kind="semantic", query="who decides which agent runs next", top=1
+            kind="longterm", query="who decides which agent runs next", top=1
         )
-        await ctx.log(f"semantic search says: {hits[0]['text']!r}")
+        await ctx.log(f"search by meaning says: {hits[0]['text']!r}")
 
-        # Longterm memory: keyed by agent name, survives restarts.
+        # The same kind holds a plain counter, keyed by agent name, and both
+        # survive a restart.
         runs = (await ctx.memory.retrieve("runs", kind="longterm")) or 0
         await ctx.memory.store("runs", runs + 1, kind="longterm")
         await ctx.log(f"this example has now run {runs + 1} time(s)")

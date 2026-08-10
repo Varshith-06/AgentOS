@@ -152,11 +152,9 @@ class Store:
         # evaporates on restart is not a kernel object. Only the pid is
         # meaningless in the new runtime; a re-run agent re-attaches by identity.
         self.db.execute("UPDATE approvals SET pid = NULL WHERE status = 'pending'")
-        # Ephemeral memory belongs to the run; longterm and semantic memory
-        # are keyed by agent name and deliberately survive (p.6).
-        self.db.execute(
-            "DELETE FROM memory WHERE mtype IN ('working', 'scratchpad', 'shared')"
-        )
+        # Ephemeral memory belongs to the run; longterm memory is keyed by
+        # agent name and deliberately survives (p.6).
+        self.db.execute("DELETE FROM memory WHERE mtype IN ('working', 'shared')")
         self.db.execute("DELETE FROM model_calls")
         self.db.execute(
             "INSERT OR REPLACE INTO runtime VALUES (1, ?, ?, ?, ?, ?)",
