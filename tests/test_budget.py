@@ -1,9 +1,4 @@
-"""Spending caps.
-
-The ledger has always been exact; what it could not do was stop. A planner
-that may spawn agents can spend without limit, and "we measured it precisely"
-is no comfort the morning after. These tests are about the kernel refusing.
-"""
+"""Spending caps."""
 
 from __future__ import annotations
 
@@ -85,8 +80,7 @@ class BudgetTest(Base):
         self.assertIn("budget exhausted", result["refused"])
 
     async def test_the_budget_covers_the_whole_tree_not_one_agent(self):
-        """A planner that could spawn its way around a cap would not have
-        one. What the second agent may spend depends on the first."""
+        """What the second agent may spend depends on what the first already spent."""
         k = self.kernel(slots=1)
         pid = k.submit_spec(spec_of(Spawner()), budget_usd=0.005)
         await asyncio.wait_for(k.run(), timeout=LIMIT)
@@ -105,9 +99,7 @@ class BudgetTest(Base):
             self.assertEqual(proc.root, pid, f"pid {proc.pid} escaped the tree")
 
     async def test_overshoot_is_bounded_by_one_call(self):
-        """Cost is unknowable until a call returns, so the check happens
-        before dispatch: a task may exceed its budget by at most the one call
-        already in flight, and never by a second."""
+        """Checked before dispatch, so a task overshoots by at most the call in flight."""
         budget = 0.05
         k = self.kernel()
         pid = k.submit_spec(spec_of(Caller(calls=20)), budget_usd=budget)
@@ -141,8 +133,7 @@ class BudgetTest(Base):
         self.assertEqual(row["root"], pid)
 
     async def test_an_exhausted_llm_agent_stops_cleanly(self):
-        """It cannot ask the model what to do when the model is what was
-        refused, so it reports rather than spinning."""
+        """It cannot ask the model what to do when the model is what was refused."""
         k = self.kernel(models={"classes": {"m": [{
             "provider": "mock", "model": "priced",
             "cost_per_mtok": [1000.0, 1000.0],

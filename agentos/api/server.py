@@ -1,52 +1,4 @@
-"""The daemon's control plane: HTTP + JSON (Phase 7, p.8).
-
-Deliberately stdlib — like the browser driver and the semantic embedding, the
-interface is the point and the implementation is humble. A FastAPI app could
-replace this file without any client or kernel change; the routes ARE the API.
-
-Reads are served straight from the store (SQLite is the read model, exactly as
-it was for the CLI since Phase 1). Mutations hop onto the kernel's event loop
-via Daemon.call, so kernel state is only ever touched from its own thread.
-
-    GET  /                            the dashboard (Phase 8)
-    GET  /state                       scheduler snapshot: deps, ready, running
-    GET  /health                      runtime info
-    GET  /ps                          processes + costs + memory usage
-    GET  /agents/<pid>                one row (result included when finished)
-    GET  /task/<pid>                  a task's result plus the team it created
-    GET  /logs?limit=  /events?limit=
-    POST /agents                      {"spec":..., "grant":[...]} -> {"pid":...}
-    POST /task                        {"goal":..., "tools":[...]} -> {"pid":...}
-    POST /agents/<pid>/kill|pause|resume
-    POST /agents/<pid>/approve        {"role": ...}
-    POST /shutdown
-
-`grant` is the capability ceiling for everything the submitted agent goes on
-to create (see kernel/permissions.py). It is the security-relevant field on
-this API: without it a submitted agent falls back to the name matrix, and with
-it no descendant can exceed what was granted here.
-
-POST /task is the doorway for work that has no predefined shape — a sentence
-and a tool list in, a planner out. What it may grant is bounded twice: by the
-daemon's own `task_tools` allowlist, which the operator sets when starting the
-runtime, and by the caller's request within it.
-
-Authentication
---------------
-Every route requires a bearer token when the daemon has one. There are no
-"safe" reads to exempt: `/ps` carries other applications' goals and results,
-`/logs` carries whatever agents logged, and `/shutdown` stops the runtime. A
-daemon with no token configured is unauthenticated, which is fine on loopback
-and refused outright on any other interface — see Daemon.__init__.
-
-    Authorization: Bearer <token>      the normal path
-    ?token=<token>                     for the dashboard, which is a browser
-                                       and cannot set a header on a page load
-
-The query form is a deliberate trade: it is convenient and it leaks into
-Referer headers and shell history in a way the header does not. Prefer the
-header for anything programmatic.
-"""
+"""The daemon's control plane: HTTP + JSON. The routes are the API."""
 
 from __future__ import annotations
 
@@ -70,12 +22,7 @@ class BadRequest(Exception):
 
 
 def _task_request(daemon, body: dict) -> tuple[dict, list[str]]:
-    """Validate a /task body and return (planner spec, grant).
-
-    Everything here is caller-supplied and arrives over a socket, so nothing
-    is trusted: the goal is bounded, the tool list must name real drivers, and
-    the request can only ask for capabilities the operator already allowed.
-    """
+    """Validate a /task body and return (planner spec, grant)."""
     from ..agents.base import spec_of
     from ..agents.llm import LLMAgent
 
@@ -198,8 +145,7 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
             return json.loads(self.rfile.read(length)) if length else {}
 
         def _authorized(self) -> bool:
-            """Constant-time compare, so a wrong token cannot be guessed a
-            character at a time by measuring how long the answer took."""
+            """Constant-time compare, so a token cannot be guessed a character at a time."""
             expected = daemon.token
             if not expected:
                 return True  # unauthenticated daemon; loopback-only by construction

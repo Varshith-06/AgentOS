@@ -1,19 +1,11 @@
-"""The first LLM call — and the proof that model choice is runtime config (p.7).
+"""The first LLM call, and the proof that model choice is runtime config.
 
-The Assistant asks for a capability class. It does not know what a Claude is:
+    python -m agentos.cli run examples/assistant.py
+    python -m agentos.cli ps                 # the cost, while it runs
 
-    reply = await ctx.request_model("fast", prompt=...)
-
-Routing lives in .agentos/models.json (seeded below on first run). The "fast"
-chain is: Claude Haiku 4.5 if ANTHROPIC_API_KEY is set -> a local
-OpenAI-compatible server if one is listening on :11434 (e.g. Ollama) -> the
-offline mock provider, which always works. Set or unset the key, start or stop
-Ollama, re-run: the same agent code lands on a different model, and the cost
-lands in the COST column of `agent ps`.
-
-Run it:        python -m agentos.cli run examples/assistant.py
-Cost:          python -m agentos.cli ps       (while it runs)  or  agent logs
-Swap models:   edit .agentos/models.json — no agent code changes
+The `fast` chain is seeded below: a frontier model if ANTHROPIC_API_KEY is
+set, else a local server on :11434, else the offline mock. Editing
+.agentos/models.json changes which one runs; the agent code does not.
 """
 
 from __future__ import annotations

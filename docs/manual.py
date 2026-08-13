@@ -1,9 +1,4 @@
-"""The text of AgentOS.pdf. Rendered by build_manual.py.
-
-Written for a reader who knows what a process and a scheduler are, and
-nothing whatsoever about this project. Every component gets: what it is, why
-it exists, how it behaves at the edges, and what it deliberately does not do.
-"""
+"""The text of AgentOS.pdf. Rendered by build_manual.py."""
 
 TITLE = "AgentOS"
 SUBTITLE = ("An operating system for AI agents.<br/>"

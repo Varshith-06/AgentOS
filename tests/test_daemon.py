@@ -1,10 +1,4 @@
-"""Phase 7: the shared runtime daemon, thin clients, and OS-process agents.
-
-The bar (AgentOS.pdf p.17): global visibility across independent applications
-— two clients submit to one runtime and one ps shows both, costs aggregated.
-Plus the executor swap: agents in real OS subprocesses, with agents/ and
-kernel/ unchanged.
-"""
+"""Phase 7: the shared runtime daemon, thin clients, and OS-process agents."""
 
 from __future__ import annotations
 
@@ -131,8 +125,7 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
             await asyncio.to_thread(client.wait, pid, 10)
 
     async def test_two_mains_with_different_files_do_not_collide(self):
-        """Every application is __main__ to itself; the daemon must never
-        hand one application's module to another's spec."""
+        """Every application is __main__ to itself."""
         d = await self._daemon()
         client = RuntimeClient(url=d.url)
         specs = []
@@ -170,8 +163,6 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_the_dashboard_and_scheduler_state_are_served(self):
-        """Phase 8: the dashboard is one GET away, and /state exposes the
-        live dependency graph it draws."""
         d = await self._daemon()
         html = await asyncio.to_thread(
             lambda: urllib.request.urlopen(d.url + "/", timeout=10).read().decode("utf-8")
@@ -188,12 +179,7 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
 
 
 class ProcessIsolationTest(unittest.IsolatedAsyncioTestCase):
-    """The executor (p.17): real OS subprocesses, same kernel, same agents.
-
-    Syscalls cross a loopback TCP socket. Nothing in these tests can tell —
-    they are written against the agent API, which is identical either side of
-    the process boundary. That is the point.
-    """
+    """The executor (p.17): real OS subprocesses, same kernel, same agents."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

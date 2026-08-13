@@ -1,9 +1,4 @@
-"""Temporal workflow + activities for compare.py.
-
-Kept in its own module because Temporal's workflow sandbox re-imports the
-defining module: it must be import-safe (no side effects at import time).
-Configuration arrives through the environment so the sandbox stays happy.
-"""
+"""Temporal workflow + activities for compare.py."""
 
 from __future__ import annotations
 
@@ -33,8 +28,7 @@ async def billable(i: int) -> int:
 
 @activity.defn
 async def durable_step(i: int) -> int:
-    """A durable step. BENCH_DELAY=0 measures pure framework overhead; a
-    realistic delay measures what that overhead is worth beside real work."""
+    """A durable step. BENCH_DELAY=0 measures framework overhead on its own."""
     _tally(i)
     delay = float(os.environ.get("BENCH_DELAY", "0"))
     if delay:

@@ -1,17 +1,4 @@
-"""The thin client (Phase 7, p.8).
-
-Applications connect to a runtime that already exists instead of instantiating
-one. An agent is submitted as its spec — module, class, params, all JSON — and
-the daemon rebuilds and schedules it. The application owns nothing: no kernel,
-no event loop, no process table. It can exit the moment it has submitted, and
-the agent keeps running.
-
-    from agentos.client import RuntimeClient
-
-    client = RuntimeClient()               # finds .agentos/daemon.json
-    pid = client.submit(MyAgent(topic="vector databases"))
-    result = client.wait(pid)
-"""
+"""The thin client (Phase 7, p.8)."""
 
 from __future__ import annotations
 
@@ -41,13 +28,7 @@ class RuntimeClient:
         dirpath: str | Path = ".agentos",
         token: str | None = None,
     ) -> None:
-        """Find the runtime and how to authenticate to it.
-
-        A token is looked for in three places, nearest first: the argument,
-        AGENTOS_TOKEN, and the endpoint file a local daemon wrote. That last
-        one is why an application on the same machine needs no configuration
-        at all, while one somewhere else must be told explicitly.
-        """
+        """Find the runtime and how to authenticate to it."""
         endpoint_data: dict[str, Any] = {}
         if url is None or token is None:
             endpoint = Path(dirpath) / "daemon.json"
@@ -91,13 +72,7 @@ class RuntimeClient:
         priority: str | None = None,
         grant: list[str] | None = None,
     ) -> int:
-        """Hand the agent to the daemon. Returns its pid in the shared runtime.
-
-        `grant` pins this agent's capabilities and becomes the ceiling for
-        anything it goes on to create: no descendant can hold more. Without
-        it the daemon's permission matrix decides by agent name, which is
-        what a named, pre-declared agent wants.
-        """
+        """Hand the agent to the daemon. Returns its pid in the shared runtime."""
         spec = spec_of(agent)
         if priority is not None:
             spec["priority"] = priority
@@ -113,14 +88,7 @@ class RuntimeClient:
         model: str = "fast",
         **options: Any,
     ) -> int:
-        """Submit work that has no predefined shape: a sentence and a tool list.
-
-        The daemon spawns a planner, which invents whatever agents the goal
-        needs — there is no graph and no agent classes to write. `tools` is
-        the ceiling for the whole tree, and must fall within whatever the
-        operator allowed with --task-tools. Returns the planner's pid; use
-        wait(pid) for the result, or task_tree(pid) to see the team too.
-        """
+        """Submit work that has no predefined shape: a sentence and a tool list."""
         body: dict[str, Any] = {
             "goal": goal, "tools": list(tools or []), "model": model
         }

@@ -1,23 +1,8 @@
-"""Capability-based tool access (AgentOS.pdf p.6-7).
+"""Capability-based tool access: `sql` granted, `shell` refused.
 
-The Finance agent asks the kernel for two capabilities. It holds `sql` in the
-permission matrix, so the driver runs its queries. It does not hold `browser`,
-so the kernel refuses *before dispatch* — the denial is an audit-log entry the
-agent can catch and name, not a stack trace.
-
-Notice what Finance.run() never does: it never imports sqlite3 and never opens
-a connection. It says "Need: sql" and the driver owns the rest. That is the
-device-driver model — swap the SQL backend and no agent changes.
-
-Run it:      python -m agentos.cli run examples/finance.py
-Audit log:   python -m agentos.cli logs        (the denial is in there)
-Drivers:     python -m agentos.cli tools
-
-Revoke, re-run — behaviour changes with no code edit (then grant it back):
-
-    python -m agentos.cli revoke Finance sql
     python -m agentos.cli run examples/finance.py
-    python -m agentos.cli grant Finance sql
+    python -m agentos.cli logs           # the denial is in there
+    python -m agentos.cli revoke Finance sql    # then run it again
 """
 
 from __future__ import annotations

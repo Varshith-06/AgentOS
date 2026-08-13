@@ -1,13 +1,4 @@
-"""The dashboard (Phase 8, p.8): one HTML file, served by the daemon at /.
-
-Running / waiting / blocked agents, the live dependency graph, the event
-timeline, and cost — polling the same JSON API everything else uses. Vanilla
-JS on purpose: no build step, no node, nothing to install; the API is the
-interesting part and the page is a window onto it.
-
-Status colors follow the reserved status palette (never reused for series),
-and every state is always written as text — color never carries meaning alone.
-"""
+"""The dashboard (Phase 8, p.8): one HTML file, served by the daemon at /."""
 
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">

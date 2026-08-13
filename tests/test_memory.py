@@ -1,10 +1,4 @@
-"""Phase 5a: the memory manager.
-
-The bar (AgentOS.pdf p.15): two agents share state through the kernel's memory
-API and never touch each other. Plus the p.6 kinds: working memory is private
-and dies with the process, longterm survives a restart and retrieves text by
-similarity, episodic is the agent's own history.
-"""
+"""Phase 5a: the memory manager."""
 
 from __future__ import annotations
 
@@ -23,12 +17,7 @@ from tests._timing import LIMIT, STARTUP  # noqa: E402
 
 
 class Stranger(Agent):
-    """Reads the same key as Recipient, but was never named in the share.
-
-    A separate class rather than a subclass defined in the test: the two need
-    different agent *names*, and a child process rebuilds an agent by
-    importing it, so it must exist at module level.
-    """
+    """Reads the same key as Recipient, but was never named in the share."""
 
     async def run(self, ctx):
         await ctx.subscribe("KeycodeShared")
@@ -109,11 +98,7 @@ class Counter(Agent):
 
 
 class Librarian(Agent):
-    """Files text into longterm memory and asks for it back by meaning.
-
-    Also stores a non-text value there: it has no vector, so it must stay
-    retrievable by key without ever surfacing in a search.
-    """
+    """Files text into longterm memory and asks for it back by meaning."""
 
     async def run(self, ctx):
         await ctx.memory.store(

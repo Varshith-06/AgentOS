@@ -1,9 +1,4 @@
-"""The browser driver, humble edition: fetch a page, hand back its visible text.
-
-A real headless-browser driver can replace this later without a single agent
-changing — agents say `request_tool("browser", "open", url=...)` and nothing
-else. That swap-without-rewrite is the whole point of drivers.
-"""
+"""The browser driver, humble edition: fetch a page, hand back its visible text."""
 
 from __future__ import annotations
 

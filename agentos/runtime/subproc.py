@@ -1,21 +1,4 @@
-"""Agents as real OS processes (Phase 7, p.8).
-
-Each agent gets its own interpreter running `python -m agentos.runtime.child`,
-and Syscall and Reply cross to it as JSON lines — the Phase 1 rule ("anything
-that survives json.dumps survives a pipe") cashed in literally, which is why
-not a line of agents/ or kernel/ had to change.
-
-Those JSON lines ride a loopback TCP socket. The executor owns one listening
-socket; each child is handed a one-time token in its environment, dials back,
-authenticates, and then speaks the protocol. Nothing above this file knows
-how a syscall was carried.
-
-The scheduler's discipline survives intact: the child only advances when the
-kernel puts a reply on `proc.inbox` (which happens when the scheduler grants a
-slot), so slots, pause-at-syscall, replay after a crash — all of it works on
-subprocess agents unchanged. And kill() is literal: cancelling the pump task
-kills the child process.
-"""
+"""Agents as real OS processes (Phase 7, p.8)."""
 
 from __future__ import annotations
 
@@ -37,15 +20,13 @@ CONNECT_TIMEOUT = 30.0  # seconds a spawned child gets to dial back
 class ProcessExecutor:
     """Owns one OS subprocess per agent, one syscall channel per subprocess.
 
-    One listening socket for the whole executor, opened lazily on the first
-    spawn, bound to 127.0.0.1 on an ephemeral port. Each child receives the
-    endpoint and a single-use token via its environment (AGENTOS_CONNECT,
-    AGENTOS_TOKEN), connects, and sends {"token": ...} as its first line. A
-    connection with an unknown, reused, or missing token is dropped.
-
-    The channel is a persistent full-duplex stream, deliberately not HTTP:
-    replies arrive when the scheduler grants a slot, not as responses to
-    requests. (The daemon's control plane is HTTP; this is the data plane.)
+    One listening socket for the whole executor, bound to 127.0.0.1 on an
+    ephemeral port. Each child gets the endpoint and a single-use token in its
+    environment and sends {"token": ...} as its first line; an unknown, reused
+    or missing token is dropped. The channel is a persistent full-duplex stream
+    and deliberately not HTTP: replies arrive when the scheduler grants a slot,
+    not as responses to requests. (The daemon's control plane is HTTP; this is
+    the data plane.)
     """
 
     transport = "socket"
@@ -91,8 +72,7 @@ class ProcessExecutor:
         fut.set_result((reader, writer))
 
     async def _spawn(self) -> tuple[Any, Any]:
-        """Exec the child interpreter. Returns (child, ticket) where the ticket
-        is what _connect needs to recognise this child when it dials in."""
+        """Exec the child interpreter. Returns (child, ticket) for _connect."""
         await self._ensure_server()
         token = secrets.token_hex(16)
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
@@ -114,12 +94,7 @@ class ProcessExecutor:
         return child, (token, fut)
 
     async def _connect(self, child: Any, ticket: Any):
-        """Return (reader, writer) for this child's syscall channel.
-
-        Racing the connection against the process dying matters: a child that
-        fails before it dials (bad import, missing module) would otherwise cost
-        the full timeout and report nothing useful.
-        """
+        """Return (reader, writer) for this child's syscall channel."""
         token, fut = ticket
         died = asyncio.ensure_future(child.wait())
         try:
@@ -213,15 +188,7 @@ class ProcessExecutor:
 
     @staticmethod
     def _close_pipes(child) -> None:
-        """Close the child's stderr transport explicitly.
-
-        Left to the garbage collector, Windows' proactor loop complains about
-        unclosed transports at interpreter shutdown — and its warning path
-        itself raises on an already-closed pipe, so every run ends in a wall
-        of ValueError tracebacks that look like a crash and are not. Closing
-        here is the fix; the try is because a transport that has already gone
-        is exactly the state we want.
-        """
+        """Close the child's stderr transport explicitly."""
         transport = getattr(child, "_transport", None)
         if transport is None:
             return
@@ -231,8 +198,7 @@ class ProcessExecutor:
             pass
 
     async def _feed_replies(self, proc: AgentProcess, writer) -> None:
-        """Kernel replies land on proc.inbox exactly as they always did; this
-        pump is the only part that knows the inbox now ends at a socket."""
+        """Pump the socket into proc.inbox: the only part that knows it is a socket."""
         while True:
             reply = await proc.inbox.get()
             line = json.dumps(
@@ -250,8 +216,7 @@ class ProcessExecutor:
             tail.append(line.decode("utf-8", errors="replace").rstrip())
 
     async def aclose(self) -> None:
-        """Stop listening. Running channels are unaffected; only new spawns
-        would need the server, and the kernel is shutting down."""
+        """Stop listening. Running channels are unaffected; only new spawns need it."""
         if self._server is None:
             return
         self._server.close()

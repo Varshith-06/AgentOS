@@ -1,10 +1,4 @@
-"""AutoGen worker for compare.py.
-
-In its own module because @message_handler resolves the handler's type hints
-at decoration time: the message type and MessageContext must both be findable
-in the defining module's globals. Kept separate so a child process running a
-different framework never imports AutoGen at all.
-"""
+"""AutoGen worker for compare.py."""
 
 import json
 import sqlite3
@@ -26,13 +20,7 @@ class Go:
 
 
 class Worker(RoutedAgent):
-    """Does the billable calls, persisting progress after each one.
-
-    AutoGen has save_state/load_state but no notion of resuming an execution
-    mid-handler: state comes back, the handler starts from the top. That is
-    the behaviour being measured, and it is not a defect — AutoGen does not
-    advertise durable execution.
-    """
+    """Does the billable calls, persisting progress after each one."""
 
     def __init__(self) -> None:
         super().__init__("worker")

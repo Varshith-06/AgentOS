@@ -1,11 +1,4 @@
-"""Agents created at runtime, and the authority they are allowed to carry.
-
-The point of this file is the ceiling. When a task's shape is decided by a
-model rather than a programmer, "what could this possibly touch?" stops being
-answerable by reading the code — so it has to be answerable from the kernel.
-Attenuation is that answer: a parent delegates a subset of what it holds and
-never more, so the root grant bounds the whole tree no matter how it grows.
-"""
+"""Agents created at runtime, and the authority they are allowed to carry."""
 
 from __future__ import annotations
 
@@ -81,8 +74,6 @@ class AttenuationTest(Base):
         self.assertTrue(result["reached"])
 
     async def test_a_parent_cannot_delegate_what_it_lacks(self):
-        """The whole guarantee in one test: you cannot hand out authority you
-        were never given."""
         k = self.kernel(permissions={"Delegator": ["http"]})
         pid = k.spawn(Delegator(grant=["filesystem"], probe="filesystem"))
         await asyncio.wait_for(k.run(), timeout=LIMIT)
@@ -190,8 +181,7 @@ class LLMAgentTest(Base):
         self.assertIn("Worker", names)
 
     async def test_it_cannot_grant_a_child_more_than_it_holds(self):
-        """Refused inside the agent, with a legible reason, before the kernel
-        has to refuse it — the model gets a chance to retry smaller."""
+        """Refused inside the agent, before the kernel has to, so it can retry smaller."""
         k = self.kernel(models={"classes": {
             "planner": scripted(
                 {"action": "spawn", "role": "W", "goal": "g", "tools": ["shell"]},
@@ -223,8 +213,7 @@ class LLMAgentTest(Base):
         self.assertTrue(result["incomplete"])
 
     async def test_the_spec_of_a_dynamic_agent_round_trips(self):
-        """A runtime-invented agent must still be re-creatable, or it cannot
-        be journaled, recovered, or run in a subprocess."""
+        """Or it could not be journaled, recovered, or run in a subprocess."""
         from agentos.agents.base import agent_from_spec
         from agentos.kernel.messages import assert_serializable
 
@@ -273,8 +262,7 @@ class EventWiringTest(Base):
         self.assertEqual(result["refused"], [])
 
     async def test_a_child_cannot_publish_a_name_it_was_not_wired_for(self):
-        """The failure this whole mechanism exists to prevent: a model
-        inventing a name nobody is listening for, and nobody noticing."""
+        """The failure this exists to prevent: a name nobody hears, and nobody notices."""
         result = await asyncio.wait_for(
             self.kernel().run_until_done(
                 Wirer(publishes=["Ready"], says=["Redy"])),
@@ -289,8 +277,7 @@ class EventWiringTest(Base):
         self.assertEqual(result["said"], [])
 
     async def test_a_hand_written_agent_is_unrestricted(self):
-        """Declarations are for agents somebody else wired. An agent that was
-        not wired decides its own events, as every example always has."""
+        """An agent nobody wired decides its own events."""
         k = self.kernel()
         result = await asyncio.wait_for(
             k.run_until_done(Announcer(events=["Whatever", "IWant"])), timeout=LIMIT)
@@ -332,9 +319,7 @@ class Hopeful(Agent):
 
 class UnsatisfiableWaitTest(Base):
     async def test_waiting_for_what_nobody_publishes_fails_instead_of_hanging(self):
-        """With every live agent wired, an unpublishable name is provably a
-        mistake — so it is refused now rather than found by the deadlock
-        detector after everything has stalled."""
+        """With every live agent wired, an unpublishable name is provably a mistake."""
         k = self.kernel()
         pid = k.spawn(Wirer(publishes=["Ready"], says=["Ready"]))
         k.table.get(pid).publishes = ["Ready"]
@@ -345,8 +330,7 @@ class UnsatisfiableWaitTest(Base):
                       k.table.get(hopeful).result["refused"])
 
     async def test_a_kernel_event_is_always_waitable(self):
-        """AgentFinished and friends have no declared publisher — the kernel
-        emits them — so they must never be refused."""
+        """The kernel emits them itself, so they have no declared publisher to check."""
         k = self.kernel()
         pid = k.spawn(Hopeful(event="AgentFinished"))
         k.table.get(pid).publishes = []
@@ -511,8 +495,7 @@ class ApprovalActionTest(Base):
 
 
 class UsesFlaky(Agent):
-    """Module-level on purpose: a retried agent is re-created from its spec,
-    and a class defined inside a test method has no importable qualname."""
+    """Module-level: a retried agent is re-created from its spec by importing it."""
 
     async def run(self, ctx):
         return await ctx.request_tool("flaky", "go")

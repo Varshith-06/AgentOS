@@ -21,19 +21,7 @@ class DirectInvocationError(Exception):
 
 
 class Agent:
-    """Subclass and implement `run`.
-
-    Constructor params must be JSON-serializable: they are the agent's spec, and
-    the spec is what lets the kernel re-create this agent in a subprocess
-    (Phase 7) or after a crash (Phase 6). An agent that cannot be described as
-    data cannot be checkpointed, so the constraint is enforced at spawn time
-    rather than discovered later.
-
-    `run` is wrapped so that it can only be entered by the executor. "Agents
-    never directly invoke other agents" is the sentence on p.5 that the entire
-    event bus exists to serve; leaving it as a convention would mean the first
-    person in a hurry quietly turns AgentOS back into a function-call framework.
-    """
+    """Subclass and implement `run`."""
 
     priority: str = "Normal"
 
@@ -69,12 +57,7 @@ class Agent:
 
 
 def spec_of(agent: Agent) -> dict[str, Any]:
-    """The data needed to re-create this agent from scratch.
-
-    `file` is the recovery fallback: after a crash, `agent recover` runs in a
-    fresh interpreter where the example module may not be importable by name
-    (it may even have been `__main__`), but its source file still is.
-    """
+    """The data needed to re-create this agent from scratch."""
     cls = type(agent)
     module = sys.modules.get(cls.__module__)
     return {
@@ -91,14 +74,7 @@ _MODULE_CACHE: dict[str, Any] = {}
 
 
 def agent_from_spec(spec: dict[str, Any]) -> Agent:
-    """Re-create an agent from its spec — the Phase 1 discipline paying off.
-
-    Used by the kernel (spawn, crash recovery), by the daemon (thin clients
-    submit specs over HTTP), and by the child process runner (an agent's own
-    subprocess rebuilds it here). Prefers a normal import; falls back to the
-    recorded source file, because the importing interpreter may not have the
-    application's module on its path — it may even have been __main__.
-    """
+    """Re-create an agent from its spec — the Phase 1 discipline paying off."""
     # Keyed by file too: two applications are both "__main__" to themselves.
     cache_key = (spec["module"], spec.get("file"))
     module = _MODULE_CACHE.get(cache_key)

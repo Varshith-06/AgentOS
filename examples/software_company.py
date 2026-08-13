@@ -1,20 +1,11 @@
-"""The software company (Phase 8, p.10) — every kernel service in one pipeline.
+"""Every kernel service in one pipeline.
 
-A ProductManager spawns the team. Research announces its findings as an event;
-Coder and DocWriter wake on it (nobody names anybody). Coder writes actual
-files through the sandboxed filesystem driver. Reviewer waits on both, then
-blocks on a human — a Release Manager must approve the ship. Every LLM call is
-routed by capability class, so this runs offline on the mock provider and on a
-frontier model if ANTHROPIC_API_KEY is set, with zero code changes.
+    python -m agentos.cli run examples/software_company.py
 
-The Release Manager is played by a coroutine so the demo is self-contained;
-in real life it is a person in another terminal:
-
-    python -m agentos.cli approvals
-    python -m agentos.cli approve <pid> --as "Release Manager"
-
-Run it:   python -m agentos.cli run examples/software_company.py
-Watch:    python -m agentos.cli top          (second terminal)
+Research announces its findings; Coder and DocWriter wake on the event and
+nobody names anybody. Reviewer waits on both, then blocks on a human. The
+Release Manager is a coroutine here so the demo is self-contained; in real
+life it is `agent approve <pid> --as "Release Manager"` in another terminal.
 """
 
 from __future__ import annotations

@@ -1,46 +1,4 @@
-"""The kernel loop.
-
-One event loop, one process table, one scheduler. Agents run only when the
-scheduler hands them a slot, and they re-enter the ready queue every time they
-give one up — a woken agent does not resume instantly, it queues like everyone
-else. That is the difference between a scheduler and a callback.
-
-Phase 2 adds the two things that make the order emergent rather than written
-down: agents publish events instead of calling each other, and they wait on a
-dependency graph instead of a sequence. Nothing in here knows what a workflow
-is.
-
-Phase 3 makes a human a dependency like any other: request_approval blocks the
-process and registers the named role as a node in the dependency graph. The
-grant lives in the store, not in memory, so a pending approval survives a
-runtime restart — the difference between a kernel object and a callback.
-
-Phase 4 does the same for tools: an agent requests a capability by name, the
-kernel validates it against the permission matrix before dispatch, and the
-running call is a dependency-graph node the scheduler waits on like any other.
-Agents never import a tool library; drivers own that.
-
-Phase 5 adds what agents remember and what they think with. Memory is a kernel
-service (six kinds behind store/retrieve/share/delete, backend invisible), and
-models are routed: an agent asks for a capability class ("Need: fast"), never
-a model name, and the kernel picks by availability, records tokens and cost
-per agent, and publishes ModelFinished.
-
-Phase 6 makes a hard kill survivable. Every syscall reply is journaled — the
-Phase 1 rule that everything crossing the boundary must survive json.dumps is
-exactly what makes the journal possible. On recovery the kernel re-creates
-each agent from its spec and re-runs it; journaled syscalls return their
-recorded replies instantly instead of re-executing (a tool does not run
-twice, a model is not billed twice, a child is not spawned twice), so the
-agent fast-forwards to where it died and goes live from there. A crash costs
-the work since the last completed syscall and nothing more.
-
-Phase 7 cashes in the boundary: every agent is a real OS subprocess, with
-Syscall and Reply crossing a loopback socket instead of an asyncio queue —
-the kernel cannot tell the difference. In daemon mode
-the runtime outlives any application; thin clients submit agents as specs
-over HTTP and one process table shows everyone's work.
-"""
+"""The kernel loop: one event loop, one process table, one scheduler."""
 
 from __future__ import annotations
 
@@ -142,12 +100,7 @@ class Kernel:
             self._journals = {}
 
     def _restore(self) -> None:
-        """Rebuild the world from the store after a hard kill.
-
-        Terminal processes come back with their results, so anything that was
-        waiting on them still resolves. Live processes come back READY with a
-        fresh task; their journal replays them forward to where they died.
-        """
+        """Rebuild the world from the store after a hard kill."""
         for row in sorted(self.store.processes(), key=lambda r: r["pid"]):
             proc = self.table.restore(
                 pid=row["pid"],
@@ -284,11 +237,7 @@ class Kernel:
         self._log(pid, "resume", f"{proc.name} resumed")
 
     def approve(self, pid: int, role: str) -> None:
-        """Satisfy a pending approval (p.6). Refused unless `role` matches.
-
-        The CLI writes grants to the store directly (so a human can approve a
-        runtime that is not running); this is the in-process equivalent.
-        """
+        """Satisfy a pending approval (p.6). Refused unless `role` matches."""
         self.store.approve(pid, role)
         self._drain_approvals()
 
@@ -318,17 +267,7 @@ class Kernel:
         return event
 
     async def run(self) -> None:
-        """Run until every process is terminal — or until nothing can progress.
-
-        The loop is event-driven with a tick as its *ceiling*, not its period:
-        a syscall wakes it immediately, and `tick` only bounds how long it may
-        doze when nothing is happening. That distinction is worth more than it
-        looks — `asyncio.sleep()` cannot resolve below the platform timer
-        quantum (~15.6ms on Windows), so a loop that slept the tick every pass
-        paid that quantum on every syscall no matter how small the tick was.
-        Polling work — control commands, approvals, the permission file,
-        deadlock detection — stays on the tick, where it belongs.
-        """
+        """Run until every process is terminal — or until nothing can progress."""
         while not self._shutdown:
             now = time.time()
             polled = now - self._last_poll >= self.tick
@@ -366,13 +305,7 @@ class Kernel:
         grant: list[str] | None = None,
         budget_usd: float | None = None,
     ) -> int:
-        """Spawn from a serialized spec — how a thin client hands the daemon
-        an agent it has never imported (p.8).
-
-        `grant` pins this process's capabilities explicitly, which is how the
-        operator sets the ceiling for a task submitted from outside: whatever
-        the agent goes on to create, no descendant can exceed this set.
-        """
+        """Spawn from a serialized spec: how a thin client hands over an agent."""
         pid = self.spawn(self._create_agent(spec))
         proc = self.table.get(pid)
         if grant is not None:
@@ -390,8 +323,7 @@ class Kernel:
         return pid
 
     def snapshot(self) -> dict[str, Any]:
-        """One consistent view of the scheduler for the dashboard (p.8):
-        who is running, who waits on whom, and what the policy is doing."""
+        """One consistent view of the scheduler for the dashboard (p.8):"""
         return {
             "policy": self.policy.name,
             "slots": self.slots,
@@ -437,12 +369,7 @@ class Kernel:
         self.table.transition(proc, state, waiting_on=waiting_on)
 
     def _requeue(self, proc: AgentProcess, reply: Reply) -> None:
-        """Owe `proc` a reply and put it back in line for a slot.
-
-        The reply is journaled here — the moment it is committed to the
-        process — not at delivery. If we die between the two, recovery replays
-        it, which is exactly what "owed" means.
-        """
+        """Owe `proc` a reply and put it back in line for a slot."""
         if not proc.alive:
             return
         self._journal(proc, reply.req_id, proc.current_op or "?", reply.value, reply.error)
@@ -464,16 +391,7 @@ class Kernel:
             self._wakeup.set()
 
     async def _idle(self, timeout: float) -> None:
-        """Doze until a syscall arrives, someone nudges, or `timeout` elapses.
-
-        The early wake is the point: a pending syscall or a freshly-runnable
-        agent is handled in microseconds instead of waiting out a timer
-        quantum (~15.6ms on Windows). Anything pulled off the mailbox is
-        stashed for _drain_mailbox rather than handled here, so the loop keeps
-        exactly one place where syscalls are dispatched. Cancelling a pending
-        `Queue.get()` never consumes an item, and _drain_mailbox runs on the
-        very next line, so nothing can be stranded in the queue.
-        """
+        """Doze until a syscall arrives, someone nudges, or `timeout` elapses."""
         if self._wakeup is None:
             self._wakeup = asyncio.Event()
         getter = asyncio.ensure_future(self.mailbox.get())
@@ -531,23 +449,7 @@ class Kernel:
         publishes: list[str] | None = None,
         subscribes: list[str] | None = None,
     ) -> int:
-        """Create a child: delegate capabilities to it, and wire its events.
-
-        Two different rules, for two different problems.
-
-        `grant` is *security*. Attenuation applies: a parent may hand a child
-        any part of what it holds and nothing else, so a planner spawned with
-        {http, sql} cannot produce a descendant that reaches the shell,
-        however many layers of agents it invents on the way.
-
-        `publishes`/`subscribes` are *correctness*. Events match by exact
-        string, so a publisher and a waiter who disagree on a name do not
-        error — the waiter simply never wakes. Letting the parent name both
-        sides makes them come from one source, and recording what it named
-        means a child that publishes something else is refused with a message
-        it can act on, instead of hanging. Nothing here is a security
-        boundary: publishing an event harms nobody.
-        """
+        """Create a child: delegate capabilities to it, and wire its events."""
         child = self._create_agent(spec)
         if grant is None and publishes is None and subscribes is None:
             return self.spawn(child, parent=proc.pid)
@@ -599,15 +501,7 @@ class Kernel:
         return None
 
     def _sys_checkpoint(self, proc: AgentProcess, label: str | None = None) -> int:
-        """kernel.checkpoint() from p.9 — the explicit form of what every
-        syscall already does implicitly.
-
-        Recovery does not need this call: a journaled syscall is a checkpoint
-        whether or not anyone asked. What it adds is the *observable* one —
-        the agent passes through CHECKPOINTING, so the p.3 state appears in
-        `agent ps` and `agent logs` instead of being a state the design
-        implies but nobody can ever see.
-        """
+        """kernel.checkpoint(): the explicit form of what every syscall does anyway."""
         was = proc.state
         if was is AgentState.RUNNING:
             self.table.transition(proc, AgentState.CHECKPOINTING, waiting_on="journal")
@@ -634,13 +528,7 @@ class Kernel:
         return None
 
     def _unpublishable(self, event_type: str) -> bool:
-        """Can we *prove* nobody will ever publish this event type?
-
-        Only then is refusing a wait safe. The kernel publishes its own event
-        types whenever it likes, and any live agent without a declared
-        vocabulary may publish anything — so a wait is refused only when
-        every live agent has a contract and none of them names this.
-        """
+        """Can we *prove* nobody will ever publish this event type?"""
         if event_type in KERNEL_EVENTS:
             return False
         for other in self.table.all():
@@ -661,12 +549,7 @@ class Kernel:
         return None
 
     def _backfill(self, pid: int, event_type: str) -> None:
-        """Redeliver pre-crash events this subscriber was owed but never took.
-
-        An event's subscriber list was recorded when it was published, so only
-        agents that were genuinely subscribed back then qualify — and anything
-        already consumed (per the consumptions table) stays consumed.
-        """
+        """Redeliver pre-crash events this subscriber was owed but never took."""
         consumed = self.store.consumptions()
         queue = self.bus.inboxes[pid][event_type]
         buffered = {e.seq for e in queue}
@@ -771,12 +654,7 @@ class Kernel:
         op: str,
         params: dict[str, Any],
     ) -> None:
-        """Dispatch a tool call through its driver (p.6-7).
-
-        The kernel validates the capability before dispatch — the application
-        does not get a vote — and the running call becomes a dependency-graph
-        node, so the agent waits for it the way it waits for anything else.
-        """
+        """Dispatch a tool call through its driver (p.6-7)."""
         if not isinstance(capability, str) or not capability.strip():
             raise ValueError("request_tool() needs a capability name")
         if not self.perms.allowed(proc.name, capability, proc.pid):
@@ -890,8 +768,7 @@ class Kernel:
         top: int = 3,
         limit: int = 20,
     ) -> Any:
-        """The p.6 memory API. Fast, local, nonblocking: the agent keeps its
-        slot. Shared-memory changes are announced as MemoryUpdated events."""
+        """The memory API: fast, local, and nonblocking."""
         if op == "store":
             self.memory.store_value(proc, key, value, kind)
             if kind == "shared":
@@ -930,9 +807,7 @@ class Kernel:
         system: str | None,
         max_tokens: int,
     ) -> None:
-        """Route a model request by capability class (p.7). The agent never
-        names a model; the manager selects by availability, and the kernel
-        records tokens and cost against this agent."""
+        """Route a model request by capability class. The agent never names a model."""
         if not isinstance(need, str) or not need.strip():
             raise ValueError("request_model() needs a capability class, e.g. 'fast'")
         if not isinstance(prompt, str) or not prompt.strip():
@@ -962,13 +837,7 @@ class Kernel:
         task.add_done_callback(self._io_tasks.discard)
 
     def _over_budget(self, proc: AgentProcess) -> tuple[float, float] | None:
-        """Has this agent's *task* spent its allowance? (spent, budget) if so.
-
-        Metered against the whole tree, because a planner that could spawn
-        its way around a cap would not have one. The check is before dispatch
-        rather than after, so a task can overshoot by at most the one call in
-        flight — the cost of a model call is not knowable until it returns.
-        """
+        """Has this agent's *task* spent its allowance? (spent, budget) if so."""
         try:
             root = self.table.get(proc.root)
         except KeyError:
@@ -1045,12 +914,7 @@ class Kernel:
     def _sys_request_approval(
         self, proc: AgentProcess, call: Syscall, role: str, reason: str
     ) -> None:
-        """Block until a human with `role` approves (p.5-6).
-
-        The human is registered as a dependency-graph node, identical in kind
-        to an agent, an event, or a timer. The approval object itself lives in
-        the store, so it outlives this runtime.
-        """
+        """Block until a human with `role` approves (p.5-6)."""
         if not isinstance(role, str) or not role.strip():
             raise ValueError("request_approval() needs a non-empty role")
         if not isinstance(reason, str) or not reason.strip():
@@ -1077,12 +941,7 @@ class Kernel:
         self.deps.add(proc.pid, call.req_id, {key})
 
     def _drain_approvals(self) -> None:
-        """Wake whoever a granted approval unblocks.
-
-        Grants arrive through the store — `agent approve` writes them there
-        directly, possibly while we were not even running — so the kernel polls
-        for them the same way it polls for control commands.
-        """
+        """Wake whoever a granted approval unblocks."""
         for row in self.store.granted_approvals():
             key = dg.key(dg.APPROVAL, row["id"])
             freed = self.deps.resolve(key, _approval_value(row))
@@ -1139,15 +998,7 @@ class Kernel:
         self._announce_exit(proc)
 
     def _retry(self, proc: AgentProcess) -> bool:
-        """Restart a crashed agent, up to its budget (p.4: retries are a
-        scheduler responsibility).
-
-        The agent is re-created from its spec and replays its journal, so a
-        retry costs only the work after its last completed syscall — the same
-        machinery crash recovery uses, applied to one process instead of the
-        whole runtime. A killed agent is never retried: a human said stop.
-        Off by default; `Kernel(retries=N)` or `Agent.retries` opts in.
-        """
+        """Restart a crashed agent, up to its retry budget."""
         budget = getattr(self.agents.get(proc.pid), "retries", None)
         if budget is None:
             budget = self.retries
@@ -1180,11 +1031,7 @@ class Kernel:
 
     @staticmethod
     def _entry_failed(entry: dict[str, Any]) -> bool:
-        """Did this journaled syscall end in failure?
-
-        Two shapes: a kernel refusal lands in the entry's own error field; a
-        tool or model that ran and failed lands inside the reply value.
-        """
+        """Did this journaled syscall end in failure?"""
         if entry.get("error"):
             return True
         value = entry.get("value")
@@ -1214,21 +1061,7 @@ class Kernel:
         self._fail_orphaned_event_waits()
 
     def _fail_orphaned_event_waits(self) -> None:
-        """An exit can make a pending event wait unsatisfiable — the agent
-        that just died may have been the only one wired to publish it.
-
-        The proof at wait time (_unpublishable) covers waits that start
-        doomed; this covers waits that become doomed. Same standard: refused
-        only when every live agent is wired and none names the event. The
-        waiter gets an error naming the real cause, instead of sitting until
-        the stall detector declares the whole runtime stuck.
-
-        Guarded, because this runs on every exit and the proof walks the
-        whole process table: if nobody is blocked on an event at all, there
-        is nothing an exit could possibly orphan. Most runtimes never wait on
-        an event, and the guard keeps them paying a dict scan rather than a
-        table walk per exit.
-        """
+        """Fail the event waits an exit has just made unsatisfiable."""
         prefix = f"{dg.EVENT}:"
         if not any(key.startswith(prefix) for key in self.deps.blocked_on):
             return
@@ -1256,8 +1089,7 @@ class Kernel:
                 break
 
     def _detect_deadlock(self) -> None:
-        """Nobody can run, nobody is asleep, no timer is pending: nothing will
-        ever happen again. Say so, instead of hanging forever."""
+        """Nothing can run, sleep, or fire a timer: say so instead of hanging."""
         if self.daemon_mode:
             return  # a daemon can always receive new work that publishes the event
         alive = [p for p in self.table.all() if p.alive]

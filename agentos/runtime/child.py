@@ -1,23 +1,4 @@
-"""One agent, one OS process (Phase 7, p.8). Run by ProcessExecutor, never by hand.
-
-The remarkable thing about this file is what is NOT in it: a new agent API.
-The Context in here is the same class agents have used since Phase 1 — its
-mailbox and inbox just end at a transport now instead of the kernel's queues.
-An agent cannot tell which side of a fork it is running on, because its
-entire world was always a serializable message boundary.
-
-The protocol (JSON lines over a loopback TCP socket):
-    child  -> parent: {"token": ...}                           (handshake, once)
-    parent -> child:  {"pid":..., "name":..., "spec":...}      (header, once)
-    child  -> parent: {"type": "syscall", "op", "req_id", "args"}
-    parent -> child:  {"req_id":..., "value":..., "error":...}
-    child  -> parent: {"type": "finished", "result"} | {"type": "failed", "error"}
-
-AGENTOS_CONNECT=host:port and AGENTOS_TOKEN arrive in the environment. The
-child dials the executor and authenticates before anything else is said.
-sys.stdout is pointed at stderr on the way in, so an agent that print()s
-cannot be mistaken for the runtime.
-"""
+"""One agent, one OS process (Phase 7, p.8). Run by ProcessExecutor, never by hand."""
 
 from __future__ import annotations
 
@@ -42,8 +23,7 @@ def _wire(header: dict) -> tuple[SimpleNamespace, asyncio.Queue, Context]:
 
 
 async def _execute(agent, ctx: Context, emit) -> int:
-    """Run the agent; report finished/failed on the channel. `emit` is the
-    only thing here that knows where bytes go."""
+    """Run the agent; report finished/failed on the channel."""
     _RUNNING.set(id(agent))
     try:
         result = await agent.run(ctx)

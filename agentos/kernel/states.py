@@ -1,8 +1,4 @@
-"""Agent lifecycle states and the legal transitions between them.
-
-The state machine is enforced, not advisory: an illegal transition raises
-InvalidTransition rather than silently corrupting the process table.
-"""
+"""Agent lifecycle states and the legal transitions between them."""
 
 from __future__ import annotations
 

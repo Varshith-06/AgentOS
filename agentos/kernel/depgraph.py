@@ -1,14 +1,4 @@
-"""The dependency graph (AgentOS.pdf p.5).
-
-Instead of static workflows, a waiting agent declares what it is waiting *for* —
-other agents, events, timers, human approvals. When the last dependency
-resolves, the scheduler wakes it automatically. Nobody wrote a sequence; the
-graph decided the order.
-
-The graph is also where deadlock is caught. A cycle of waiters is detected the
-moment it would be created and reported to the agent that closed it, rather than
-being discovered later as a run that never ends.
-"""
+"""The dependency graph (AgentOS.pdf p.5)."""
 
 from __future__ import annotations
 

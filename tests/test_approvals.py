@@ -1,10 +1,4 @@
-"""Phase 3: human approval as a first-class kernel object.
-
-The bar (AgentOS.pdf p.15): a pending approval must survive a runtime restart.
-A human dependency that evaporates on restart is not a kernel object — it is a
-callback with good PR. These tests kill the runtime mid-block and check that
-the approval, and even a grant issued while nothing was running, is honored.
-"""
+"""Phase 3: human approval as a first-class kernel object."""
 
 from __future__ import annotations
 

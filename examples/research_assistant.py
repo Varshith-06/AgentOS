@@ -1,13 +1,10 @@
-"""The research assistant (Phase 8, p.10) — memory doing the coordinating.
+"""The research assistant: memory doing the coordinating.
 
-Two Searchers investigate different aspects of a topic in parallel. Neither
-talks to anyone: each files what it finds into longterm memory (its own) and
-shared memory (everyone's). The Synthesizer waits on both, reads everything
-shared with it without naming a single key, and drafts the brief; the
-Critic reads the same shared memory and scores it. Kill a Searcher mid-run
-(`agent kill 2`) and the rest still completes with what remains.
+    python -m agentos.cli run examples/research_assistant.py
 
-Run it:   python -m agentos.cli run examples/research_assistant.py
+Neither Searcher talks to anyone; they file findings into shared memory and
+the Synthesizer reads all of it without naming a key. Kill one mid-run and
+the rest completes with what remains.
 """
 
 from __future__ import annotations

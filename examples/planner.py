@@ -1,20 +1,12 @@
 """A task arrives as a sentence; the team is invented on the spot.
 
     python -m agentos.cli run examples/planner.py
-
-Nothing here is predefined except the tools the operator allows. There is no
-workflow graph, and no agent classes for "researcher" or "writer" — the
-planner invents those roles at runtime, and AgentOS runs them as processes.
-
-It is fully offline: the "model" is a scripted mock, so the sequence of
-decisions is fixed and this demonstrates the *runtime*, not a model's
-cleverness. Point the `fast` class at a real model and the same code runs a
-real planner — that is the Phase 5 claim.
-
-Watch it from another terminal:
-
-    python -m agentos.cli ps       # the invented team, with their permissions
+    python -m agentos.cli ps       # the invented team and its permissions
     python -m agentos.cli logs     # every delegation and denial
+
+Offline: the model is a scripted mock, so this demonstrates the runtime and
+not a model's cleverness. Point the `fast` class at a real one and the same
+code runs a real planner.
 """
 
 import asyncio

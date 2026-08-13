@@ -1,10 +1,4 @@
-"""The hosted path: a sentence and a tool list arrive over HTTP.
-
-This is the endpoint that turns AgentOS into something a company can run
-behind an API, so most of these tests are about what it *refuses*. The goal
-text and the tool list come off a socket; the planner they produce can invent
-agents nobody wrote. The ceiling has to hold at the door.
-"""
+"""The hosted path: a sentence and a tool list arrive over HTTP."""
 
 from __future__ import annotations
 
@@ -158,8 +152,7 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["spec"]["params"]["retries"], 5)
 
     async def test_a_budget_over_the_operators_ceiling_is_refused(self):
-        """The daemon in this fixture allows no budget ceiling, so a request
-        naming one is accepted; the ceiling case is covered below."""
+        """This fixture sets no ceiling, so a request naming a budget is accepted."""
         code, body = await asyncio.to_thread(
             self.post, "/task", {"goal": "x", "tools": [], "budget_usd": 0.25})
         self.assertEqual(code, 200)

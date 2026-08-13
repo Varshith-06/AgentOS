@@ -1,16 +1,6 @@
 """Two agents waiting on each other. The kernel must say so, not hang.
 
-A scheduler that hangs forever on a cycle is not a scheduler, it is a bug you
-find at 2am. AgentOS catches a wait that would close a cycle at the moment it is
-requested and hands the agent an error it can see, name, and act on.
-
-The second half shows the other kind of stall: an agent waiting for an event
-that nobody will ever publish. There is no cycle there — the wait-for graph is a
-straight line into nothing — so it is caught by a different rule: if every
-surviving agent is Waiting, nobody is asleep, and no timer is pending, then
-nothing can ever happen again.
-
-Run it: python -m agentos.cli run examples/deadlock.py
+    python -m agentos.cli run examples/deadlock.py
 """
 
 from __future__ import annotations

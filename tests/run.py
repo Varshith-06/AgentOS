@@ -1,17 +1,8 @@
 """Run the suite with the test files in parallel: python tests/run.py
 
-`python -m unittest discover tests` runs everything in one interpreter, one
-file after another. Most of the suite's wall time is not assertions, it is
-agents — every integration test starts real OS processes and waits on real
-scheduling — so the files spend most of their time blocked, and they were
-written independent by construction: each one builds its own Store in its own
-temporary directory and binds its daemons to port 0. Nothing stops them
-running at once except the runner.
-
-This runner starts one interpreter per test file, capped at the CPU count,
-and aggregates. Output per file is buffered and printed whole, so failures
-read exactly as they would have serially. The exit code is the number of
-failing files.
+One interpreter per file, capped at the CPU count. Each file already builds
+its own Store in its own temporary directory and binds to port 0. The exit
+code is the number of failing files.
 """
 
 from __future__ import annotations
@@ -31,18 +22,7 @@ WHY = re.compile(r"^(\w*(?:Error|Exception|Failure)):?(.*)$", re.M)
 
 
 def annotate(failed: list) -> None:
-    """Put the failure on the run page, not only in the log.
-
-    Downloading a job log needs admin rights on the repository, so a red badge
-    on a public project is otherwise undiagnosable by everyone except its
-    owner — including, most of the time, its owner on a phone. Annotations and
-    the step summary render on the run page itself, where a failure should be
-    readable in one click.
-
-    A flaky suite is the case that needs this most: the run that failed is
-    rarely the run you are looking at, so the failing test's name has to
-    survive in something more durable than a log nobody opened.
-    """
+    """Put the failure on the run page, not only in the log."""
     for name, _, _, _, output in failed:
         tests = WHICH.findall(output)
         why = WHY.findall(output)

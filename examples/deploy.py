@@ -1,27 +1,11 @@
-"""Human approval as a first-class kernel object (AgentOS.pdf p.5-6).
+"""Human approval as a first-class kernel object.
 
-The Deployer runs its checks, then declares that it needs a human:
+    python -m agentos.cli run examples/deploy.py
+    python -m agentos.cli approvals                          # second terminal
+    python -m agentos.cli approve 1 --as "Senior Engineer"
 
-    approval = await ctx.request_approval(
-        role="Senior Engineer", reason="Production deployment"
-    )
-
-The runtime blocks the process — `agent ps` shows Blocked, waiting on Senior
-Engineer — and the human becomes a node in the dependency graph, identical in
-kind to an agent, an event, or a timer. Nothing polls. When the grant lands,
-the scheduler wakes the Deployer exactly where it stopped.
-
-Run it:            python -m agentos.cli run examples/deploy.py
-Watch it block:    python -m agentos.cli ps          (second terminal)
-See the request:   python -m agentos.cli approvals
-Approve it:        python -m agentos.cli approve 1 --as "Senior Engineer"
-
-Approving as the wrong role is refused — try --as "Intern".
-
-The approval is durable, not a callback. Kill this process (Ctrl-C) while it is
-blocked and run it again: the Deployer re-attaches to the same pending approval
-instead of asking twice. Approve while nothing is running, then start the run:
-it sails through.
+The wrong role is refused, and the approval is durable: kill this process
+while it is blocked and the next run re-attaches instead of asking twice.
 """
 
 from __future__ import annotations

@@ -1,10 +1,4 @@
-"""Phase 4: permissions and tool drivers.
-
-The bar (AgentOS.pdf p.15): an agent cannot reach a tool it was not granted —
-the kernel validates the capability before dispatch, the denial lands in the
-audit log, and revoking a capability in config changes behaviour with no code
-edit, even on a running system.
-"""
+"""Phase 4: permissions and tool drivers."""
 
 from __future__ import annotations
 
@@ -245,8 +239,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(py["value"]["stdout"].strip(), "42")
 
     async def test_a_tool_call_is_a_scheduler_wait_not_a_hang(self):
-        """The agent visibly Waits on the tool, and a running tool is not a
-        deadlock even when every agent in the system is waiting on it."""
+        """A running tool is not a deadlock, even with every agent waiting on it."""
         k = self.kernel(permissions={"ToolUser": ["python"]})
         pid = k.spawn(
             ToolUser(

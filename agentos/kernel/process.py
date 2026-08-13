@@ -60,14 +60,10 @@ class AgentProcess:
         return (self.ended_at or time.time()) - self.started_at
 
     def row(self) -> dict[str, Any]:
-        """The serializable view — what `agent ps` reads, and since Phase 6
-        also everything recovery needs to resurrect this process: the spec
-        re-creates the agent, the journal replays it forward, and the result
-        satisfies anyone who was waiting on it.
+        """The serializable view: what `agent ps` reads and what recovery needs.
 
-        Publishes the raw timestamps, not an elapsed time: a row is a snapshot
-        written at the last transition, and a Sleeping agent makes no
-        transitions. Only the reader knows what time it is now.
+        Raw timestamps, not an elapsed time: a row is written at the last
+        transition, and only the reader knows what time it is now.
         """
         return {
             "pid": self.pid,
@@ -129,12 +125,7 @@ class ProcessTable:
         state: AgentState,
         started_at: float,
     ) -> AgentProcess:
-        """Re-insert a process from persisted state (crash recovery).
-
-        This sets the state directly rather than transitioning into it:
-        deserialization is not a lifecycle event, and the legal-transition
-        table has no edge for "came back from the dead".
-        """
+        """Re-insert a process from persisted state (crash recovery)."""
         proc = AgentProcess(
             pid=pid, name=name, parent=parent, spec=spec, priority=priority
         )

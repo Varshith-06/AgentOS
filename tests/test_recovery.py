@@ -1,13 +1,4 @@
-"""Phase 6: checkpoints and crash recovery.
-
-The bar (AgentOS.pdf p.17): kill the runtime mid-execution, restart it, and
-agents resume from their last checkpoint instead of re-running from scratch.
-A hard kill costs the work since the last completed syscall and nothing more.
-
-The crash is simulated the way kill -9 behaves: every task dies instantly and
-nothing gets to clean up. The store keeps only what was already persisted —
-which, because every syscall reply is journaled, is everything that matters.
-"""
+"""Phase 6: checkpoints and crash recovery."""
 
 from __future__ import annotations
 
@@ -116,12 +107,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(poll(), timeout)
 
     async def _crash(self, k, run_task):
-        """kill -9, in-process: every task dies instantly, nothing cleans up.
-
-        The kernel's store is swapped for a scratch one first, so the death
-        throes (task cancellations firing _on_fail) cannot touch the real
-        persisted state — exactly like a process that is simply gone.
-        """
+        """kill -9, in-process: every task dies instantly, nothing cleans up."""
         scratch_dir = tempfile.TemporaryDirectory()
         self.addCleanup(scratch_dir.cleanup)
         scratch = Store(scratch_dir.name)

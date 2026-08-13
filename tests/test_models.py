@@ -1,10 +1,4 @@
-"""Phase 5b: model routing.
-
-The bar (AgentOS.pdf p.16): model choice is a runtime configuration concern,
-not an application concern. Agents ask for a capability class; the manager
-selects by availability, falls through on failure, and the kernel records
-tokens and cost per agent. All offline, via the mock provider.
-"""
+"""Phase 5b: model routing."""
 
 from __future__ import annotations
 
@@ -130,8 +124,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(finished[0].payload["model"], "m")
 
     async def test_a_slow_model_call_is_a_wait_not_a_deadlock(self):
-        """Every agent Waiting on a model in flight must not trip the stall
-        detector — the pending call can still wake someone."""
+        """A model call in flight can still wake someone, so it is not a stall."""
         k = self.kernel(
             {"fast": [{"provider": "mock", "model": "m", "latency": 0.3}]}
         )

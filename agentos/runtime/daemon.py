@@ -1,17 +1,4 @@
-"""The shared runtime daemon (Phase 7, p.8).
-
-The runtime becomes a process that outlives any application. Applications are
-thin clients: they connect to a runtime that already exists, submit agents as
-specs, and walk away — the daemon owns scheduling, permissions, memory,
-models, journaling, and recovery for everyone's agents at once. One
-`agent ps` shows them all, with cost aggregated across applications. That is
-the claim that separates AgentOS from a library.
-
-    python -m agentos.cli daemon                 # terminal 1: the runtime
-    python examples/app_research.py              # terminal 2: an application
-    python examples/app_support.py               # terminal 3: another one
-    python -m agentos.cli ps                     # everyone, one table
-"""
+"""The shared runtime daemon (Phase 7, p.8)."""
 
 from __future__ import annotations
 
@@ -30,12 +17,7 @@ from ..kernel.store import Store
 
 
 def _is_loopback(host: str) -> bool:
-    """Is this address reachable only from this machine?
-
-    An empty host or 0.0.0.0 means "every interface", which is the case this
-    guard exists for. Anything that does not resolve is treated as exposed:
-    when in doubt about reachability, assume the worse of the two.
-    """
+    """Is this address reachable only from this machine?"""
     if not host or host in ("0.0.0.0", "::", "*"):
         return False
     try:
@@ -141,11 +123,7 @@ class Daemon:
             self.loop.call_soon_threadsafe(setattr, self.kernel, "_shutdown", True)
 
     def call(self, fn: Callable[[], Any], timeout: float = 10.0) -> Any:
-        """Run `fn` on the kernel's event loop and return its result.
-
-        Kernel state is only ever touched from the loop thread; this is the
-        one door in, and every mutating API route goes through it.
-        """
+        """Run `fn` on the kernel's event loop and return its result."""
         fut: concurrent.futures.Future = concurrent.futures.Future()
 
         def runner() -> None:

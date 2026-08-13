@@ -1,16 +1,4 @@
-"""GPU visibility (AgentOS.pdf p.8: the runtime knows all GPU utilization).
-
-Deliberately small and deliberately honest. AgentOS does not *schedule* GPU
-memory — the p.4 "GPU-aware scheduling" idea is listed as future work in the
-design doc, and pretending otherwise would be worse than reporting nothing.
-What this does is report: if an NVIDIA GPU is present, the shared runtime can
-show its utilization alongside agents, cost, and memory, which is what the
-p.8 dashboard asks for.
-
-No dependency: `nvidia-smi` ships with the driver, and its absence is the
-answer rather than an error. Everything degrades to None on a machine with no
-GPU, which is most machines this will run on.
-"""
+"""GPU visibility (AgentOS.pdf p.8: the runtime knows all GPU utilization)."""
 
 from __future__ import annotations
 
@@ -30,11 +18,7 @@ def available() -> bool:
 
 
 def utilization(ttl: float = CACHE_TTL) -> list[dict[str, Any]] | None:
-    """Per-GPU utilization, or None when there is no GPU to report on.
-
-    Cached: the kernel loop and the dashboard both ask, and shelling out on
-    every tick would cost more than the information is worth.
-    """
+    """Per-GPU utilization, or None when there is no GPU to report on."""
     global _cache
     now = time.monotonic()
     fresh_until, value = _cache

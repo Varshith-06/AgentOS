@@ -1,21 +1,7 @@
-"""The event-driven pipeline from AgentOS.pdf p.5, plus the dependency graph.
+"""The event-driven pipeline, plus a wait on a dependency set.
 
-    Research finishes
-      -> publishes ResearchCompleted
-      -> the runtime wakes CodeAgent
-      -> the runtime wakes DocumentationAgent
-      -> notifies Planner
-
-Read Research.run() and notice what is NOT there: it never mentions CodeAgent or
-DocumentationAgent. It does not know they exist. It publishes a fact about the
-world and stops. The runtime decides who cares.
-
-That is why the Reviewer at the bottom can be added — a fourth subscriber — by
-appending one line to main() and editing no other agent. Loose coupling is not a
-style here; the kernel gives an agent no way to name another agent.
-
-Run it:     python -m agentos.cli run examples/pipeline.py
-Timeline:   python -m agentos.cli events -v
+    python -m agentos.cli run examples/pipeline.py
+    python -m agentos.cli events -v      # the timeline
 """
 
 from __future__ import annotations
@@ -73,13 +59,7 @@ class Reviewer(Agent):
 
 
 class Planner(Agent):
-    """Waits on a dependency *set*, not a sequence (p.5).
-
-    "Research depends on: Market Search, Legal Review, Human Approval. Once
-    every dependency completes, the scheduler automatically wakes the waiting
-    process." The Planner below never orders anything: it declares what it needs
-    and the scheduler decides when it may continue.
-    """
+    """Waits on a dependency *set*, not a sequence (p.5)."""
 
     priority = "High"
 

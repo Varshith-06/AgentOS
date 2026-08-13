@@ -1,27 +1,12 @@
-"""Scheduling policies, measured against each other (p.4).
+"""The three scheduling policies, measured against each other.
 
-AgentOS ships three policies. The published benchmark numbers all use `fifo`,
-the default; this harness asks what the other two are actually worth.
+    python benchmarks/schedulers.py
 
-The honest way to compare schedulers is not to find one number where one wins.
-A scheduling policy is a choice about *which work matters*, so each policy is
-run against three workloads, and each workload is the kind of load a different
-policy was designed for:
-
-  A. INDEPENDENT   agents that need nothing from each other. Nothing to
-                   optimise, so this measures what a policy *costs*.
-  B. MIXED URGENCY High/Normal/Low submitted together, more work than slots.
-                   Measures how long an urgent agent waits behind routine work.
-  C. BOTTLENECK    a few agents that many others are blocked on, plus filler
-                   nobody is waiting for. Measures how long the blocked agents
-                   stay blocked.
-
-The mechanism that makes B and C interesting is re-queueing. An agent that
-sleeps goes Sleeping -> Ready -> the *back* of the ready queue, so a bottleneck
-agent that yields several times keeps landing behind the filler. FIFO honours
-that queue; the other two policies are allowed to jump it.
-
-Run it:   python benchmarks/schedulers.py
+Each policy runs three workloads: independent agents (what a policy costs),
+mixed urgency (how long an urgent agent waits), and a bottleneck (how long
+agents blocked on it stay blocked). Re-queueing is what makes the last two
+interesting: a yielding agent lands at the back of the ready queue, and
+only the non-FIFO policies may jump it.
 """
 
 from __future__ import annotations
@@ -73,8 +58,7 @@ class Blocked(Agent):
 
 
 async def _run(policy: str, slots: int, build) -> tuple[Kernel, float, float]:
-    """Run one workload under one policy. `build` spawns and returns nothing;
-    it receives the kernel. Returns (kernel, t0, wall)."""
+    """Run one workload under one policy. Returns (kernel, t0, wall)."""
     tmp = tempfile.TemporaryDirectory()
     store = Store(tmp.name)
     k = Kernel(store=store, tick=TICK, policy=policy, slots=slots)

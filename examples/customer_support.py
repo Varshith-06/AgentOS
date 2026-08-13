@@ -1,13 +1,7 @@
-"""Customer support (Phase 8, p.10) — events in, routed work out.
+"""Customer support: events in, routed work out.
 
-An Intake agent publishes each incoming ticket as an event; it has no idea who
-handles tickets. Triage subscribes, classifies each one with a model call, and
-spawns the specialists with their queues. Every resolution lands in shared
-memory, which is how the Supervisor compiles the report without ever touching
-a specialist.
-
-Run it:   python -m agentos.cli run examples/customer_support.py
-Timeline: python -m agentos.cli events -v
+    python -m agentos.cli run examples/customer_support.py
+    python -m agentos.cli events -v      # the timeline
 """
 
 from __future__ import annotations

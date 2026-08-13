@@ -1,15 +1,4 @@
-"""Externally visible runtime state.
-
-`agent ps` runs in a different terminal than the runtime, so the process table
-has to live somewhere both can see. Phase 1 uses SQLite at .agentos/runtime.db:
-the kernel publishes the process table on every transition, and the CLI reads
-it. Control commands (kill/pause/resume) go the other way through a queue that
-the kernel polls.
-
-This is deliberately the same shape as the Phase 7 daemon — a control plane the
-kernel serves and clients talk to — so that swapping SQLite for the FastAPI
-daemon later is a transport change, not a redesign.
-"""
+"""Externally visible runtime state."""
 
 from __future__ import annotations
 
@@ -152,8 +141,7 @@ class Store:
         )
 
     def resume_runtime(self, policy: str, slots: int) -> None:
-        """Take over after a crash. Nothing is wiped: the process table, the
-        journals, the events, and the memory are exactly what recovery needs."""
+        """Take over after a crash. Nothing is wiped: all of it is what recovery needs."""
         now = time.time()
         self.db.execute("DELETE FROM commands")
         self.db.execute(
@@ -165,11 +153,7 @@ class Store:
         self.db.execute("UPDATE runtime SET heartbeat = ? WHERE id = 1", (time.time(),))
 
     def flush(self) -> None:
-        """Push the write-ahead log into the database file.
-
-        Autocommit means committed data already survives this process dying;
-        a WAL checkpoint is what makes it survive the machine dying, which is
-        the guarantee an explicit ctx.checkpoint() is asking for."""
+        """Push the write-ahead log into the database file."""
         try:
             self.db.execute("PRAGMA wal_checkpoint(PASSIVE)")
         except sqlite3.OperationalError:
@@ -228,13 +212,7 @@ class Store:
     def request_approval(
         self, agent: str, role: str, reason: str, pid: int
     ) -> dict[str, Any]:
-        """Find or create the approval object this request refers to.
-
-        Identity is (agent, role, reason). A grant issued while the runtime was
-        down is honored here, and a pending request orphaned by a restart —
-        pid nulled by a fresh boot, or still carrying this same pid after a
-        crash recovery — is adopted instead of asking the human twice.
-        """
+        """Find or create the approval object this request refers to."""
         row = self.db.execute(
             "SELECT * FROM approvals WHERE agent = ? AND role = ? AND reason = ?"
             " AND (status = 'granted'"
@@ -255,12 +233,7 @@ class Store:
         return self.approval(int(cur.lastrowid))
 
     def approve(self, pid: int, role: str) -> dict[str, Any]:
-        """Grant the pending approval for `pid`, validating the role.
-
-        This writes the grant to the store directly rather than queueing a
-        command: a grant is durable state, which is what lets a human approve
-        while the runtime is down and have the restarted run honor it.
-        """
+        """Grant the pending approval for `pid`, validating the role."""
         row = self.pending_approval_for(pid)
         if row is None:
             raise ValueError(f"pid {pid} has no pending approval")
@@ -425,8 +398,7 @@ class Store:
         }
 
     def model_usage(self) -> dict[str, dict[str, Any]]:
-        """model -> calls, tokens, cost, and mean latency. The p.8 dashboard
-        wants usage per *model*; model_costs() answers per agent."""
+        """model -> calls, tokens, cost, mean latency. model_costs() answers per agent."""
         rows = self.db.execute(
             "SELECT model, COUNT(*) AS calls, SUM(input_tokens) AS input_tokens,"
             " SUM(output_tokens) AS output_tokens, SUM(cost) AS cost,"

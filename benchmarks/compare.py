@@ -1,29 +1,14 @@
-"""AgentOS against the frameworks people actually use, on identical workloads.
+"""AgentOS against LangGraph, CrewAI Flows, AutoGen and Temporal.
 
-  AgentOS  ·  LangGraph  ·  CrewAI Flows  ·  AutoGen  ·  Temporal
+    python benchmarks/compare.py
 
-Run it:   python benchmarks/compare.py
-Any comparator that is not installed is skipped, so this runs with none of
-them present (AgentOS columns only) or all of them.
+Any comparator that is not installed is skipped. What is held equal: one
+billable operation is an INSERT into a shared tally plus 80ms of work, every
+framework persists to SQLite (Temporal's durability lives in its server),
+and the crash is a real OS kill once the tally shows equal progress.
 
-    pip install langgraph langgraph-checkpoint-sqlite crewai \
-                autogen-core temporalio
-
-What is held equal
-------------------
-* The billable operation: one INSERT into a shared tally table plus a fixed
-  80ms of work. A shared table, not any framework's own logs, is what counts
-  executions — nobody grades their own homework.
-* Durability: every framework persists to SQLite. Temporal is the exception
-  by design (its durability lives in a server process), which is itself part
-  of the result.
-* The crash: a real OS kill of a real process, delivered by the parent once
-  the tally shows the same completed work everywhere. Nothing is simulated.
-
-What is NOT held equal, and cannot be: these frameworks aim at different
-things. CrewAI and AutoGen do not claim durable execution, so a recovery
-number for them measures a capability they never advertised. Read the
-recovery column as "what happens if the process dies", not as a scorecard.
+CrewAI and AutoGen do not claim durable execution, so read their recovery
+column as what happens if the process dies, not as a scorecard.
 """
 
 from __future__ import annotations
@@ -81,12 +66,7 @@ HAVE = {
 
 
 def _quiet():
-    """Silence a framework's console UI during a timed run.
-
-    CrewAI renders progress panels to stdout; in a real deployment you would
-    turn that off, and leaving it on would charge terminal rendering to its
-    per-step cost. Errors still surface — only stdout is captured.
-    """
+    """Silence a framework's console UI during a timed run."""
     import contextlib
     import io
     return contextlib.redirect_stdout(io.StringIO())
@@ -117,8 +97,7 @@ def bill(tally: str, i: int, delay: float = 0.0) -> None:
 
 
 class BillingAgent(Agent):
-    """Six billable calls through the sql capability. Each crosses the syscall
-    boundary, so each is journaled — and a journaled call does not re-run."""
+    """Six billable calls through the sql capability, one journaled syscall each."""
 
     async def run(self, ctx):
         for i in range(self.params["calls"]):
@@ -167,8 +146,7 @@ def _kernel(rundir: str, tally: str, recover: bool = False, tick: float = TICK):
 
 
 def _lg_billing(tally: str, per_node: bool):
-    """Two shapes: everything in one node (the obvious way to write it), or
-    one node per call (the decomposition that buys finer checkpoints)."""
+    """Two shapes: everything in one node, or one node per call."""
     from typing import TypedDict
 
     from langgraph.graph import StateGraph, START, END
@@ -238,11 +216,7 @@ def _lg_run(graph, ckpt: str, thread: str, resume: bool) -> None:
 
 
 def _crewai_flow(tally: str, db: str, n: int, delay: float):
-    """A persisted Flow, one method per call — CrewAI's own chaining idiom.
-
-    Methods are generated because @start/@listen wire the chain at class
-    definition time and we need n of them.
-    """
+    """A persisted Flow, one method per call — CrewAI's own chaining idiom."""
     from pydantic import BaseModel
     from crewai.flow.flow import Flow, listen, start
     from crewai.flow.persistence import persist
@@ -300,8 +274,7 @@ def _child(kind: str, rundir: str, tally: str, resume: bool) -> int:
 
 
 def bench_recovery(kind: str) -> dict:
-    """Start the workload, kill it hard once KILL_AFTER calls have landed,
-    resume it, and count how many billable calls ran more than once."""
+    """Run the workload, kill it after KILL_AFTER calls, resume, count repeats."""
     tmp = tempfile.mkdtemp()
     rundir = os.path.join(tmp, "run")
     os.makedirs(rundir, exist_ok=True)
@@ -340,8 +313,9 @@ def bench_recovery(kind: str) -> dict:
 
 
 def bench_recovery_temporal() -> dict:
-    """Temporal keeps durable state in a server, so the process that dies is
-    the worker; a fresh worker picks the workflow up from its event history."""
+    """Temporal's durable state is in the server, so the process that dies is the
+    worker; a fresh one picks the workflow up from its event history.
+    """
     from temporalio.client import Client
     from temporalio.testing import WorkflowEnvironment
     from benchmarks._temporal_defs import TASK_QUEUE
@@ -498,8 +472,9 @@ def load_agentos() -> tuple[float, int, bool]:
 
 
 def _load_library(run_one_app) -> tuple[float, int, bool]:
-    """Shared shape for the library frameworks: N apps as N threads, each
-    owning its own state, and the tally as the only global view."""
+    """N apps as N threads, each owning its state, with the tally as the only
+    global view.
+    """
     import concurrent.futures as cf
 
     tmp = tempfile.mkdtemp()

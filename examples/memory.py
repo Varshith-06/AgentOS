@@ -1,18 +1,10 @@
-"""The memory manager (AgentOS.pdf p.6).
+"""The memory manager: four kinds behind store / retrieve / share / delete.
 
-Four kinds of memory behind one API — store / retrieve / share / delete — and
-the backend is invisible to the agents.
+    python -m agentos.cli run examples/memory.py     # twice
 
-The Researcher keeps a private working draft, shares one finding into shared
-memory (which publishes MemoryUpdated), files facts into longterm memory, and
-bumps a longterm counter. The Writer proves the boundaries: it is woken by the
-event, it CAN read the shared finding, it CANNOT read the Researcher's working
-draft, and it never touches the Researcher directly.
-
-Run it twice:   python -m agentos.cli run examples/memory.py
-                python -m agentos.cli run examples/memory.py
-The longterm counter climbs across runs — that memory belongs to the agent's
-name, not to a pid, and pids do not survive a restart.
+The Writer is woken by MemoryUpdated, can read the shared finding, and
+cannot read the Researcher's working draft. The longterm counter climbs
+across runs: that memory belongs to the agent's name, not to a pid.
 """
 
 from __future__ import annotations

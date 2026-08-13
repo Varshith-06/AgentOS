@@ -1,10 +1,4 @@
-"""Authentication on the control plane.
-
-Almost every test here is a refusal. The routes hand out the ability to spend
-money, stop other people's work, and read what their agents produced, so the
-interesting question is never "does the right token work" — it is whether
-anything gets through without one.
-"""
+"""Authentication on the control plane."""
 
 from __future__ import annotations
 

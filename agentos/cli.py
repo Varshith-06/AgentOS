@@ -1,14 +1,5 @@
 """`agent ps / top / wait / logs / events / approvals / tools / kill / pause /
-resume / approve / grant / revoke`.
-
-The CLI is a client, not part of the runtime. It reads the published process
-table and pushes control commands back — which is exactly what it will do in
-Phase 7 when the transport becomes HTTP instead of SQLite.
-
-`approve`, `grant`, and `revoke` are the exception to the command queue: they
-are durable state, written straight to the store or the permissions file. That
-is what lets a human approve — or revoke a capability from — a runtime that is
-not even running; a live runtime picks the change up within a tick.
+resume / approve / grant / revoke`. A client, not part of the runtime.
 """
 
 from __future__ import annotations
@@ -103,12 +94,7 @@ def cmd_ps(args, store: Store) -> int:
 
 
 def cmd_wait(args, store: Store) -> int:
-    """`agent wait <pid>` (p.8) — block until an agent terminates.
-
-    A polling reader, not a kernel call: the CLI is a client and the process
-    table is the contract between them. Exits 0 if the agent finished, 1 if
-    it failed, 2 if the runtime went away while we were waiting.
-    """
+    """`agent wait <pid>` (p.8) — block until an agent terminates."""
     deadline = time.time() + args.timeout if args.timeout else None
     last = None
     while True:

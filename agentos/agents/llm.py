@@ -1,67 +1,4 @@
-"""One agent class whose *parameters* are its identity.
-
-Everywhere else in AgentOS an agent is a Python class someone wrote ahead of
-time. That is the right shape when the work is known. It is the wrong shape
-when a task arrives as a sentence — "perform an experiment about trees" — and
-the team that should do it has to be invented on the spot.
-
-`LLMAgent` is the answer to that: a role, a goal, a set of tools, and a model
-class. Creating an agent at runtime means constructing those four values,
-which are JSON — so a dynamically-invented agent still satisfies the Phase 1
-rule that an agent must be re-creatable from its spec. It journals, it
-recovers, and it runs in a subprocess like anything else.
-
-The planner is not a special class. It is an `LLMAgent` with `may_spawn`,
-which is the only thing separating a team lead from a worker here.
-
-Authority
----------
-An agent may delegate only what it holds (`ctx.spawn(..., grant=...)`, checked
-in the kernel). So the capability set handed to the root agent is the ceiling
-for the entire task tree, however many layers of agents it invents. Give the
-planner `["http"]` and nothing it creates, at any depth, can reach the shell.
-
-Coordination
-------------
-Agents never call each other; they publish events and the runtime decides who
-wakes. That rule does not relax just because the agents were invented at
-runtime — but somebody has to choose the event names, and no programmer is
-present to do it. So the **parent chooses**: a spawn carries the events that
-child may publish and the ones it will wait for, and the kernel holds it to
-them. The planner is naming both sides of every match it creates, which is
-what keeps a publisher and a waiter from drifting apart. A child that
-publishes a name it was not given is refused, rather than announcing into a
-void that nobody is listening to.
-
-The root planner is unrestricted: it is where a task's vocabulary comes from.
-
-Protocol
---------
-The model is asked to reply with one JSON object per turn:
-
-    {"action": "tool",  "capability": "http", "op": "get", "params": {...}}
-    {"action": "spawn", "role": "...", "goal": "...", "tools": [...],
-                        "publishes": [...], "subscribes": [...],
-                        "model": "...", "priority": "High", "retries": 1}
-    {"action": "publish", "event": "...", "payload": {...}}
-    {"action": "wait",  "events": [...]}      (or bare, for your own agents)
-    {"action": "remember", "key": "...", "value": ..., "kind": "shared"}
-    {"action": "recall", "key": "..."}        (or {"query": "..."} to search)
-    {"action": "ask_human", "role": "...", "reason": "..."}
-    {"action": "done",  "result": ...}
-
-Memory is how invented agents hand each other real state: an event payload
-fits a notification, not a dataset. `remember` with kind "shared" is readable
-by the whole team; "longterm" survives into future tasks under this role's
-name, and text remembered there comes back from `recall` with a query rather
-than an exact key. `ask_human` blocks on the kernel's durable approval object — the same
-one `agent approve` grants — so an invented agent can stop for a person
-exactly the way a hand-written one always could.
-
-Anything unparseable is handed back to the model as an observation rather than
-raising: a model that returns prose gets a chance to correct itself, and the
-run fails only when it runs out of steps.
-"""
+"""One agent class whose *parameters* are its identity."""
 
 from __future__ import annotations
 
@@ -131,12 +68,12 @@ class ActionError(Exception):
 
 class LLMAgent(Agent):
     """params: role, goal, tools, model, may_spawn, max_steps, max_children,
-    publishes, subscribes, retries, context."""
+    publishes, subscribes, retries, context.
+    """
 
     @property
     def retries(self) -> int | None:
-        """The kernel reads restart budgets off the agent object (p.4); for a
-        dynamic agent the budget arrives in params like everything else."""
+        """The kernel reads restart budgets off the agent; here it arrives in params."""
         value = self.params.get("retries")
         return value if isinstance(value, int) and value >= 0 else None
 

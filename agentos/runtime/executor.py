@@ -1,14 +1,4 @@
-"""Context: the only handle an agent has on the world.
-
-An agent runs in its own OS process. It cannot see the kernel, the process
-table, or another agent — the entire surface available to it is the Context
-class below, and every method on it does the same thing: put a
-JSON-serializable Syscall on a queue and wait for a Reply.
-
-That the queue's far end is a socket to another process is invisible from
-here, which is the point. runtime/child.py constructs this same class inside
-the agent's process; runtime/subproc.py drives the other side.
-"""
+"""Context: the only handle an agent has on the world."""
 
 from __future__ import annotations
 
@@ -24,21 +14,17 @@ class KernelError(Exception):
 
 
 class Memory:
-    """The p.6 memory API: four kinds behind four verbs, backend invisible.
-
-    Kinds: working (private, dies with the process), shared (cross-agent,
-    through the kernel only), longterm (keyed by agent name — it survives
-    restarts, and text stored in it is searchable by meaning), episodic
-    (your own history; read-only).
-    """
+    """The p.6 memory API: four kinds behind four verbs, backend invisible."""
 
     def __init__(self, ctx: "Context") -> None:
         self._ctx = ctx
 
     async def store(self, key: str, value: Any, kind: str = "working") -> None:
-        """Store a JSON-serializable value. Storing to `shared` publishes a
-        MemoryUpdated event; text stored to `longterm` is embedded, so a later
-        retrieve(kind="longterm", query=...) can find it."""
+        """Store a JSON-serializable value.
+
+        `shared` publishes MemoryUpdated; text stored to `longterm` is embedded,
+        so a later retrieve(kind="longterm", query=...) can find it.
+        """
         await self._ctx._syscall("memory", op="store", key=key, value=value, kind=kind)
 
     async def retrieve(
@@ -49,18 +35,16 @@ class Memory:
         top: int = 3,
         limit: int = 20,
     ) -> Any:
-        """Fetch a value (None if absent or not yours to read). With no key:
-        every key you can read, as a dict. kind="longterm" with query=... ranks
-        your text notes by similarity; kind="episodic" returns your own recent
-        history."""
+        """Fetch a value (None if absent or not yours to read). With no key:"""
         return await self._ctx._syscall(
             "memory", op="retrieve", key=key, kind=kind, query=query, top=top, limit=limit
         )
 
     async def share(self, key: str, with_agent: Any = "*") -> None:
-        """Promote one of your working keys into shared memory (or widen the
-        access list of a shared key you created). `with_agent` is a pid, an
-        agent name, or "*" for everyone."""
+        """Promote a working key into shared memory, or widen a shared key's access.
+
+        `with_agent` is a pid, an agent name, or "*" for everyone.
+        """
         await self._ctx._syscall("memory", op="share", key=key, with_agent=with_agent)
 
     async def delete(self, key: str, kind: str = "working") -> bool:
@@ -68,12 +52,7 @@ class Memory:
 
 
 class Context:
-    """The only handle an agent has on the world.
-
-    Deliberately tiny. There is no `ctx.kernel`, no `ctx.processes`, and no way
-    to reach another agent — an agent cannot even name one except by PID, and a
-    PID is just an integer it can pass back to the kernel.
-    """
+    """The only handle an agent has on the world."""
 
     def __init__(self, proc: AgentProcess, mailbox: asyncio.Queue) -> None:
         self._proc = proc
@@ -113,20 +92,7 @@ class Context:
     ) -> int:
         """Create a child agent. Returns its PID immediately; does not block.
 
-        `grant` delegates capabilities to the child, and may only name things
-        this agent already holds — the kernel refuses anything wider. Leaving
-        it None keeps the permission matrix in charge, which is what a named,
-        pre-declared agent wants. Pass it when you are creating an agent whose
-        identity is its parameters rather than its class, so its authority
-        travels with the process instead of the name.
-
-        `publishes`/`subscribes` wire the child into the event bus: the names
-        it may announce, and the ones it will wait for. Naming both sides here
-        is what stops a publisher and a waiter drifting apart — events match
-        by exact string, and two agents that disagree about one do not fail,
-        they hang. A child that publishes outside what you gave it is refused.
-        Leave them None for an agent that decides its own events, which is
-        what a hand-written one does.
+        `grant` may name any subset of your own capabilities, and never more.
         """
         from ..agents.base import spec_of
 
@@ -148,13 +114,7 @@ class Context:
         await self._syscall("log", message=message)
 
     async def checkpoint(self, label: str | None = None) -> int:
-        """Take an explicit checkpoint (p.9's kernel.checkpoint()).
-
-        Every completed syscall is already a checkpoint, so this is never
-        required for recovery. It is here for the agent that wants to mark a
-        durable point by name — the state becomes Checkpointing while it
-        happens, which is what makes that lifecycle state observable.
-        """
+        """Take an explicit checkpoint (p.9's kernel.checkpoint())."""
         return await self._syscall("checkpoint", label=label)
 
     async def publish(self, event_type: str, **payload: Any) -> None:
@@ -182,15 +142,7 @@ class Context:
         system: str | None = None,
         max_tokens: int = 1024,
     ) -> dict[str, Any]:
-        """Ask for a capability class ('fast', 'reasoning'), never a model name.
-
-            reply = await ctx.request_model("fast", prompt="Summarize: ...")
-            reply["text"], reply["model"], reply["cost"]
-
-        The kernel routes to the first available candidate in the models
-        config, falls to the next on failure, and records tokens and cost
-        against this agent (see `agent ps`). State: Waiting.
-        """
+        """Ask for a capability class ('fast', 'reasoning'), never a model name."""
         result = await self._syscall(
             "request_model", need=need, prompt=prompt, system=system, max_tokens=max_tokens
         )
@@ -200,18 +152,7 @@ class Context:
         return model["value"]
 
     async def request_tool(self, capability: str, op: str, **params: Any) -> Any:
-        """Ask the kernel to run a tool operation. State becomes Waiting.
-
-        Agents never import tool libraries. They request a capability by name
-        ('Need: sql') and the kernel dispatches to the driver that owns the
-        authentication, rate limiting, retries, and error handling:
-
-            rows = await ctx.request_tool("sql", "query", query="SELECT ...")
-
-        The call is refused before dispatch unless this agent's name holds the
-        capability in the permission matrix — and the denial is audit-logged.
-        Tool failures arrive as KernelError, never as a raw stack trace.
-        """
+        """Ask the kernel to run a tool operation. State becomes Waiting."""
         result = await self._syscall(
             "request_tool", capability=capability, op=op, params=params
         )
@@ -221,17 +162,7 @@ class Context:
         return tool["value"]
 
     async def request_approval(self, role: str, reason: str) -> dict[str, Any]:
-        """Block until a human with `role` approves. State becomes Blocked.
-
-        The human is a node in the dependency graph — identical in kind to an
-        agent, an event, or a timer. Someone grants it from another terminal:
-
-            agent approve <pid> --as "<role>"
-
-        Returns {"role": ..., "reason": ..., "by": ...}. The approval is a
-        durable kernel object: it survives a runtime restart, and a grant
-        issued while the runtime is down is honored when it comes back.
-        """
+        """Block until a human with `role` approves. State becomes Blocked."""
         result = await self._syscall("request_approval", role=role, reason=reason)
         return result["approval"]
 
@@ -241,15 +172,7 @@ class Context:
         events: list[str] | None = None,
         timer: float | None = None,
     ) -> dict[str, Any]:
-        """Block until *every* dependency resolves, then wake automatically.
-
-            await ctx.wait_all(agents=[market, legal], events=["HumanApproved"])
-
-        This is the p.5 dependency graph as an API: the agent states what it
-        needs, and the scheduler — not the application — decides when it runs
-        again. Returns {"agents": {pid: result}, "events": {type: payload},
-        "timer": True}.
-        """
+        """Block until *every* dependency resolves, then wake automatically."""
         result = await self._syscall(
             "wait_all",
             agents=list(agents or []),

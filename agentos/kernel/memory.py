@@ -1,30 +1,4 @@
-"""The memory manager (AgentOS.pdf p.6).
-
-Four kinds of memory behind four verbs — store, retrieve, share, delete — and
-the backend stays invisible to the agent. Today it is SQLite; swapping in
-Redis or a real vector database changes this file and nothing else.
-
-The kinds, and who a row belongs to:
-
-  working   private to one process; freed when it exits
-  shared    one global namespace; readable by whoever the owner shared with
-  longterm  keyed by agent *name*, so it survives restarts and new pids; text
-            values are embedded on the way in, so one kind answers both
-            `key=...` and `query=...`
-  episodic  the agent's own execution history; the kernel writes it, agents
-            may only read it
-
-Two earlier kinds were names without mechanisms. `scratchpad` was working
-memory spelled differently — same owner, same lifetime, same table, and no
-code anywhere branched on it. `semantic` was longterm plus a vector column,
-which is a way of *retrieving* memory rather than a kind of it; the split also
-left a hole, since an LLM agent could recall by query but was never offered
-the kind that answered, so its own longterm notes were unsearchable.
-
-The embedding is a deterministic hashed bag-of-words — deliberately humble,
-like the browser driver. A real embedding model can replace _embed() without
-any agent changing, because agents only ever say `query=...`.
-"""
+"""The memory manager (AgentOS.pdf p.6)."""
 
 from __future__ import annotations
 
@@ -74,8 +48,7 @@ class MemoryManager:
         self.db = store.db
 
     def _owner(self, proc: Any, kind: str) -> str:
-        """Ephemeral memory dies with the pid; persistent memory follows the
-        agent's name across restarts, because pids do not survive them."""
+        """Ephemeral memory dies with the pid; persistent memory follows the name."""
         return proc.name if kind in PERSISTENT else str(proc.pid)
 
     @staticmethod
@@ -172,8 +145,7 @@ class MemoryManager:
         return json.loads(row["value"]) if row else None
 
     def share(self, proc: Any, key: str, with_agent: Any = "*") -> None:
-        """Grant access: promote one of your working keys into shared memory,
-        or widen the access list of a shared key you created."""
+        """Promote a working key into shared memory, or widen a shared key's access."""
         target = str(with_agent)
         existing = self._shared_row(key)
         if existing is not None:

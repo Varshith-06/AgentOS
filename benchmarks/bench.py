@@ -1,20 +1,4 @@
-"""The evaluation (Phase 8, p.17-18): numbers, not assertions.
-
-Measures the three claims from the design doc, offline and deterministically:
-
-  1. RECOVERY   a hard kill mid-run costs the work since the last completed
-                syscall and nothing more — count re-executed steps (target: 0)
-  2. APPROVAL   human-in-the-loop latency: approve() -> agent finished
-  3. LOAD       multiple applications on one daemon: throughput, and a cost
-                ledger that is exact to the token
-
-Run it:   python benchmarks/bench.py
-
-The harness measures AgentOS against its own claims; a LangGraph or CrewAI
-comparator can be slotted in as another column by anyone with those installed
-— the workloads here are deliberately framework-shaped (step pipelines, an
-approval gate, N clients x M agents), not AgentOS-shaped.
-"""
+"""The evaluation: recovery after a hard kill, approval latency, cost under load."""
 
 from __future__ import annotations
 
@@ -41,8 +25,7 @@ MOCK = {"classes": {"fast": [
 
 
 class StepWorker(Agent):
-    """N slow steps; each step is counted in longterm memory, so a step that
-    ran twice is arithmetically visible."""
+    """N slow steps, each counted in longterm memory, so a repeat is visible."""
 
     async def run(self, ctx):
         tag, steps = self.params["tag"], self.params["steps"]

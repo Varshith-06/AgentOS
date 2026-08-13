@@ -1,28 +1,11 @@
-"""Crash recovery (AgentOS.pdf p.7-8) — the demo that sells the project.
+"""Crash recovery: three workers, five slow steps, every step journaled.
 
-Three workers each grind through five slow steps. Every step is real work
-with a visible side effect: a line appended to .agentos/crash_log.txt through
-the python tool driver. The kernel journals every syscall reply, so every
-completed step is a checkpoint.
-
-The demo:
-
-    python -m agentos.cli run examples/crash.py     # note the os_pid it prints
-    # mid-run, from another terminal, kill it dead:
-    #   taskkill /F /PID <os_pid>        (Windows)
-    #   kill -9 <os_pid>                 (elsewhere)
+    python -m agentos.cli run examples/crash.py   # note the os_pid
+    kill -9 <os_pid>                              # or taskkill /F /PID
     python -m agentos.cli recover
 
-Recovery re-creates each worker from its spec and replays its journal:
-completed steps return their recorded results instantly — the tool does NOT
-run again — and the worker goes live exactly where it died. When it is done,
-count the lines:
-
-    every (worker, step) pair appears exactly once.
-
-A hard kill cost the work since the last completed syscall, and nothing more.
-Watch it happen: `python -m agentos.cli top` during either run, and
-`agent logs | grep recover` afterwards.
+Every (worker, step) pair appears in .agentos/crash_log.txt exactly once:
+replayed steps return their recorded results instead of running again.
 """
 
 from __future__ import annotations

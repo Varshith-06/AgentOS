@@ -1,16 +1,4 @@
-"""The event bus (AgentOS.pdf p.4-5).
-
-Agents never invoke other agents. They publish an event, and the runtime decides
-who wakes. That is what produces loosely coupled agent systems: the publisher
-does not know its subscribers exist, and adding a new subscriber requires
-editing nothing.
-
-Delivery is buffered per subscriber, not broadcast-and-forget. A subscriber that
-is busy when an event fires still receives it, because the event lands in that
-subscriber's queue and waits. Without the buffer, "did I subscribe before you
-published?" becomes a race, and races in a scheduler are the bugs you never
-reproduce.
-"""
+"""The event bus (AgentOS.pdf p.4-5)."""
 
 from __future__ import annotations
 

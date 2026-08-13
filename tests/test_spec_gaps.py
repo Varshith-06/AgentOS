@@ -1,9 +1,4 @@
-"""The design-doc items that were specified but unimplemented until now.
-
-Each test here names the page of AgentOS.pdf it is defending, because that is
-the only reason these features exist. An audit found them missing; a test is
-what stops them going missing again.
-"""
+"""The design-doc items that were specified but unimplemented until now."""
 
 from __future__ import annotations
 
@@ -54,8 +49,7 @@ class CheckpointTest(Base):
         self.assertIn("checkpoint", ops)
 
     async def test_checkpointing_state_is_actually_entered(self):
-        """p.3 lists Checkpointing as a lifecycle state. Before this it was
-        declared in the enum and never reached by any code path."""
+        """Declared in the enum and, before this, reached by no code path."""
         k = self.kernel()
         seen: list[str] = []
         original = k.table.on_transition
@@ -77,9 +71,7 @@ class Idle(Agent):
 
 
 class Napper(Agent):
-    """Module level, like every agent must be: a child process re-creates it
-    from its spec by importing it, and a class defined inside a test method
-    has no importable name."""
+    """Module level: a child process re-creates an agent by importing it."""
 
     async def run(self, ctx):
         await ctx.sleep(self.params.get("nap", 60))
@@ -114,13 +106,7 @@ class ProcessCardTest(Base):
 
 
 class FlakyAgent(Agent):
-    """Fails the first N times it is started, then succeeds.
-
-    The attempt counter is a file rather than class state, because a restart
-    is a brand-new OS process: anything held in memory died with the attempt
-    that failed. That is the point of the retry — and the reason a counter
-    has to live somewhere both processes can see.
-    """
+    """Fails the first N times it is started, then succeeds."""
 
     async def run(self, ctx):
         counter = Path(self.params["counter"])

@@ -1,9 +1,4 @@
-"""Application #1 — a thin client (Phase 7, p.8).
-
-This file owns no runtime. It connects to the daemon, hands over an agent as
-data, and waits. Everything the agent needs — scheduling, model routing, cost
-accounting, journaling — belongs to the daemon, and is shared with every
-other application connected to it.
+"""Application #1: a thin client that owns no runtime.
 
     python -m agentos.cli daemon        # terminal 1, once
     python examples/app_research.py     # terminal 2 (this file)

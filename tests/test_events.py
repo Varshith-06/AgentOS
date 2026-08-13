@@ -157,9 +157,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(k.table.get(pid).result, "buffered: vectors")
 
     async def test_each_publish_is_delivered_exactly_once(self):
-        """A subscriber alternating between waiting (dependency path) and
-        busy (buffer path) must see every event exactly once — a publish that
-        resolves a wait must also consume the buffered copy it just made."""
+        """A publish that resolves a wait must also consume the copy it just buffered."""
         # Module-level: a child process rebuilds an agent by importing it.
 
         k = self.kernel()

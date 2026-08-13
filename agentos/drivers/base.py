@@ -1,16 +1,4 @@
-"""Tool drivers behave like device drivers (AgentOS.pdf p.6-7).
-
-An agent never imports a tool library; it requests a capability by name and
-the kernel dispatches to the driver that owns it. "Owns" is the operative word:
-timeouts, rate limiting, retries, caching, logging, and error handling live
-here, once, instead of being reimplemented inside every agent (p.7).
-
-A driver exposes its operations as `op_<name>` coroutines. execute() wraps
-every call in the shared discipline: serve from cache if allowed, respect the
-rate limit, bound the runtime, retry Transient failures, and convert anything
-unexpected into a ToolError the agent can see and name — a driver bug must
-never take the kernel down.
-"""
+"""Tool drivers behave like device drivers (AgentOS.pdf p.6-7)."""
 
 from __future__ import annotations
 

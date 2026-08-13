@@ -65,10 +65,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         return Kernel(store=self.store, tick=0.01, **kw)
 
     async def _until(self, predicate, timeout=LIMIT):
-        """Wait for a condition instead of a clock: on a loaded machine (the
-        parallel runner puts thirteen files' worth of subprocesses on every
-        core) a fixed sleep asserts about the scheduler's speed, not its
-        behaviour."""
+        """Wait for a condition, not a clock: a fixed sleep asserts about speed."""
         async def poll():
             while not predicate():
                 await asyncio.sleep(0.01)
@@ -219,12 +216,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
             Sleeper(callback=lambda: None)
 
     async def test_agent_context_exposes_no_kernel_handle(self):
-        """An agent must not be able to reach the kernel or another agent.
-
-        This deliberately pins the whole surface rather than spot-checking it:
-        every future phase adds syscalls, and each one should have to justify
-        itself by failing this test on the way in.
-        """
+        """An agent must not be able to reach the kernel or another agent."""
         from agentos.runtime.executor import Context
 
         surface = {a for a in dir(Context) if not a.startswith("_")}

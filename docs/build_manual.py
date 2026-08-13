@@ -1,14 +1,4 @@
-"""Builds AgentOS.pdf — the project's reference manual.
-
-    pip install reportlab
-    python docs/build_manual.py
-
-The manual is written for someone who knows roughly what a process and a
-scheduler are, and nothing at all about this project. It explains every
-component, why it exists, how it behaves at the edges, and what it does not
-do. Regenerate it whenever the system changes; the content lives in
-docs/manual.py so this file stays about layout.
-"""
+"""Builds AgentOS.pdf — the project's reference manual."""
 
 from __future__ import annotations
 

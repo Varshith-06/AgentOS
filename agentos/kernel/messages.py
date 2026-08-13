@@ -1,14 +1,4 @@
-"""The agent <-> kernel message boundary.
-
-This module is the whole reason the hybrid process model works. Agents never
-hold a reference to the Kernel, the process table, or each other. Every
-interaction is a Syscall message that crosses a queue and comes back as a
-Reply. Both are required to be JSON-serializable, which is checked at runtime.
-
-That check is not ceremony. It is the invariant that lets Phase 7 move an agent
-into a real OS subprocess without touching a line of agent code: if a syscall
-payload can survive json.dumps, it can survive a pipe.
-"""
+"""The agent <-> kernel message boundary."""
 
 from __future__ import annotations
 

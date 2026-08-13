@@ -1,31 +1,4 @@
-"""Model routing (AgentOS.pdf p.7).
-
-Agents request a capability class — "Need: fast", "Need: reasoning" — and
-never a model name. The routing table lives in `.agentos/models.json`:
-
-    {
-      "classes": {
-        "fast": [
-          {"provider": "anthropic", "model": "claude-haiku-4-5",
-           "cost_per_mtok": [1.00, 5.00], "context_window": 200000},
-          {"provider": "openai", "base_url": "http://localhost:11434/v1",
-           "model": "llama3.2", "api_key_env": null},
-          {"provider": "mock", "model": "mock-fast"}
-        ]
-      }
-    }
-
-Candidates are tried in order. One is skipped if it is unavailable (its API
-key is not set) or the prompt exceeds its context window; one that fails at
-call time (endpoint down, 5xx) falls through to the next. That is what makes
-model choice a runtime configuration concern: set or unset a key, and the
-same agent code lands on a different model.
-
-Providers: `anthropic` (the official SDK when installed, stdlib HTTP
-otherwise), `openai` (any OpenAI-compatible endpoint — OpenAI, Ollama, vLLM,
-LM Studio), `litellm` (any model LiteLLM knows, if installed), and `mock`
-(offline and deterministic, so the fake-agent examples keep working forever).
-"""
+"""Model routing (AgentOS.pdf p.7)."""
 
 from __future__ import annotations
 
@@ -181,23 +154,7 @@ class ModelManager:
         )
 
     def _rank(self, candidates: list[dict], estimated: int) -> list[dict]:
-        """Order the candidates by the p.7 selection criteria.
-
-        The default stays "the order a human wrote them in", because that is
-        the most honest expression of a preference and the config is where a
-        preference belongs. Setting `prefer` on the class asks the runtime to
-        decide instead:
-
-            "reasoning": {"prefer": "cheapest", "candidates": [...]}
-
-        cheapest  — lowest projected cost for this prompt, using the same
-                    cost_per_mtok rates the ledger bills at
-        fastest   — lowest declared latency
-        best      — highest declared quality
-
-        Candidates that cannot serve the prompt at all sort last rather than
-        being dropped, so the failure message still names them.
-        """
+        """Order the candidates by the p.7 selection criteria."""
         if not isinstance(candidates, dict):
             prefer, items = None, list(candidates)
         else:
@@ -380,10 +337,7 @@ class ModelManager:
 
 
 def _estimate_tokens(text: str) -> int:
-    """A rough pre-flight size check for context-window routing only.
-
-    Never used for billing: real token counts come back from the provider.
-    """
+    """A rough pre-flight size check for context-window routing only."""
     return max(len(text) // 4, len(text.split()))
 
 

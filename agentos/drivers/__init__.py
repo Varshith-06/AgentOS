@@ -1,7 +1,4 @@
-"""The driver registry: capability name -> the driver class that owns it.
-
-Adding a driver is registering it here; no agent and no kernel code changes.
-"""
+"""The driver registry: capability name -> the driver class that owns it."""
 
 from __future__ import annotations
 

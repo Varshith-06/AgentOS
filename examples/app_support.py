@@ -1,9 +1,4 @@
-"""Application #2 — another thin client, same shared runtime (Phase 7, p.8).
-
-Run alongside app_research.py: two independent applications, two terminals,
-one process table, one cost ledger. Neither application knows the other
-exists — but `agent ps` sees both, which is the p.8 claim.
-"""
+"""Application #2 — another thin client, same shared runtime (Phase 7, p.8)."""
 
 from __future__ import annotations
 

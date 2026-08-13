@@ -1,24 +1,4 @@
-"""Capability-based tool access (AgentOS.pdf p.7).
-
-The permission matrix maps an agent's *name* to the capabilities it may
-request. Deny is the default: an agent holds nothing it was not granted, and
-the kernel checks the matrix before dispatch — the application does not get a
-vote.
-
-The matrix lives in a JSON file (`.agentos/permissions.json` by default) so
-that granting or revoking is a config change, not a code change. The kernel
-re-reads the file when it changes, which means revocation applies to a running
-system: the next request_tool() after the edit is refused.
-
-    {
-      "Finance": ["sql"],
-      "Coder":   ["filesystem", "python"],
-      "*":       []
-    }
-
-`"*"` as an agent name grants to every agent; `"*"` as a capability grants
-every capability. Both exist for tests and toy runs, not for production humility.
-"""
+"""Capability-based tool access (AgentOS.pdf p.7)."""
 
 from __future__ import annotations
 
@@ -67,16 +47,7 @@ class Permissions:
         return cls(path=default_path)
 
     def capabilities(self, agent: str, pid: int | None = None) -> set[str]:
-        """Everything this process may reach.
-
-        A per-PID grant is the whole answer when one exists: it was delegated
-        deliberately by a parent, and the name matrix must not widen it. That
-        is what makes delegation an *attenuation* — a task's root grant is the
-        ceiling for every agent underneath it, however the tree grows.
-
-        Without a PID grant this falls back to the p.7 matrix: the agent's own
-        name plus whatever "*" grants everyone.
-        """
+        """Everything this process may reach."""
         if pid is not None and pid in self.pid_grants:
             return set(self.pid_grants[pid])
         return set(self.grants.get(agent, ())) | set(self.grants.get("*", ()))

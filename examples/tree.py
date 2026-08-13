@@ -1,18 +1,11 @@
-"""The agent tree from AgentOS.pdf p.8, with no LLM anywhere in sight.
+"""The agent tree: a planner, three researchers, a writer, and no LLM at all.
 
-    Planner
-    ├── Research A
-    ├── Research B
-    ├── Research C
-    └── Documentation
+    python -m agentos.cli run examples/tree.py --slots 2
+    python -m agentos.cli top            # second terminal
+    python -m agentos.cli kill 3         # take out a child
 
-Every agent here just sleeps. That is the point: the scheduler, the process
-table, and the lifecycle are verifiable without spending a token or needing a
-key. If the kernel is wrong, it is wrong deterministically.
-
-Run it:      python -m agentos.cli run examples/tree.py --slots 2
-Watch it:    python -m agentos.cli top          (in a second terminal)
-Kill a kid:  python -m agentos.cli kill 3       (in a second terminal)
+Every agent just sleeps, so the scheduler and the lifecycle are verifiable
+without a key: if the kernel is wrong, it is wrong deterministically.
 """
 
 from __future__ import annotations

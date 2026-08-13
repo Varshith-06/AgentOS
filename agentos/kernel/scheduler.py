@@ -1,9 +1,4 @@
-"""Scheduling policy: which READY agent gets the next execution slot (p.4).
-
-Scheduling is based on agent state, not CPU instructions. A policy sees the whole
-ready queue plus a view of the dependency graph, so it can reason about what
-running an agent would *unblock* — something a CPU scheduler never gets to know.
-"""
+"""Scheduling policy: which READY agent gets the next execution slot (p.4)."""
 
 from __future__ import annotations
 
@@ -41,11 +36,7 @@ class FIFO:
 
 
 class Priority:
-    """High before Normal before Low; FIFO within a band.
-
-    Starvation is possible by design — that is what a priority scheduler is —
-    so the ageing guard below is what keeps a Low agent from waiting forever.
-    """
+    """High before Normal before Low; FIFO within a band."""
 
     name = "priority"
     # after this many picks, the oldest waiting process wins regardless of band
@@ -73,13 +64,7 @@ class Priority:
 
 
 class DependencyAware:
-    """Run whoever unblocks the most work (p.4).
-
-    This is the policy a CPU scheduler cannot have. The kernel knows that six
-    agents are blocked waiting on pid 12, so pid 12 runs before an agent nobody
-    is waiting on, regardless of submission order. Ties fall back to priority,
-    then to FIFO.
-    """
+    """Run whoever unblocks the most work (p.4)."""
 
     name = "dependency"
 
