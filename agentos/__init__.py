@@ -33,4 +33,4 @@ __all__ = [
     "ToolError",
     "Transient",
 ]
-__version__ = "1.0.0"  # Phase 8: all eight phases of the design doc implemented
+__version__ = "1.0.0"

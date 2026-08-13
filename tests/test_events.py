@@ -60,7 +60,7 @@ class BusySubscriber(Agent):
 
     async def run(self, ctx):
         await ctx.subscribe("ResearchCompleted")
-        await ctx.sleep(0.15)  # the event fires while we are asleep
+        await ctx.sleep(0.15)
         event = await ctx.wait_event("ResearchCompleted")
         return f"buffered: {event['topic']}"
 
@@ -133,7 +133,6 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
     def kernel(self, **kw):
         return Kernel(store=self.store, tick=0.01, **kw)
 
-    # -- the event bus (p.5) ---------------------------------------------
     async def test_publisher_wakes_subscribers_it_never_names(self):
         k = self.kernel()
         results = await asyncio.wait_for(
@@ -149,12 +148,10 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         k = self.kernel()
         pid = k.spawn(BusySubscriber())
         run = asyncio.create_task(k.run())
-        # Subscribed-then-sleeping is the state this test needs the publish to
-        # land in; wait for it rather than trusting two subprocess startups to
-        # order themselves on a loaded machine.
+        # Wait for Sleeping rather than trusting two process startups to order.
         while k.table.get(pid).state is not AgentState.SLEEPING:
             await asyncio.sleep(0.01)
-        k.spawn(Publisher(delay=0.02))  # fires long before the subscriber waits
+        k.spawn(Publisher(delay=0.02))
         await asyncio.wait_for(run, timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
         self.assertEqual(k.table.get(pid).result, "buffered: vectors")
@@ -163,9 +160,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         """A subscriber alternating between waiting (dependency path) and
         busy (buffer path) must see every event exactly once — a publish that
         resolves a wait must also consume the buffered copy it just made."""
-        # Stream and TickCounter are module-level: a child process rebuilds an
-        # agent by importing it, so a class defined in here would have no name
-        # it could be found by.
+        # Module-level: a child process rebuilds an agent by importing it.
 
         k = self.kernel()
         counter = k.spawn(TickCounter())
@@ -181,23 +176,18 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ResearchCompleted", types)
         self.assertIn("AgentFinished", types)
 
-    # -- the dependency graph (p.5) --------------------------------------
     async def test_wait_all_resolves_agents_events_and_timer_together(self):
         k = self.kernel()
-        # The publisher's delay has to outlast a child process starting up,
-        # or it announces before the waiter is listening and the event is
-        # simply missed. Generous on purpose: this test is about the three
-        # dependency kinds resolving together, not about timing.
+        # The delay has to outlast a child process starting up, or the event is
+        # published before the waiter is listening and simply missed.
         pub = k.spawn(Publisher(delay=STARTUP))
         waiter = k.spawn(
             Waiter(agents=[pub], events=["ResearchCompleted"], timer=0.05)
         )
         await asyncio.wait_for(k.run(), timeout=LIMIT)
         result = k.table.get(waiter).result
-        # The waiter itself saw an int pid — Context normalises that. What we
-        # are reading here is its *result*, which travelled back from another
-        # process as JSON, and JSON object keys are strings. Both facts are
-        # real; this is the far side of the boundary.
+        # This result travelled back from another process as JSON, and JSON object
+        # keys are strings. Context normalises pids on the near side only.
         self.assertEqual(result["agents"], {str(pub): "published"})
         self.assertEqual(result["events"]["ResearchCompleted"]["topic"], "vectors")
         self.assertTrue(result["timer"])
@@ -207,7 +197,6 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         slow = k.spawn(Publisher(delay=STARTUP))
         waiter = k.spawn(Waiter(agents=[slow], events=["ResearchCompleted"]))
         await asyncio.wait_for(k.run(), timeout=LIMIT)
-        # It cannot have finished before the thing it depended on.
         self.assertGreaterEqual(
             k.table.get(waiter).ended_at, k.table.get(slow).ended_at
         )
@@ -219,7 +208,6 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(k.table.get(pid).state, AgentState.FAILED)
         self.assertIn("at least one dependency", k.table.get(pid).exit_reason)
 
-    # -- deadlock --------------------------------------------------------
     async def test_wait_cycle_is_refused_not_hung(self):
         k = self.kernel()
         await asyncio.wait_for(k.run_until_done(Circular()), timeout=LIMIT)
@@ -234,7 +222,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
     async def test_unsatisfiable_event_wait_is_detected_not_hung(self):
         k = self.kernel()
         pid = k.spawn(Hopeful())
-        await asyncio.wait_for(k.run(), timeout=LIMIT)  # would hang forever if broken
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertIs(proc.state, AgentState.FAILED)
         self.assertIn("deadlock", proc.exit_reason)
@@ -243,17 +231,15 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         """An agent asleep can still publish. Do not cry deadlock on it."""
         k = self.kernel()
         waiter = k.spawn(Waiter(events=["ResearchCompleted"]))
-        k.spawn(Publisher(delay=STARTUP))  # everyone is Waiting/Sleeping meanwhile
+        k.spawn(Publisher(delay=STARTUP))
         await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIs(k.table.get(waiter).state, AgentState.FINISHED)
 
-    # -- p.5: agents never directly invoke other agents -------------------
     async def test_direct_agent_invocation_is_blocked(self):
         k = self.kernel()
         result = await asyncio.wait_for(k.run_until_done(Rude()), timeout=LIMIT)
         self.assertIn("Agents are processes, not functions", result["blocked"])
 
-    # -- scheduling policies (p.4) ---------------------------------------
     def _ready(self, *procs):
         return deque(procs)
 
@@ -275,7 +261,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
             ready.append(high)
             self.assertIs(policy.pick(ready, SchedulerView()), high)
         ready.append(table.create("H", {}, priority="High"))
-        self.assertIs(policy.pick(ready, SchedulerView()), low)  # its turn at last
+        self.assertIs(policy.pick(ready, SchedulerView()), low)
 
     def test_dependency_aware_runs_whoever_unblocks_the_most(self):
         table = ProcessTable()
@@ -283,7 +269,7 @@ class EventTest(unittest.IsolatedAsyncioTestCase):
         blocking = table.create("Blocking", {})
         view = SchedulerView(dependents={blocking.pid: 3})
         picked = DependencyAware().pick(self._ready(lonely, blocking), view)
-        self.assertIs(picked, blocking)  # despite being submitted second
+        self.assertIs(picked, blocking)
 
     async def test_priority_policy_end_to_end(self):
         k = self.kernel(policy="priority", slots=1)

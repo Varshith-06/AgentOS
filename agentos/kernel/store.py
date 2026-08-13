@@ -130,16 +130,11 @@ class Store:
         self.db = sqlite3.connect(self.path, isolation_level=None, timeout=5.0)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")  # concurrent CLI reads
-        # WAL + NORMAL fsyncs at checkpoints instead of on every commit. What
-        # that gives up is the last few transactions if the *machine* loses
-        # power; what it keeps is everything this runtime actually claims —
-        # a killed process cannot lose committed data, because the WAL is
-        # already in the OS's hands. Autocommit means one commit per write,
-        # so the difference is large: ~273ms of fsync per 400 writes, gone.
+        # WAL + NORMAL fsyncs at checkpoints rather than per commit: a killed
+        # process still cannot lose committed data, and 400 writes save ~273ms.
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.executescript(SCHEMA)
 
-    # -- runtime identity ------------------------------------------------
     def register_runtime(self, policy: str, slots: int) -> None:
         now = time.time()
         self.db.execute("DELETE FROM processes")
@@ -148,12 +143,7 @@ class Store:
         self.db.execute("DELETE FROM log")
         self.db.execute("DELETE FROM journal")
         self.db.execute("DELETE FROM consumptions")
-        # Approvals deliberately survive a restart — a human dependency that
-        # evaporates on restart is not a kernel object. Only the pid is
-        # meaningless in the new runtime; a re-run agent re-attaches by identity.
         self.db.execute("UPDATE approvals SET pid = NULL WHERE status = 'pending'")
-        # Ephemeral memory belongs to the run; longterm memory is keyed by
-        # agent name and deliberately survives (p.6).
         self.db.execute("DELETE FROM memory WHERE mtype IN ('working', 'shared')")
         self.db.execute("DELETE FROM model_calls")
         self.db.execute(
@@ -165,7 +155,7 @@ class Store:
         """Take over after a crash. Nothing is wiped: the process table, the
         journals, the events, and the memory are exactly what recovery needs."""
         now = time.time()
-        self.db.execute("DELETE FROM commands")  # stale control commands only
+        self.db.execute("DELETE FROM commands")
         self.db.execute(
             "INSERT OR REPLACE INTO runtime VALUES (1, ?, ?, ?, ?, ?)",
             (os.getpid(), policy, slots, now, now),
@@ -189,7 +179,6 @@ class Store:
         row = self.db.execute("SELECT * FROM runtime WHERE id = 1").fetchone()
         return dict(row) if row else None
 
-    # -- process table ---------------------------------------------------
     def publish(self, row: dict[str, Any]) -> None:
         self.db.execute(
             "INSERT OR REPLACE INTO processes VALUES (?, ?, ?)",
@@ -200,7 +189,6 @@ class Store:
         rows = self.db.execute("SELECT row FROM processes ORDER BY pid").fetchall()
         return [json.loads(r["row"]) for r in rows]
 
-    # -- control commands (CLI -> kernel) --------------------------------
     def send_command(self, op: str, **args: Any) -> int:
         cur = self.db.execute(
             "INSERT INTO commands (op, args, created_at) VALUES (?, ?, ?)",
@@ -220,7 +208,6 @@ class Store:
         )
         return [(r["op"], json.loads(r["args"])) for r in rows]
 
-    # -- log -------------------------------------------------------------
     def append_log(self, pid: int | None, kind: str, message: str) -> None:
         self.db.execute(
             "INSERT INTO log (ts, pid, kind, message) VALUES (?, ?, ?, ?)",
@@ -238,7 +225,6 @@ class Store:
             ).fetchall()
         return [dict(r) for r in reversed(rows)]
 
-    # -- human approvals (Phase 3, p.5-6) ----------------------------------
     def request_approval(
         self, agent: str, role: str, reason: str, pid: int
     ) -> dict[str, Any]:
@@ -322,7 +308,6 @@ class Store:
         rows = self.db.execute(query + " ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
-    # -- the journal (Phase 6): every completed syscall is a checkpoint ------
     def append_journal(
         self, pid: int, req_id: int, op: str, value: Any, error: str | None
     ) -> None:
@@ -358,7 +343,6 @@ class Store:
             for r in self.db.execute("SELECT * FROM consumptions").fetchall()
         }
 
-    # -- memory + model accounting (Phase 5): what the CLI reads -----------
     def memory_usage(self) -> dict[str, int]:
         """owner -> bytes of stored values. The p.3 process card's MEM figure."""
         rows = self.db.execute(
@@ -413,7 +397,6 @@ class Store:
         ).fetchall()
         return [dict(r) for r in reversed(rows)]
 
-    # -- tool accounting (p.8: the runtime knows all tool usage) -----------
     def record_tool_call(
         self, pid: int, agent: str, capability: str, op: str,
         latency: float, ok: bool, error: str | None,
@@ -463,7 +446,6 @@ class Store:
             for r in rows
         }
 
-    # -- events ----------------------------------------------------------
     def append_event(
         self,
         seq: int,

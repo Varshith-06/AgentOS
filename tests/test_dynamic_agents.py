@@ -51,8 +51,6 @@ class Base(unittest.IsolatedAsyncioTestCase):
         return Kernel(store=self.store, models=models, **kw)
 
 
-# -- delegation and its limits ----------------------------------------------
-
 class Delegator(Agent):
     """Spawns one child with whatever `grant` it was told to try."""
 
@@ -122,8 +120,6 @@ class AttenuationTest(Base):
         self.assertEqual(k.perms.pid_grants, {})
 
 
-# -- the generic agent ------------------------------------------------------
-
 class LLMAgentTest(Base):
     async def test_it_finishes_when_the_model_says_done(self):
         k = self.kernel(models={"classes": {"m": scripted({"action": "done",
@@ -191,7 +187,7 @@ class LLMAgentTest(Base):
         await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "team finished")
         names = {p.name for p in k.table.all()}
-        self.assertIn("Worker", names)  # the role, not the class, in ps
+        self.assertIn("Worker", names)
 
     async def test_it_cannot_grant_a_child_more_than_it_holds(self):
         """Refused inside the agent, with a legible reason, before the kernel
@@ -206,7 +202,7 @@ class LLMAgentTest(Base):
                                       model="planner", may_spawn=True)),
             timeout=LIMIT)
         self.assertEqual(result, "backed off")
-        self.assertEqual(len([p for p in k.table.all()]), 1)  # no child created
+        self.assertEqual(len([p for p in k.table.all()]), 1)
 
     async def test_a_worker_cannot_spawn(self):
         k = self.kernel(models={"classes": {"m": scripted(
@@ -240,8 +236,6 @@ class LLMAgentTest(Base):
         self.assertEqual(again.name, "Surveyor")
         self.assertEqual(again.params["tools"], ["filesystem"])
 
-
-# -- events the parent wires, not the programmer -----------------------------
 
 class Wirer(Agent):
     """Spawns one child with a declared event vocabulary."""
@@ -312,9 +306,8 @@ class EventWiringTest(Base):
 
 class Slowpoke(Agent):
     async def run(self, ctx):
-        # Long enough that the waiter is subscribed before this finishes and
-        # the kernel fires AgentFinished; a missed event leaves the waiter
-        # hanging and its result None.
+        # Must outlast the waiter's subscribe, or AgentFinished fires into an
+        # empty room and the waiter hangs.
         await ctx.sleep(STARTUP)
         return "done"
 
@@ -344,7 +337,7 @@ class UnsatisfiableWaitTest(Base):
         detector after everything has stalled."""
         k = self.kernel()
         pid = k.spawn(Wirer(publishes=["Ready"], says=["Ready"]))
-        k.table.get(pid).publishes = ["Ready"]  # wire the root too
+        k.table.get(pid).publishes = ["Ready"]
         hopeful = k.spawn(Hopeful(event="NeverComes"))
         k.table.get(hopeful).publishes = []
         await asyncio.wait_for(k.run(), timeout=LIMIT)
@@ -357,9 +350,7 @@ class UnsatisfiableWaitTest(Base):
         k = self.kernel()
         pid = k.spawn(Hopeful(event="AgentFinished"))
         k.table.get(pid).publishes = []
-        # Sleeps first, so the waiter is certainly subscribed before this
-        # finishes and the kernel fires AgentFinished. Without the sleep the
-        # test races on which of the two reaches its syscall first.
+        # Sleeps first, so the waiter is subscribed before AgentFinished fires.
         k.spawn(Slowpoke())
         await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIsNone(k.table.get(pid).result["refused"])
@@ -369,7 +360,7 @@ class UnsatisfiableWaitTest(Base):
         k = self.kernel()
         pid = k.spawn(Hopeful(event="Maybe"))
         k.table.get(pid).publishes = []
-        k.spawn(LateAnnouncer(event="Maybe"))  # unwired: may publish anything
+        k.spawn(LateAnnouncer(event="Maybe"))
         await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIsNone(k.table.get(pid).result["refused"])
 
@@ -425,8 +416,6 @@ class LLMEventTest(Base):
         worker = [p for p in k.table.all() if p.name == "W"][0]
         self.assertEqual(worker.result, "corrected")
 
-
-# -- the Context surface reached through actions ------------------------------
 
 class StubMemory:
     def __init__(self):
@@ -521,8 +510,6 @@ class ApprovalActionTest(Base):
         self.assertEqual(k.table.get(pid).result, "released")
 
 
-# -- retries that actually retry ---------------------------------------------
-
 class UsesFlaky(Agent):
     """Module-level on purpose: a retried agent is re-created from its spec,
     and a class defined inside a test method has no importable qualname."""
@@ -587,19 +574,15 @@ class SpawnExtrasTest(Base):
         await asyncio.wait_for(k.run(), timeout=LIMIT)
         child = [p for p in k.table.all() if p.name == "Rush"][0]
         self.assertEqual(child.priority, "High")
-        self.assertEqual(child.spec["params"]["retries"], 3)  # clamped
+        self.assertEqual(child.spec["params"]["retries"], 3)
 
-
-# -- a wait whose publisher dies ----------------------------------------------
 
 class SilentQuitter(Agent):
     """Wired as a publisher, exits without ever publishing."""
 
     async def run(self, ctx):
-        # Must outlive the waiter's registration. If it exits first there is
-        # no live wired publisher at the moment the wait is registered, and
-        # the kernel refuses with "nothing is wired to publish this" — also
-        # correct, but a different sentence, which is what the test asserts.
+        # Must outlive the waiter's registration: exiting first is refused with a
+        # different sentence than the one asserted here.
         await ctx.sleep(STARTUP)
         return "quit"
 

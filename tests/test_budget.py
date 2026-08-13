@@ -24,8 +24,7 @@ from agentos.kernel.store import Store  # noqa: E402
 
 from tests._timing import LIMIT  # noqa: E402
 
-# 1000 tokens in + 1000 out at these rates is $0.002 a call, so a $0.005
-# budget buys two calls and refuses the third.
+# 1000 tokens in + 1000 out is $0.002 a call, so $0.005 buys two.
 PRICED = {"classes": {"m": [{
     "provider": "mock", "model": "priced", "cost_per_mtok": [1000.0, 1000.0],
 }]}}
@@ -95,7 +94,6 @@ class BudgetTest(Base):
         spent_first = result["first"]["made"]
         spent_second = result["second"]["made"]
         self.assertGreater(spent_first, 0)
-        # The child inherits a partly-spent budget, so it gets strictly less.
         self.assertLess(spent_second, spent_first + 1)
         self.assertIsNotNone(result["second"]["refused"])
 
@@ -118,7 +116,7 @@ class BudgetTest(Base):
         ledger = self.store.model_costs()
         spent = sum(c["cost"] for c in ledger.values())
         calls = sum(c["calls"] for c in ledger.values())
-        per_call = spent / calls  # what a call actually costs, not a guess
+        per_call = spent / calls
         self.assertGreaterEqual(spent, budget, "it should reach the budget")
         self.assertLess(
             spent, budget + per_call,

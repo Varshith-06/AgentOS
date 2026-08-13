@@ -41,7 +41,7 @@ class Deployer(Agent):
 
         approval = await ctx.request_approval(
             role="Senior Engineer", reason="Production deployment"
-        )  # state: Blocked, until a human grants it
+        )
 
         await ctx.log(f"approved by {approval['by']} - deploying")
         await ctx.sleep(0.5)

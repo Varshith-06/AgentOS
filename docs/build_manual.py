@@ -217,8 +217,7 @@ def build(blocks, out: str, toc_pages: dict | None = None) -> dict:
 
 if __name__ == "__main__":
     out = str(Path(__file__).resolve().parents[1] / "AgentOS.pdf")
-    # Two passes: the first discovers what page each chapter starts on, the
-    # second writes those numbers into the contents page.
+    # Two passes: the first discovers page numbers, the second writes them in.
     pages = build(CONTENT, out)
     build(CONTENT, out, toc_pages=pages)
     size = Path(out).stat().st_size

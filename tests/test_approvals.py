@@ -70,7 +70,6 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
             t.cancel()
         await asyncio.gather(run_task, *tasks, return_exceptions=True)
 
-    # -- blocking and resuming (p.6) ---------------------------------------
     async def test_request_approval_blocks_until_a_human_approves(self):
         k = self.kernel()
         pid = k.spawn(Deploy())
@@ -78,7 +77,6 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         await self._blocked(k, pid)
         self.assertEqual(k.table.get(pid).waiting_on, "Senior Engineer")
 
-        # Blocked on a human is not a deadlock: the runtime must keep serving.
         await asyncio.sleep(0.1)
         self.assertFalse(run.done())
         self.assertIs(k.table.get(pid).state, AgentState.BLOCKED)
@@ -125,9 +123,8 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         pid = k.spawn(Deploy())
         run = asyncio.create_task(k.run())
         await self._blocked(k, pid)
-        # The watcher is a separate process; approving before it has reached
-        # its wait_event call would fire the event into an empty room. Wait
-        # for it to actually be listening, which is the Waiting state.
+        # The watcher is a separate process: approving before it reaches wait_event
+        # would fire the event into an empty room.
         await self._until(
             lambda: k.table.get(watcher).state is AgentState.WAITING, timeout=LIMIT)
         k.approve(pid, "Senior Engineer")
@@ -145,7 +142,6 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         self.assertIs(proc.state, AgentState.FAILED)
         self.assertIn("killed", proc.exit_reason)
 
-    # -- the restart bar (p.15: "done when") --------------------------------
     async def test_pending_approval_survives_a_runtime_restart(self):
         k1 = self.kernel()
         pid1 = k1.spawn(Deploy())
@@ -154,11 +150,11 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         original = self.store.approvals()[0]
         await self._crash(k1, run1)
 
-        k2 = self.kernel()  # a restart wipes processes; approvals survive
+        k2 = self.kernel()
         pending = self.store.approvals()
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0]["status"], "pending")
-        self.assertIsNone(pending[0]["pid"])  # old pids mean nothing now
+        self.assertIsNone(pending[0]["pid"])
 
         pid2 = k2.spawn(Deploy())
         run2 = asyncio.create_task(k2.run())
@@ -178,14 +174,13 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         await self._blocked(k1, pid1)
         await self._crash(k1, run1)
 
-        self.store.approve(pid1, "Senior Engineer")  # the CLI path: runtime is dead
+        self.store.approve(pid1, "Senior Engineer")
 
         k2 = self.kernel()
         result = await asyncio.wait_for(k2.run_until_done(Deploy()), timeout=LIMIT)
         self.assertEqual(result, {"deployed": True, "by": "Senior Engineer"})
-        self.assertEqual(self.store.approvals(), [])  # granted, consumed, done
+        self.assertEqual(self.store.approvals(), [])
 
-    # -- suspension interplay ------------------------------------------------
     async def test_approval_while_suspended_is_delivered_on_resume(self):
         k = self.kernel()
         pid = k.spawn(Deploy())
@@ -195,7 +190,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         k.pause(pid)
         self.assertIs(k.table.get(pid).state, AgentState.SUSPENDED)
         k.approve(pid, "Senior Engineer")
-        await asyncio.sleep(0.05)  # ticks pass; a suspended agent stays suspended
+        await asyncio.sleep(0.05)
         self.assertIs(k.table.get(pid).state, AgentState.SUSPENDED)
 
         k.resume(pid)
@@ -210,7 +205,7 @@ class ApprovalTest(unittest.IsolatedAsyncioTestCase):
         await self._blocked(k, pid)
 
         k.pause(pid)
-        k.resume(pid)  # nothing to deliver yet: it must stay suspended
+        k.resume(pid)
         self.assertIs(k.table.get(pid).state, AgentState.SUSPENDED)
 
         k.approve(pid, "Senior Engineer")

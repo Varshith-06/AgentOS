@@ -49,7 +49,7 @@ class Worker(Agent):
             )
             out = await ctx.request_tool("python", "run", code=code)
             await ctx.log(out["stdout"].strip())
-            await ctx.sleep(1.0)  # slow enough to be killed mid-run
+            await ctx.sleep(1.0)
         return {"worker": tag, "steps": 5}
 
 

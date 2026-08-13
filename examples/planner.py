@@ -27,22 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agentos import Kernel  # noqa: E402
 from agentos.agents.llm import LLMAgent  # noqa: E402
 
-# What the operator allows. This set is the ceiling for the whole task: the
-# planner cannot grant what it does not hold, and neither can anything it
-# creates. Add "shell" here and the tree could reach a shell; leave it out and
-# no amount of model creativity gets there.
+# The ceiling for the whole task: nothing in the tree can exceed this.
 ALLOWED_TOOLS = ["filesystem"]
 
 TASK = "perform an experiment about trees"
 
-# The scripted "reasoning". Each entry is one model turn, in order.
-#
-# Note what the planner does with events: it invents the name
-# "MeasurementsReady", tells the Surveyor to publish it, and tells the Analyst
-# to wait for it. Neither worker knows the other exists — the Analyst is woken
-# by the runtime when the event fires, which is the p.5 rule holding for
-# agents nobody declared. No event name appears anywhere in this file outside
-# the planner's own decisions.
+# The scripted "reasoning", one model turn per entry. The planner invents
+# the event names; none of them appears anywhere else in this file.
 PLANNER_SCRIPT = [
     json.dumps({"action": "spawn", "role": "Surveyor",
                 "goal": "measure the trees on the plot",
@@ -70,16 +61,12 @@ SURVEYOR_SCRIPT = [
 ]
 
 ANALYST_SCRIPT = [
-    # Reached only after MeasurementsReady arrives: the kernel held this agent
-    # until the Surveyor published, without either of them naming the other.
     json.dumps({"action": "publish", "event": "AnalysisReady",
                 "payload": {"finding": "growth correlates with canopy gap"}}),
     json.dumps({"action": "done", "result": "measurements interpreted"}),
 ]
 
 MODELS = {"classes": {
-    # Separate scripts so the demo is legible; a real deployment points every
-    # class at the same model and lets it decide.
     "fast": [{"provider": "mock", "model": "mock-planner",
               "cost_per_mtok": [1.0, 5.0], "script": PLANNER_SCRIPT}],
     "surveyor": [{"provider": "mock", "model": "mock-surveyor",
@@ -99,7 +86,7 @@ async def main(slots: int = 4, policy: str = "fifo") -> int:
         policy=policy,
         models=MODELS,
         tools={"filesystem": {"root": str(root)}},
-        permissions={},  # nothing by name: authority comes from the grant below
+        permissions={},
     )
 
     planner = LLMAgent(
@@ -110,7 +97,6 @@ async def main(slots: int = 4, policy: str = "fifo") -> int:
         may_spawn=True,
         child_max_steps=4,
     )
-    # submit_spec pins the ceiling. Everything below inherits at most this.
     pid = kernel.submit_spec(spec_of(planner), grant=ALLOWED_TOOLS)
 
     print(f'task: "{TASK}"')

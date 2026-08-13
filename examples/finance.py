@@ -60,8 +60,7 @@ class Finance(Agent):
 
 async def main(slots: int = 4, policy: str = "fifo") -> int:
     if not PERMISSIONS.exists():
-        # First run: seed the p.7 matrix. After that the file is the truth —
-        # edit it (or use agent grant/revoke) and re-run; no code changes.
+        # First run seeds the matrix; after that the file is the truth.
         Permissions(path=PERMISSIONS).grant("Finance", "sql")
 
     kernel = Kernel(

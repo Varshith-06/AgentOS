@@ -38,7 +38,7 @@ class Searcher(Agent):
 class Synthesizer(Agent):
     async def run(self, ctx):
         await ctx.wait_all(agents=self.params["searchers"])
-        findings = await ctx.memory.retrieve(kind="shared")  # everything shared
+        findings = await ctx.memory.retrieve(kind="shared")
         draft = await ctx.request_model(
             "fast",
             prompt="Synthesize a two-sentence brief from: "

@@ -61,7 +61,6 @@ class ProcessExecutor:
         self._on_fail = on_fail
         self._server: asyncio.Server | None = None
         self._port: int | None = None
-        #: token -> Future[(reader, writer)] for children we expect to dial in
         self._expected: dict[str, asyncio.Future] = {}
 
     def start(self, proc: AgentProcess, agent: Any) -> asyncio.Task:
@@ -71,7 +70,6 @@ class ProcessExecutor:
         proc.task = task
         return task
 
-    # -- opening the channel --------------------------------------------------
     async def _ensure_server(self) -> None:
         if self._server is None:
             self._server = await asyncio.start_server(
@@ -149,7 +147,6 @@ class ProcessExecutor:
             if not fut.done():
                 fut.cancel()
 
-    # -- the message loop ------------------------------------------------------
     async def _run(self, proc: AgentProcess, agent: Any) -> None:
         stderr_tail: deque[str] = deque(maxlen=40)
         child = None  # a kill can land before the interpreter even exists
@@ -193,14 +190,12 @@ class ProcessExecutor:
                     self._on_fail(proc, RuntimeError(msg["error"]))
                     return
         except asyncio.CancelledError:
-            # Killed by the kernel — and agents being processes, "killed"
-            # means the OS process actually dies.
             if child is not None:
                 child.kill()
                 await child.wait()
             self._on_fail(proc, asyncio.CancelledError("killed"))
             raise
-        except Exception as exc:  # protocol or transport failure
+        except Exception as exc:
             self._on_fail(proc, exc)
         finally:
             for pump in pumps:
@@ -260,15 +255,9 @@ class ProcessExecutor:
         if self._server is None:
             return
         self._server.close()
-        # close() is what stops new spawns being accepted, and is the whole of
-        # what this method promises. wait_closed() used to return as soon as
-        # the listening socket was down; since 3.12.1 it also waits for every
-        # open connection's handler to finish. An agent that is still up is
-        # still connected, so on 3.12+ awaiting it unbounded means waiting for
-        # the very channels the docstring says are unaffected — shutdown hung
-        # here on a loaded CI runner until the caller's timeout fired. Wait
-        # briefly so the socket is normally released in an orderly way, then
-        # stop; whatever is left goes down with the loop.
+        # close() is the whole of what this promises. Since 3.12.1 wait_closed()
+        # also waits for every open connection's handler -- every live agent -- so
+        # bound it and let the loop take whatever is left.
         try:
             await asyncio.wait_for(self._server.wait_closed(), timeout=5)
         except asyncio.TimeoutError:  # not CancelledError: that must propagate

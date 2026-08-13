@@ -47,8 +47,7 @@ class BillWorkflow:
     @workflow.run
     async def run(self, calls: int) -> int:
         for i in range(calls):
-            # Sized for an 80ms activity. A 30s timeout would leave a dead
-            # worker undetected for 30s, which would not be a fair setting.
+            # Sized for an 80ms activity: a 30s timeout would hide a dead worker for 30s.
             await workflow.execute_activity(
                 billable, i, start_to_close_timeout=timedelta(seconds=2)
             )

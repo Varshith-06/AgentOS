@@ -49,9 +49,6 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
         return "no agents (is the runtime running? try: agent run <example>)"
     mem = store.memory_usage() if store else {}
     costs = store.model_costs() if store else {}
-    # The p.3 process card, one row per agent: MODEL and PERMS are on that
-    # card next to PID and status, so they belong here and not only in
-    # `agent tools`.
     cols = [
         "PID", "NAME", "PARENT", "CHILDREN", "STATUS", "PRIORITY",
         "WAITING ON", "MODEL", "PERMS", "EVENTS", "MEM", "COST", "CKPT", "TIME",
@@ -67,15 +64,12 @@ def _table(rows: list[dict], store: Store | None = None) -> str:
             r["waiting_on"] or "-",
             r.get("model") or "-",
             ",".join(r.get("permissions") or []) or "-",
-            # The wiring a parent gave a runtime-invented agent (p.5): what it
-            # may announce, and what it waits for. "-" for unwired agents.
             " ".join(
                 part for part in (
                     "pub:" + ",".join(r["publishes"]) if r.get("publishes") else "",
                     "sub:" + ",".join(r["subscribes"]) if r.get("subscribes") else "",
                 ) if part
             ) or "-",
-            # private memory follows the pid; longterm memory follows the name
             _bytes_str(mem.get(str(r["pid"]), 0) + mem.get(r["name"], 0)),
             f"${costs[r['pid']]['cost']:.4f}" if r["pid"] in costs else "-",
             f"#{r['checkpoint']}" if r.get("checkpoint") else "-",
@@ -148,7 +142,7 @@ def cmd_top(args, store: Store) -> int:
         while True:
             rows = store.processes()
             live = [r for r in rows if r["status"] not in ("Finished", "Failed")]
-            print("\033[2J\033[H", end="")  # clear
+            print("\033[2J\033[H", end="")
             print(_runtime_banner(store))
             print(f"\n{len(live)} live / {len(rows)} total\n")
             print(_table(rows, store))

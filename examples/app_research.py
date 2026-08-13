@@ -29,7 +29,7 @@ class ResearchJob(Agent):
         await ctx.log(f"researching {topic}")
         reply = await ctx.request_model("fast", prompt=f"One insight about {topic}.")
         await ctx.memory.store("insight", reply["text"], kind="shared")
-        await ctx.sleep(3)  # linger so `agent ps` catches both apps live
+        await ctx.sleep(3)
         return {"topic": topic, "model": reply["model"], "cost": reply["cost"]}
 
 

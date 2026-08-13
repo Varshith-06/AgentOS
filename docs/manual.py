@@ -51,13 +51,11 @@ TOC = [
     ]),
 ]
 
-# ---------------------------------------------------------------------------
 
 CONTENT: list[tuple] = [
     ("cover", COVER),
     ("toc", TOC),
 
-    # =====================================================================
     ("h1", "Part I — The idea"),
 
     ("h2", "1. What AgentOS is"),
@@ -206,7 +204,6 @@ other_agent.run()     # raises DirectInvocationError
      "Those three capabilities normally cost a rewrite each. Here they are "
      "consequences of one rule applied consistently from the beginning."),
 
-    # =====================================================================
     ("h1", "Part II — The kernel"),
     ("body",
      "The kernel is the part that owns everything. This part of the manual "
@@ -741,7 +738,6 @@ $ python -m agentos.cli recover
      "already in the operating system's hands. Profiling showed this one "
      "setting accounted for about 94% of database time."),
 
-    # =====================================================================
     ("h1", "Part III — Running agents"),
 
     ("h2", "17. How an agent actually runs"),
@@ -825,7 +821,6 @@ $ python -m agentos.cli recover
      "do <i>today</i>: agents are still spawned locally, the listener binds to "
      "loopback only, and the stream is unencrypted."),
 
-    # =====================================================================
     ("h1", "Part IV — The runtime as a service"),
 
     ("h2", "19. The daemon and the HTTP API"),
@@ -1056,7 +1051,6 @@ $ curl -H "Authorization: Bearer $TOKEN" host:7070/task/1
      "can reach. The capability system decides <i>whether</i> those run; it "
      "cannot constrain what they do once they are running."),
 
-    # =====================================================================
     ("h1", "Part V — Evidence"),
     ("body",
      "Claims in this manual are measured rather than asserted wherever "
@@ -1192,7 +1186,6 @@ control, with shell granted: shell.run -> detector works
      "overhead and recovery granularity. They say nothing about ecosystems, "
      "integrations, or how good any framework's agents are at their jobs."),
 
-    # =====================================================================
     ("h1", "Part VI — Reference"),
 
     ("h2", "25. Command line"),

@@ -75,14 +75,13 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.wait_for(poll(), timeout)
 
-    # -- lifecycle -------------------------------------------------------
     def test_illegal_transition_raises(self):
         table = ProcessTable()
         proc = table.create("X", {})
         table.transition(proc, AgentState.RUNNING)
         table.transition(proc, AgentState.FINISHED)
         with self.assertRaises(InvalidTransition):
-            table.transition(proc, AgentState.RUNNING)  # terminal is terminal
+            table.transition(proc, AgentState.RUNNING)
 
     def test_ready_cannot_skip_to_waiting(self):
         table = ProcessTable()
@@ -103,9 +102,8 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         await k.run()
         self.assertIs(k.table.get(pid).state, AgentState.FAILED)
         self.assertIn("ValueError", k.table.get(pid).exit_reason)
-        self.assertIs(k.table.get(2).state, AgentState.FINISHED)  # kernel survived
+        self.assertIs(k.table.get(2).state, AgentState.FINISHED)
 
-    # -- tree and wait ---------------------------------------------------
     async def test_spawn_builds_parent_child_links(self):
         k = self.kernel()
         result = await k.run_until_done(Parent())
@@ -124,7 +122,6 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Running -> Waiting", states)
         self.assertIn("Waiting -> Ready", states)
 
-    # -- scheduling ------------------------------------------------------
     async def test_slots_are_never_oversubscribed(self):
         k = self.kernel(slots=2)
         for i in range(6):
@@ -140,7 +137,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.gather(k.run(), watch())
         self.assertLessEqual(peak, 2)
-        self.assertEqual(peak, 2)  # and it does actually use both
+        self.assertEqual(peak, 2)
 
     async def test_woken_agent_requeues_instead_of_resuming_instantly(self):
         """A scheduler, not a callback: Sleeping -> Ready -> Running."""
@@ -158,15 +155,13 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    # -- control ---------------------------------------------------------
     async def test_kill_child_leaves_parent_alive(self):
         k = self.kernel()
         parent = k.spawn(Immortal())
         child = k.spawn(Immortal(), parent=parent)
         runner = asyncio.create_task(k.run())
-        # Both are real interpreters starting up. Killing on a 50ms timer can
-        # land before the child process exists at all, and the kill is then
-        # aimed at nothing; wait for it to be genuinely asleep instead.
+        # Both are real interpreters starting up: a kill on a 50ms timer can land
+        # before the child exists, so wait for it to be genuinely asleep.
         await self._until(
             lambda: k.table.get(child).state is AgentState.SLEEPING
             and k.table.get(parent).state is AgentState.SLEEPING
@@ -184,12 +179,8 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         k = self.kernel()
         root = k.spawn(Nester(depth=0))
         runner = asyncio.create_task(k.run())
-        # Each generation is a real interpreter starting up, so wait for the
-        # tree to exist rather than guessing how long three spawns take.
-        # Existing is not enough: the table row appears when a generation is
-        # spawned, and killing a process whose interpreter has not reached its
-        # first syscall leaves nothing to transition. Every one of them has to
-        # be parked in its sleep before the kill means anything.
+        # Existing is not enough -- a process that has not reached its first
+        # syscall has nothing to transition. Wait for all three to be asleep.
         async def three_deep():
             while not (len(k.table.all()) == 3 and all(
                 p.state is AgentState.SLEEPING for p in k.table.all()
@@ -197,14 +188,14 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
                 await asyncio.sleep(0.02)
 
         await asyncio.wait_for(three_deep(), timeout=LIMIT)
-        self.assertEqual(len(k.table.all()), 3)  # root -> child -> grandchild
+        self.assertEqual(len(k.table.all()), 3)
 
-        k.kill(2)  # the middle one
+        k.kill(2)
         await self._until(
             lambda: k.table.get(2).state is AgentState.FAILED
-            and k.table.get(3).state is AgentState.FAILED  # descendant taken
+            and k.table.get(3).state is AgentState.FAILED
         )
-        self.assertTrue(k.table.get(1).alive)  # ancestor untouched
+        self.assertTrue(k.table.get(1).alive)
 
         k.kill(1)
         await runner
@@ -212,9 +203,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
     async def test_pause_and_resume_via_control_queue(self):
         """The CLI path: commands arrive through the store, not the API."""
         k = self.kernel(slots=1)
-        # Long enough that the pause below lands while it is still asleep: the
-        # command travels through the store, and a 50ms life could be over
-        # before it arrives on a loaded machine, leaving nothing to suspend.
+        # Long enough that the pause below lands while it is still asleep.
         pid = k.spawn(Sleeper(duration=STARTUP))
         runner = asyncio.create_task(k.run())
 
@@ -225,10 +214,9 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(runner, timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
 
-    # -- the message boundary --------------------------------------------
     def test_non_serializable_params_are_rejected_at_construction(self):
         with self.assertRaises(NotSerializable):
-            Sleeper(callback=lambda: None)  # cannot survive a pipe -> refused
+            Sleeper(callback=lambda: None)
 
     async def test_agent_context_exposes_no_kernel_handle(self):
         """An agent must not be able to reach the kernel or another agent.
@@ -243,19 +231,11 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             surface,
             {
-                # Phase 1: processes
                 "pid", "name", "spawn", "sleep", "wait", "log",
-                # Phase 2: events and the dependency graph
                 "publish", "subscribe", "wait_event", "wait_all",
-                # Phase 3: a human is a dependency like any other
                 "request_approval",
-                # Phase 4: capabilities, never libraries
                 "request_tool",
-                # Phase 5: memory as a kernel service; models by class, not name
                 "memory", "request_model",
-                # Phase 6: the explicit form of the implicit checkpoint (p.9).
-                # Adds no reach — it names a durable point, it does not expose
-                # kernel state.
                 "checkpoint",
             },
         )

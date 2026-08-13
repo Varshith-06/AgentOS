@@ -13,8 +13,6 @@ from typing import Any
 
 from ..kernel.messages import assert_serializable
 
-#: Set by the executor to the identity of the agent it is currently running.
-#: An agent that reaches into another agent's run() will not match it.
 _RUNNING: ContextVar[int | None] = ContextVar("agentos_running_agent", default=None)
 
 
@@ -101,15 +99,14 @@ def agent_from_spec(spec: dict[str, Any]) -> Agent:
     recorded source file, because the importing interpreter may not have the
     application's module on its path — it may even have been __main__.
     """
-    # The cache key includes the file: two different applications are both
-    # "__main__" to themselves, and the daemon must never hand one the other.
+    # Keyed by file too: two applications are both "__main__" to themselves.
     cache_key = (spec["module"], spec.get("file"))
     module = _MODULE_CACHE.get(cache_key)
     if module is None:
         try:
             module = importlib.import_module(spec["module"])
             if not hasattr(module, spec["qualname"].split(".")[0]):
-                raise ImportError(spec["qualname"])  # wrong module (e.g. __main__)
+                raise ImportError(spec["qualname"])
         except ImportError:
             file = spec.get("file")
             if not file or not Path(file).exists():
@@ -119,9 +116,7 @@ def agent_from_spec(spec: dict[str, Any]) -> Agent:
                 f"agentos_loaded_{Path(file).stem}_{digest}", file
             )
             module = importlib.util.module_from_spec(loader)
-            # Register before exec so classes defined inside get a __module__
-            # that resolves — an agent loaded this way must itself be able to
-            # spawn siblings, which means spec_of() must find its module.
+            # Register before exec so spec_of() can resolve classes defined inside.
             sys.modules[module.__name__] = module
             loader.loader.exec_module(module)
             _MODULE_CACHE[(module.__name__, file)] = module

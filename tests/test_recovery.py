@@ -33,7 +33,7 @@ class Journaled(Agent):
     async def run(self, ctx):
         before = (await ctx.memory.retrieve("count", kind="longterm")) or 0
         await ctx.memory.store("count", before + 1, kind="longterm")
-        await ctx.sleep(0.4)  # the crash lands here
+        await ctx.sleep(0.4)
         after = await ctx.memory.retrieve("count", kind="longterm")
         return {"before": before, "after": after}
 
@@ -66,7 +66,7 @@ class ToolWorker(Agent):
             "run",
             code=f"open({self.params['path']!r}, 'a').write('ran\\n'); print('done')",
         )
-        await ctx.sleep(0.5)  # crash after the tool completed
+        await ctx.sleep(0.5)
         return out["stdout"].strip()
 
 
@@ -86,14 +86,14 @@ class Announcer(Agent):
 class Listener(Agent):
     async def run(self, ctx):
         await ctx.subscribe("BigNews")
-        await ctx.sleep(0.4)  # busy while the news lands; crash here
+        await ctx.sleep(0.4)
         event = await ctx.wait_event("BigNews")
         return event["detail"]
 
 
 class BadReturn(Agent):
     async def run(self, ctx):
-        return object()  # cannot cross the boundary, cannot be recovered
+        return object()
 
 
 class RecoveryTest(unittest.IsolatedAsyncioTestCase):
@@ -136,7 +136,6 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    # -- the p.17 bar ---------------------------------------------------------
     async def test_a_crashed_agent_resumes_instead_of_rerunning(self):
         k1 = self.kernel()
         pid = k1.spawn(Journaled())
@@ -175,9 +174,8 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
         k2 = self.kernel(recover=True)
         await asyncio.wait_for(k2.run(), timeout=LIMIT)
         results = k2.table.get(parent).result
-        self.assertIn({"ran": 1}, results.values())  # the pre-crash result, served
+        self.assertIn({"ran": 1}, results.values())
         self.assertIn("slow done", results.values())
-        # QuickChild must not have executed a second time:
         counter = self.store.db.execute(
             "SELECT value FROM memory WHERE mtype='longterm' AND owner='QuickChild'"
         ).fetchone()
@@ -222,11 +220,8 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
         k1 = self.kernel()
         listener = k1.spawn(Listener())
         run1 = asyncio.create_task(k1.run())
-        # The listener must be subscribed before the news breaks, or the
-        # publish lands nowhere and there is nothing to buffer. Its Sleeping
-        # state is the proof: the subscribe syscall precedes the sleep. On an
-        # idle machine the announcer's 0.1s head start made this ordering
-        # automatic; under the parallel runner's load it has to be waited for.
+        # The listener must be subscribed before the news breaks; its Sleeping
+        # state is the proof, and under load it has to be waited for.
         await self._until(
             lambda: k1.table.get(listener).state is AgentState.SLEEPING,
             timeout=LIMIT,
@@ -239,7 +234,7 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
             ),
             timeout=LIMIT,
         )
-        await self._crash(k1, run1)  # the listener never consumed BigNews
+        await self._crash(k1, run1)
 
         k2 = self.kernel(recover=True)
         await asyncio.wait_for(k2.run(), timeout=LIMIT)
@@ -250,11 +245,10 @@ class RecoveryTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(k1.run_until_done(QuickChild()), timeout=LIMIT)
 
         k2 = self.kernel(recover=True)
-        await asyncio.wait_for(k2.run(), timeout=LIMIT)  # returns immediately
+        await asyncio.wait_for(k2.run(), timeout=LIMIT)
         self.assertEqual(len(k2.table.all()), 1)
         self.assertIs(k2.table.all()[0].state, AgentState.FINISHED)
 
-    # -- the discipline that makes all of this possible -----------------------
     async def test_a_non_serializable_result_fails_the_agent(self):
         k = self.kernel()
         pid = k.spawn(BadReturn())

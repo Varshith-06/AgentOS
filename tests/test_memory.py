@@ -41,7 +41,7 @@ class RoundTrip(Agent):
 
     async def run(self, ctx):
         await ctx.memory.store("k", {"nested": [1, 2, 3]})
-        everything = await ctx.memory.retrieve()  # no key: everything of mine
+        everything = await ctx.memory.retrieve()
         one = await ctx.memory.retrieve("k")
         await ctx.memory.delete("k")
         gone = await ctx.memory.retrieve("k")
@@ -61,13 +61,13 @@ class Snoop(Agent):
     """Tries to read a key another agent stored privately."""
 
     async def run(self, ctx):
-        await ctx.sleep(0.05)  # the Stasher has definitely stored by now
+        await ctx.sleep(0.05)
         return {"stolen": await ctx.memory.retrieve("secret")}
 
 
 class SharedWriter(Agent):
     async def run(self, ctx):
-        await ctx.sleep(STARTUP)  # the reader must be subscribed before this lands
+        await ctx.sleep(STARTUP)
         await ctx.memory.store("finding", {"total": 42}, kind="shared")
         return "shared"
 
@@ -83,7 +83,7 @@ class SelectiveSharer(Agent):
     """Shares a working key with exactly one pid, then announces."""
 
     async def run(self, ctx):
-        await ctx.sleep(STARTUP)  # both readers must be subscribed before this fires
+        await ctx.sleep(STARTUP)
         await ctx.memory.store("keycode", "1234")
         await ctx.memory.share("keycode", with_agent=self.params["friend"])
         await ctx.publish("KeycodeShared")
@@ -103,7 +103,7 @@ class Counter(Agent):
     async def run(self, ctx):
         runs = (await ctx.memory.retrieve("runs", kind="longterm")) or 0
         await ctx.memory.store("runs", runs + 1, kind="longterm")
-        leftover = await ctx.memory.retrieve("leftover")  # working, prior run?
+        leftover = await ctx.memory.retrieve("leftover")
         await ctx.memory.store("leftover", "only for this run")
         return {"runs": runs + 1, "leftover_from_last_run": leftover}
 
@@ -142,7 +142,7 @@ class Antiquarian(Agent):
         for kind in ("scratchpad", "semantic"):
             try:
                 await ctx.memory.store("k", "v", kind=kind)
-            except Exception as exc:  # KernelError, relayed from the kernel
+            except Exception as exc:
                 errors[kind] = str(exc)
         return errors
 
@@ -206,7 +206,7 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["runs"], 1)
 
         second = await asyncio.wait_for(
-            self.kernel().run_until_done(Counter()), timeout=LIMIT  # a fresh runtime
+            self.kernel().run_until_done(Counter()), timeout=LIMIT
         )
         self.assertEqual(second["runs"], 2, "longterm memory must survive")
         self.assertIsNone(

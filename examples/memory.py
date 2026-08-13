@@ -24,11 +24,8 @@ from agentos import Agent, Kernel
 
 class Researcher(Agent):
     async def run(self, ctx):
-        # Working memory: private to this process, freed when it exits.
         await ctx.memory.store("draft", {"hunch": "agents should be processes"})
 
-        # Longterm memory: text is embedded on the way in, so it comes back
-        # by meaning as well as by key.
         facts = [
             "the scheduler hands execution slots to ready agents",
             "the event bus wakes subscribers the publisher never names",
@@ -42,14 +39,11 @@ class Researcher(Agent):
         )
         await ctx.log(f"search by meaning says: {hits[0]['text']!r}")
 
-        # The same kind holds a plain counter, keyed by agent name, and both
-        # survive a restart.
         runs = (await ctx.memory.retrieve("runs", kind="longterm")) or 0
         await ctx.memory.store("runs", runs + 1, kind="longterm")
         await ctx.log(f"this example has now run {runs + 1} time(s)")
 
-        await ctx.sleep(0.05)  # let the Writer subscribe first
-        # Shared memory: the only way agents pass state — through the kernel.
+        await ctx.sleep(0.05)
         await ctx.memory.store(
             "finding", f"run #{runs + 1}: {hits[0]['text']}", kind="shared"
         )
@@ -61,14 +55,14 @@ class Writer(Agent):
         await ctx.subscribe("MemoryUpdated")
         event = await ctx.wait_event("MemoryUpdated")
 
-        spied = await ctx.memory.retrieve("draft")  # Researcher's working memory?
+        spied = await ctx.memory.retrieve("draft")
         shared = await ctx.memory.retrieve(event["key"], kind="shared")
         history = await ctx.memory.retrieve(kind="episodic", limit=10)
 
         await ctx.log(f"shared finding from {event['by']}: {shared!r}")
         return {
             "shared": shared,
-            "spied_on_working_memory": spied,  # None: private means private
+            "spied_on_working_memory": spied,
             "own_history_entries": len(history),
         }
 

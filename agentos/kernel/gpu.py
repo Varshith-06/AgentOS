@@ -20,7 +20,7 @@ import time
 from typing import Any
 
 QUERY = "utilization.gpu,memory.used,memory.total,name"
-CACHE_TTL = 2.0  # seconds; nvidia-smi costs ~50ms, the dashboard polls faster
+CACHE_TTL = 2.0  # seconds; nvidia-smi costs ~50ms and the dashboard polls faster
 
 _cache: tuple[float, list[dict[str, Any]] | None] = (0.0, None)
 
@@ -60,7 +60,7 @@ def utilization(ttl: float = CACHE_TTL) -> list[dict[str, Any]] | None:
                     "memory_total_mb": float(total),
                 })
         except (OSError, subprocess.SubprocessError, ValueError):
-            result = None  # a driver that will not answer is the same as none
+            result = None
     _cache = (now + ttl, result)
     return result
 

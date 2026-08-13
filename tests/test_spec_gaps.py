@@ -37,8 +37,6 @@ class Base(unittest.IsolatedAsyncioTestCase):
         return Kernel(store=self.store, **kw)
 
 
-# -- p.9: kernel.checkpoint(), and the p.3 Checkpointing state ---------------
-
 class Checkpointer(Agent):
     async def run(self, ctx):
         await ctx.log("before")
@@ -71,8 +69,6 @@ class CheckpointTest(Base):
         await asyncio.wait_for(k.run_until_done(Checkpointer()), timeout=LIMIT)
         self.assertIn(AgentState.CHECKPOINTING.value, seen)
 
-
-# -- p.3: the process card carries Model and Permissions --------------------
 
 class Idle(Agent):
     async def run(self, ctx):
@@ -117,8 +113,6 @@ class ProcessCardTest(Base):
         assert_serializable("row", k.table.get(pid).row())
 
 
-# -- p.4: retries are a scheduler responsibility ----------------------------
-
 class FlakyAgent(Agent):
     """Fails the first N times it is started, then succeeds.
 
@@ -155,7 +149,7 @@ class RetryTest(Base):
         await asyncio.wait_for(k.run(), timeout=LIMIT)
         proc = k.table.get(pid)
         self.assertEqual(proc.state, AgentState.FAILED)
-        self.assertEqual(proc.retries, 1)  # one restart, then give up
+        self.assertEqual(proc.retries, 1)
 
     async def test_retries_are_off_by_default(self):
         k = self.kernel()
@@ -176,8 +170,6 @@ class RetryTest(Base):
         self.assertEqual(proc.state, AgentState.FAILED)
         self.assertEqual(proc.retries, 0)
 
-
-# -- p.7: caching is a driver responsibility --------------------------------
 
 class Counter(ToolDriver):
     name = "counter"
@@ -229,8 +221,6 @@ class DriverCacheTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(d.calls, 2)
 
 
-# -- p.7: model selection criteria, not just config order -------------------
-
 class ModelRankingTest(unittest.IsolatedAsyncioTestCase):
     CANDIDATES = [
         {"provider": "mock", "model": "pricey", "cost_per_mtok": [10, 10],
@@ -271,8 +261,6 @@ class ModelRankingTest(unittest.IsolatedAsyncioTestCase):
         reply = await m.request("fast", prompt="a much longer prompt " * 20)
         self.assertEqual(reply["model"], "roomy")
 
-
-# -- p.8: the runtime knows all tool usage, and GPU when there is one -------
 
 class ToolUser(Agent):
     async def run(self, ctx):

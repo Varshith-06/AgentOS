@@ -45,7 +45,7 @@ class CodeAgent(Agent):
     async def run(self, ctx):
         await ctx.subscribe("ResearchCompleted")
         await ctx.log("waiting for research")
-        event = await ctx.wait_event("ResearchCompleted")  # state: Waiting
+        event = await ctx.wait_event("ResearchCompleted")
         await ctx.log(f"woken by ResearchCompleted({event['topic']}) - writing code")
         await ctx.sleep(1)
         return {"module": f"{event['topic']}.py"}

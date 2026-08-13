@@ -36,9 +36,7 @@ class ToolDriver:
     min_interval: float = 0.0  # rate limit: seconds between calls
     retries: int = 0  # extra attempts after a Transient failure
     cache_ttl: float = 0.0  # seconds a result stays fresh; 0 disables caching
-    #: Ops safe to serve from cache. Caching a write would be a correctness
-    #: bug, so this is opt-in per driver and empty by default — a driver
-    #: declares which of its operations are reads.
+    # Ops safe to serve from cache; caching a write would be a correctness bug.
     cacheable: tuple[str, ...] = ()
 
     def __init__(
@@ -61,8 +59,6 @@ class ToolDriver:
             self.cache_ttl = cache_ttl
         self._cache: dict[str, tuple[float, Any]] = {}
         self._log = log or (lambda message: None)
-        #: Drivers may announce kernel events (the filesystem driver publishes
-        #: FileCreated, p.5). Drivers are kernel modules; agents are not.
         self._publish = publish or (lambda event_type, **payload: None)
         self._next_call = 0.0
 
@@ -132,9 +128,9 @@ class ToolDriver:
                 self._log(f"{self.name}.{op} attempt {attempt} failed: {exc}; retrying")
             except ToolError:
                 raise
-            except TypeError as exc:  # bad or missing params
+            except TypeError as exc:
                 raise ToolError(f"{self.name}.{op} bad arguments: {exc}") from exc
-            except Exception as exc:  # anything else: named, not propagated raw
+            except Exception as exc:
                 raise ToolError(
                     f"{self.name}.{op} failed: {type(exc).__name__}: {exc}"
                 ) from exc

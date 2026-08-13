@@ -149,7 +149,6 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.wait_for(poll(), timeout)
 
-    # -- the permission matrix (p.7) ---------------------------------------
     async def test_an_ungranted_capability_is_denied_and_audited(self):
         k = self.kernel(permissions={})
         result = await asyncio.wait_for(
@@ -188,8 +187,8 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
         run = asyncio.create_task(k.run())
         await self._until(
             lambda: any(e["kind"] == "tool" for e in self.store.logs())
-        )  # the first call went through
-        perms_path.write_text(json.dumps({}))  # the human revokes it, mid-run
+        )
+        perms_path.write_text(json.dumps({}))
         await asyncio.wait_for(run, timeout=LIMIT)
         self.assertEqual(k.table.get(pid).result, "revoked mid-run")
 
@@ -200,7 +199,6 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("no driver for capability 'teleport'", result["denied"])
 
-    # -- the drivers ---------------------------------------------------------
     async def test_sql_driver_round_trip(self):
         k = self.kernel(permissions={"ToolUser": ["sql"]})
         result = await asyncio.wait_for(
@@ -224,7 +222,7 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
             result = await asyncio.wait_for(k.run_until_done(FsAgent()), timeout=LIMIT)
         self.assertEqual(result["text"], "hello")
         self.assertIn("escapes the sandbox root", result["escape"])
-        self.assertIn("FileCreated", [e.type for e in k.bus.history])  # p.5
+        self.assertIn("FileCreated", [e.type for e in k.bus.history])
 
     async def test_shell_and_python_drivers_run_commands(self):
         k = self.kernel(permissions={"ToolUser": ["shell", "python"]})
@@ -246,7 +244,6 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(py["value"]["stdout"].strip(), "42")
 
-    # -- tool calls are scheduling, not function calls ------------------------
     async def test_a_tool_call_is_a_scheduler_wait_not_a_hang(self):
         """The agent visibly Waits on the tool, and a running tool is not a
         deadlock even when every agent in the system is waiting on it."""
@@ -263,11 +260,10 @@ class ToolTest(unittest.IsolatedAsyncioTestCase):
             lambda: k.table.get(pid).state is AgentState.WAITING
             and k.table.get(pid).waiting_on == "tool python"
         )
-        await asyncio.wait_for(run, timeout=LIMIT)  # would deadlock-fail if broken
+        await asyncio.wait_for(run, timeout=LIMIT)
         self.assertIs(k.table.get(pid).state, AgentState.FINISHED)
         self.assertIn("ToolCompleted", [e.type for e in k.bus.history])
 
-    # -- what the base driver owns: retries, rate limits, the boundary --------
     async def test_transient_failures_are_retried(self):
         self.register("flaky", Flaky)
         k = self.kernel(permissions={"ToolUser": ["flaky"]})

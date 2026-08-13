@@ -58,7 +58,7 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
             store=self.store, port=0, tick=0.01,
             models=MODELS, permissions={},
             tools={"filesystem": {"root": str(self.root)}},
-            task_tools=["filesystem"],   # what the operator allows
+            task_tools=["filesystem"],
         )
         self.task = asyncio.create_task(self.daemon.start())
         await asyncio.sleep(0.15)
@@ -81,7 +81,6 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
         except urllib.error.HTTPError as exc:
             return exc.code, json.loads(exc.read())
 
-    # -- the happy path ------------------------------------------------------
     async def test_a_sentence_and_a_tool_list_produce_a_team(self):
         pid = await asyncio.to_thread(
             self.client.task, "perform an experiment about trees",
@@ -92,7 +91,6 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
         tree = await asyncio.to_thread(self.client.task_tree, pid)
         self.assertEqual(tree["status"], "Finished")
         self.assertEqual(tree["goal"], "perform an experiment about trees")
-        # The planner invented an agent nobody declared, and it did real work.
         self.assertIn("Surveyor", [a["name"] for a in tree["agents"]])
         self.assertEqual((self.root / "notes.txt").read_text(encoding="utf-8"),
                          "oak 12m")
@@ -107,7 +105,6 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
                 self.client.status, pid)]:
             self.assertTrue(set(agent["permissions"]) <= {"filesystem"})
 
-    # -- what it refuses -----------------------------------------------------
     async def test_a_tool_the_operator_did_not_allow_is_refused(self):
         code, body = await asyncio.to_thread(
             self.post, "/task", {"goal": "run something", "tools": ["shell"]})
@@ -158,7 +155,7 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(code, 200)
         row = await asyncio.to_thread(self.client.status, body["pid"])
         self.assertEqual(row["priority"], "High")
-        self.assertEqual(row["spec"]["params"]["retries"], 5)  # clamped
+        self.assertEqual(row["spec"]["params"]["retries"], 5)
 
     async def test_a_budget_over_the_operators_ceiling_is_refused(self):
         """The daemon in this fixture allows no budget ceiling, so a request
@@ -187,7 +184,6 @@ class TaskApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(code, 400)
         self.assertIn("priority", body["error"])
 
-    # -- POST /agents now carries a grant too --------------------------------
     async def test_submit_accepts_a_grant(self):
         from agentos.agents.llm import LLMAgent
 

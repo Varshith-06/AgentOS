@@ -184,9 +184,8 @@ function drawGraph(snapshot) {
   $("graph").innerHTML = svg + "</svg>";
 }
 
-// A page loaded as /?token=... carries that token into every poll, because a
-// browser cannot put an Authorization header on the navigation that fetched
-// this page. Sent as a header from here on, so it stays out of the URLs.
+// A browser cannot set an Authorization header on the navigation that loaded
+// this page, so /?token=... is read once and sent as a header from here on.
 const TOKEN = new URLSearchParams(location.search).get("token");
 const authed = path => fetch(path, {
   headers: TOKEN ? {Authorization: "Bearer " + TOKEN} : {},
@@ -217,8 +216,6 @@ async function tick() {
     const spend = Object.values(ps.costs).reduce((a, c) => a + c.cost, 0);
     $("t-cost").textContent = "$" + spend.toFixed(4);
 
-    // Latency and GPU (p.8). A machine with no GPU says so rather than
-    // showing a zero that looks like an idle one.
     const models = Object.entries(ps.models || {});
     const totalCalls = models.reduce((a, [, m]) => a + m.calls, 0);
     $("t-latency").textContent = totalCalls

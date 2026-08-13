@@ -42,17 +42,12 @@ class Permissions:
         self.grants: dict[str, set[str]] = {
             agent: set(caps) for agent, caps in (grants or {}).items()
         }
-        #: Per-PID grants, for agents created at runtime rather than named in
-        #: the matrix. A dynamically spawned agent has no useful name — every
-        #: one of them may be an LLMAgent — so its capabilities travel with
-        #: its process instead of its class.
         self.pid_grants: dict[int, set[str]] = {}
         self.path = Path(path) if path is not None else None
         self._sig: tuple[int, int] | None = None
         if self.path is not None:
             self.refresh(force=True)
 
-    # -- per-process capabilities (delegation) -----------------------------
     def assign(self, pid: int, capabilities: set[str] | list[str]) -> None:
         """Pin an exact capability set to one process."""
         self.pid_grants[pid] = set(capabilities)
@@ -69,9 +64,8 @@ class Permissions:
             return cls(grants=source)
         if isinstance(source, (str, Path)):
             return cls(path=source)
-        return cls(path=default_path)  # None: watch the standard location
+        return cls(path=default_path)
 
-    # -- the check the kernel makes ---------------------------------------
     def capabilities(self, agent: str, pid: int | None = None) -> set[str]:
         """Everything this process may reach.
 
@@ -97,13 +91,12 @@ class Permissions:
                 return True
         return False
 
-    # -- the file the humans edit ------------------------------------------
     def _signature(self) -> tuple[int, int] | None:
         try:
             stat = self.path.stat()
             return (stat.st_mtime_ns, stat.st_size)
         except OSError:
-            return None  # no file: nothing is granted
+            return None
 
     def refresh(self, force: bool = False) -> None:
         """Re-read the matrix if the file changed since we last looked."""

@@ -40,8 +40,6 @@ MOCK = {"classes": {"fast": [
 ]}}
 
 
-# -- workload agents ----------------------------------------------------------
-
 class StepWorker(Agent):
     """N slow steps; each step is counted in longterm memory, so a step that
     ran twice is arithmetically visible."""
@@ -69,8 +67,6 @@ class ModelCaller(Agent):
         return "done"
 
 
-# -- 1. recovery after a hard kill --------------------------------------------
-
 async def bench_recovery(agents: int = 3, steps: int = 6) -> dict:
     tmp = tempfile.TemporaryDirectory()
     store = Store(tmp.name)
@@ -79,12 +75,8 @@ async def bench_recovery(agents: int = 3, steps: int = 6) -> dict:
         k1.spawn(StepWorker(tag=f"w{a}", steps=steps))
     run1 = asyncio.create_task(k1.run())
 
-    # Die roughly halfway through — but "halfway" has to be measured, not
-    # guessed at with a sleep. Every agent is a real interpreter starting up,
-    # and a fixed delay short enough to be mid-run on a fast machine is one
-    # that kills an empty runtime on a slow one: nothing journaled, nothing
-    # replayed, and a recovery benchmark that proves nothing by measuring
-    # nothing. So watch the work itself and pull the plug at the halfway mark.
+    # Watch the work and pull the plug at the halfway mark: a fixed delay that
+    # is mid-run on a fast machine kills an empty runtime on a slow one.
     halfway = agents * steps // 2
 
     async def until_halfway() -> None:
@@ -93,8 +85,8 @@ async def bench_recovery(agents: int = 3, steps: int = 6) -> dict:
 
     await asyncio.wait_for(until_halfway(), timeout=120)
 
-    # kill -9, in effect: swap the store for a scratch one so the death throes
-    # cannot touch persisted state, then cancel every task with no cleanup.
+    # kill -9, in effect: swap in a scratch store so the death throes cannot
+    # touch persisted state, then cancel every task with no cleanup.
     scratch_dir = tempfile.TemporaryDirectory()
     scratch = Store(scratch_dir.name)
     k1.store, k1.memory = scratch, MemoryManager(scratch)
@@ -137,8 +129,6 @@ def _steps_done(store: Store) -> int:
     return len(_step_counters(store))
 
 
-# -- 2. human-in-the-loop latency ---------------------------------------------
-
 async def bench_approval(rounds: int = 5) -> dict:
     latencies = []
     for _ in range(rounds):
@@ -158,8 +148,6 @@ async def bench_approval(rounds: int = 5) -> dict:
     return {"rounds": rounds, "median_ms": statistics.median(latencies),
             "worst_ms": max(latencies)}
 
-
-# -- 3. cost under multi-application load ---------------------------------------
 
 async def bench_load(apps: int = 3, agents_per_app: int = 5, calls: int = 2) -> dict:
     tmp = tempfile.TemporaryDirectory()
@@ -205,8 +193,6 @@ async def bench_load(apps: int = 3, agents_per_app: int = 5, calls: int = 2) -> 
     }
 
 
-# -- the table -----------------------------------------------------------------
-
 def row(label: str, value, note: str = "") -> None:
     print(f"  {label:<38} {value:>14}   {note}")
 
@@ -242,11 +228,8 @@ async def main(check: bool = False) -> int:
     if not check:
         return 0
 
-    # --check gates on the *correctness* claims only. The timings above are
-    # deliberately not asserted: they are machine-dependent by nature, and a
-    # shared CI runner under noisy-neighbour load would fail a threshold that
-    # says nothing about the code. What must never regress is the behaviour
-    # the numbers are there to illustrate.
+    # --check gates on the correctness claims only. Timings are machine-
+    # dependent, so they are printed and never asserted.
     failures = []
     if r["re_executed"] != 0:
         failures.append(f"{r['re_executed']} step(s) re-executed after recovery, expected 0")

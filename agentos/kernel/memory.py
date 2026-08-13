@@ -41,8 +41,7 @@ EPHEMERAL = ("working", "shared")
 PERSISTENT = ("longterm",)
 KINDS = EPHEMERAL + PERSISTENT  # episodic is read-only and handled separately
 
-# Kinds that once existed. Naming them costs two lines and turns a puzzling
-# "unknown kind" into the one-line migration the caller actually needs.
+# Kinds that once existed, so an unknown kind gets a migration hint.
 RETIRED = {
     "scratchpad": "use 'working' — scratchpad had the same owner and lifetime",
     "semantic": "use 'longterm' — it embeds text; search it with query=...",
@@ -74,7 +73,6 @@ class MemoryManager:
         self.store = store
         self.db = store.db
 
-    # -- ownership ---------------------------------------------------------
     def _owner(self, proc: Any, kind: str) -> str:
         """Ephemeral memory dies with the pid; persistent memory follows the
         agent's name across restarts, because pids do not survive them."""
@@ -89,18 +87,14 @@ class MemoryManager:
                 f"unknown memory kind {kind!r} (have: {', '.join(KINDS)}, episodic)"
             )
 
-    # -- the four verbs ------------------------------------------------------
     def store_value(self, proc: Any, key: str, value: Any, kind: str = "working") -> None:
-        # Before _check_kind, which knows nothing of episodic: the caller asked
-        # for a real kind and deserves the real reason it is refused.
+        # Before _check_kind, which knows nothing of episodic.
         if kind == "episodic":
             raise MemoryError_("episodic memory is written by the kernel, not agents")
         self._check_kind(kind)
         if not isinstance(key, str) or not key.strip():
             raise MemoryError_("memory keys must be non-empty strings")
 
-        # Text bound for longterm memory is embedded on the way in, so the row
-        # answers a later query=... without the agent having said so up front.
         vector = (
             json.dumps(_embed(value))
             if kind == "longterm" and isinstance(value, str)
@@ -229,14 +223,12 @@ class MemoryManager:
         )
         return cur.rowcount > 0
 
-    # -- kernel hooks --------------------------------------------------------
     def forget_process(self, pid: int) -> None:
         """A process exited: its private memory is freed, like any OS would."""
         self.db.execute(
             "DELETE FROM memory WHERE mtype = 'working' AND owner = ?", (str(pid),)
         )
 
-    # -- internals -----------------------------------------------------------
     def _shared_row(self, key: str):
         return self.db.execute(
             "SELECT * FROM memory WHERE mtype = 'shared' AND owner = '*' AND key = ?",

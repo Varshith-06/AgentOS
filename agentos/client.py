@@ -63,7 +63,6 @@ class RuntimeClient:
             token or os.environ.get("AGENTOS_TOKEN") or endpoint_data.get("token")
         )
 
-    # -- transport -----------------------------------------------------------
     def _request(self, method: str, path: str, body: dict | None = None) -> Any:
         data = None if body is None else json.dumps(body).encode("utf-8")
         headers = {"Content-Type": "application/json"}
@@ -86,7 +85,6 @@ class RuntimeClient:
                 f"no runtime answering at {self.url}: {exc.reason}"
             ) from exc
 
-    # -- submitting work -----------------------------------------------------
     def submit(
         self,
         agent: Agent,
@@ -151,7 +149,6 @@ class RuntimeClient:
     def run(self, agent: Agent, timeout: float = 300.0) -> Any:
         return self.wait(self.submit(agent), timeout=timeout)
 
-    # -- observing the shared runtime ----------------------------------------
     def health(self) -> dict[str, Any]:
         return self._request("GET", "/health")
 
@@ -165,7 +162,6 @@ class RuntimeClient:
     def events(self, limit: int = 200) -> list[dict[str, Any]]:
         return self._request("GET", f"/events?limit={limit}")
 
-    # -- control -------------------------------------------------------------
     def kill(self, pid: int) -> None:
         self._request("POST", f"/agents/{pid}/kill")
 

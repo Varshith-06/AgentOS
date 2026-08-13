@@ -37,7 +37,7 @@ class Stubborn(Agent):
 class Circular(Agent):
     async def run(self, ctx):
         other = await ctx.spawn(Stubborn(target=ctx.pid))
-        return await ctx.wait(other)  # I wait on it; it waits on me
+        return await ctx.wait(other)
 
 
 class Hopeful(Agent):

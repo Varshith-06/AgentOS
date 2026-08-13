@@ -113,18 +113,13 @@ def _task_request(daemon, body: dict) -> tuple[dict, list[str]]:
     if not isinstance(retries, int) or retries < 0:
         raise BadRequest('"retries" must be a non-negative integer')
 
-    # Spending is the one resource a caller can consume without limit, so the
-    # operator's ceiling applies the same way the tool allowlist does: the
-    # request may ask for less, never more.
     ceiling = daemon.task_budget_usd
     if "budget_usd" not in body:
         budget = ceiling
     else:
         budget = body["budget_usd"]
         if budget is None:
-            # Explicit null means "unmetered". Honouring that under a ceiling
-            # would let a caller opt out of the cap by asking to, which is
-            # not a cap at all.
+            # Explicit null must not become a way to opt out of the ceiling.
             if ceiling is not None:
                 raise BadRequest(
                     f"this runtime caps submitted tasks at ${ceiling:.4f}; "
@@ -188,9 +183,8 @@ def _task_tree(store, pid: int) -> dict | None:
 def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:
-            pass  # the kernel log is the log
+            pass
 
-        # -- plumbing -----------------------------------------------------
         def _json(self, code: int, payload) -> None:
             body = json.dumps(payload).encode("utf-8")
             self.send_response(code)
@@ -203,7 +197,6 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
             length = int(self.headers.get("Content-Length") or 0)
             return json.loads(self.rfile.read(length)) if length else {}
 
-        # -- authentication -------------------------------------------------
         def _authorized(self) -> bool:
             """Constant-time compare, so a wrong token cannot be guessed a
             character at a time by measuring how long the answer took."""
@@ -219,8 +212,7 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
             return hmac.compare_digest(presented, expected)
 
         def _deny(self) -> None:
-            # The reply says a token is needed and nothing about the one sent:
-            # confirming "close but wrong" is help an attacker can use.
+            # Says a token is needed, and nothing about the one that was sent.
             body = json.dumps({"error": "unauthorized: a bearer token is required"})
             raw = body.encode("utf-8")
             self.send_response(401)
@@ -233,7 +225,6 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
         def _limit(self, query: dict) -> int:
             return int(query.get("limit", ["200"])[0])
 
-        # -- reads: straight from the store --------------------------------
         def do_GET(self) -> None:
             if not self._authorized():
                 self._deny()
@@ -296,7 +287,6 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
             finally:
                 store.close()
 
-        # -- mutations: onto the kernel's own thread ------------------------
         def do_POST(self) -> None:
             if not self._authorized():
                 self._deny()

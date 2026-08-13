@@ -49,10 +49,10 @@ async def _execute(agent, ctx: Context, emit) -> int:
         result = await agent.run(ctx)
         await emit({"type": "finished", "result": result})
         return 0
-    except (TypeError, ValueError) as exc:  # includes a non-serializable result
+    except (TypeError, ValueError) as exc:
         await emit({"type": "failed", "error": f"{type(exc).__name__}: {exc}"})
         return 1
-    except BaseException as exc:  # agent bug: reported, never swallowed
+    except BaseException as exc:
         await emit({"type": "failed", "error": f"{type(exc).__name__}: {exc}"})
         return 1
 

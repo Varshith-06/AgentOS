@@ -50,7 +50,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
     async def test_mock_round_trip_records_tokens_and_cost(self):
         k = self.kernel(
             {"fast": [{"provider": "mock", "model": "mock-1",
-                       "cost_per_mtok": [1_000_000, 1_000_000]}]}  # $1 per token
+                       "cost_per_mtok": [1_000_000, 1_000_000]}]}
         )
         pid = k.spawn(ModelUser(prompt="six words are in this prompt"))
         await asyncio.wait_for(k.run(), timeout=LIMIT)
@@ -99,7 +99,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("no available model", result["error"])
         calls = self.store.model_calls()
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0]["ok"], 0)  # the failure is on the record too
+        self.assertEqual(calls[0]["ok"], 0)
 
     async def test_an_unknown_need_lists_what_is_configured(self):
         k = self.kernel({"fast": [{"provider": "mock", "model": "m"}]})
@@ -107,7 +107,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
             k.run_until_done(ModelUser(need="telepathy")), timeout=LIMIT
         )
         self.assertIn("telepathy", result["error"])
-        self.assertIn("fast", result["error"])  # tells you what exists
+        self.assertIn("fast", result["error"])
 
     async def test_context_window_routes_long_prompts_away(self):
         k = self.kernel(
@@ -136,7 +136,7 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
             {"fast": [{"provider": "mock", "model": "m", "latency": 0.3}]}
         )
         pid = k.spawn(ModelUser())
-        await asyncio.wait_for(k.run(), timeout=LIMIT)  # would fail fast if broken
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIsNone(k.table.get(pid).result["error"])
 
 

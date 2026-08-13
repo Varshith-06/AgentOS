@@ -22,7 +22,7 @@ class SupportTriage(Agent):
             "fast", prompt=f"Classify this support ticket in one word: {ticket!r}"
         )
         await ctx.log(f"ticket triaged by {reply['model']}")
-        await ctx.sleep(3)  # linger so `agent ps` catches both apps live
+        await ctx.sleep(3)
         return {"ticket": ticket, "triage": reply["text"][:80], "cost": reply["cost"]}
 
 

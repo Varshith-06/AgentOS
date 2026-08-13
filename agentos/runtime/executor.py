@@ -90,8 +90,7 @@ class Context:
         return self._proc.name
 
     async def _syscall(self, op: str, /, **args: Any) -> Any:
-        # `op` is positional-only so syscall payloads may themselves have an
-        # "op" key (request_tool does) without colliding with this parameter.
+        # `op` is positional-only so a syscall payload may carry its own "op" key.
         self._req_id += 1
         call = Syscall(pid=self._proc.pid, op=op, req_id=self._req_id, args=args)
         await self._mailbox.put(call)
@@ -105,7 +104,6 @@ class Context:
             raise KernelError(reply.error)
         return reply.value
 
-    # -- processes (Phase 1) ---------------------------------------------
     async def spawn(
         self,
         agent: Any,
@@ -159,7 +157,6 @@ class Context:
         """
         return await self._syscall("checkpoint", label=label)
 
-    # -- events (Phase 2, p.4-5) -----------------------------------------
     async def publish(self, event_type: str, **payload: Any) -> None:
         """Announce that something happened. You do not know who is listening."""
         await self._syscall("publish", event_type=event_type, payload=payload)
@@ -173,13 +170,11 @@ class Context:
         result = await self.wait_all(events=[event_type])
         return result["events"][event_type]
 
-    # -- memory (Phase 5, p.6) ------------------------------------------------
     @property
     def memory(self) -> Memory:
         """memory.store() / retrieve() / share() / delete(). See Memory."""
         return self._memory
 
-    # -- models (Phase 5, p.7) --------------------------------------------------
     async def request_model(
         self,
         need: str,
@@ -204,7 +199,6 @@ class Context:
             raise KernelError(model["error"])
         return model["value"]
 
-    # -- tools (Phase 4, p.6-7) ---------------------------------------------
     async def request_tool(self, capability: str, op: str, **params: Any) -> Any:
         """Ask the kernel to run a tool operation. State becomes Waiting.
 
@@ -226,7 +220,6 @@ class Context:
             raise KernelError(tool["error"])
         return tool["value"]
 
-    # -- human approval (Phase 3, p.5-6) -----------------------------------
     async def request_approval(self, role: str, reason: str) -> dict[str, Any]:
         """Block until a human with `role` approves. State becomes Blocked.
 
@@ -242,7 +235,6 @@ class Context:
         result = await self._syscall("request_approval", role=role, reason=reason)
         return result["approval"]
 
-    # -- the dependency graph (Phase 2, p.5) ------------------------------
     async def wait_all(
         self,
         agents: list[int] | None = None,
@@ -264,13 +256,9 @@ class Context:
             events=list(events or []),
             timer=timer,
         )
-        # JSON object keys are strings, so pids arrive as "2" when the reply
-        # crossed a real pipe (process isolation). Normalize: agents always
-        # see int pids, whichever transport carried the reply.
+        # Pids arrive as strings when a reply crossed a pipe as JSON; agents
+        # always see ints.
         result["agents"] = {int(pid): r for pid, r in result["agents"].items()}
         return result
 
 
-# There is no in-process executor. An agent runs in its own OS process and
-# reaches the kernel over a socket — see runtime/subproc.py, which drives the
-# child, and runtime/child.py, which builds the Context above on the far side.

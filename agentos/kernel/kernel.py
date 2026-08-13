@@ -65,17 +65,15 @@ from .scheduler import SchedulerView, get_policy
 from .states import TERMINAL, AgentState
 from .store import Store
 
-#: Syscalls that keep the agent's slot (it never stops running).
 NONBLOCKING = {"spawn", "log", "publish", "subscribe", "memory", "checkpoint"}
 
-#: States from which the system can still make progress on its own.
 LIVE = frozenset(
     {
         AgentState.RUNNING,
         AgentState.READY,
         AgentState.SLEEPING,
-        AgentState.SUSPENDED,  # a human can resume it
-        AgentState.BLOCKED,  # a human can approve it
+        AgentState.SUSPENDED,
+        AgentState.BLOCKED,
         AgentState.CHECKPOINTING,
     }
 )
@@ -99,20 +97,15 @@ class Kernel:
         self.policy = get_policy(policy)
         self.slots = slots
         self.tick = tick
-        #: Default restart budget for an agent that raises (p.4). An agent
-        #: may override it with its own `retries` attribute.
         self.retries = retries
         self.store = store if store is not None else Store()
 
-        # The p.7 permission matrix. None means: watch the standard file next
-        # to the runtime state, so grants and revocations are config edits.
         self.perms = Permissions.of(permissions, self.store.dir / "permissions.json")
         self.tools_config = tools or {}
         self._drivers: dict[str, Any] = {}
         self._io_tasks: set[asyncio.Task] = set()
         self._io_calls = 0  # running tool/model calls: pending I/O is not a deadlock
 
-        # Phase 5: memory as a kernel service, model choice as runtime config.
         self.memory = MemoryManager(self.store)
         self.models = ModelManager.of(
             models,
@@ -121,10 +114,8 @@ class Kernel:
         )
 
         self.mailbox: asyncio.Queue[Syscall] = asyncio.Queue()
-        #: Syscalls the idle wait pulled off the mailbox early; drained first.
         self._early: deque[Syscall] = deque()
-        self._last_poll = 0.0  # when the tick-rate polling work last ran
-        #: Set to cut an idle short. Created on the loop, so not in __init__.
+        self._last_poll = 0.0
         self._wakeup: asyncio.Event | None = None
         self.ready: deque[AgentProcess] = deque()
         self.running: set[int] = set()
@@ -133,22 +124,14 @@ class Kernel:
         self.bus = EventBus()
         self.deps = DependencyGraph()
 
-        # An agent is always a real OS process: its own interpreter, its own
-        # address space, syscalls crossing a loopback socket as JSON. There is
-        # exactly one execution path, deliberately — a runtime whose tests
-        # exercise a different execution model from the one it deploys is
-        # testing something it does not ship.
         self.transport = ProcessExecutor.transport
         self.executor = ProcessExecutor(self.mailbox, self._on_finish, self._on_fail)
-        #: Daemon mode: the runtime outlives its work. Never exit on quiescence,
-        #: and never declare a stall a deadlock — new work can always arrive.
+        # Daemon mode: never exit on quiescence, never call a stall a deadlock.
         self.daemon_mode = daemon
         self.table.on_transition = self._publish_row
         self._shutdown = False
         self._timers = 0  # outstanding timer dependencies
 
-        # Phase 6: the journal is the checkpoint. On a fresh boot it is
-        # cleared; on recovery it is the script the agents replay from.
         self._recovered = recover
         if recover:
             self.store.resume_runtime(self.policy.name, slots)
@@ -158,7 +141,6 @@ class Kernel:
             self.store.register_runtime(self.policy.name, slots)
             self._journals = {}
 
-    # -- crash recovery (Phase 6, p.7-8) -----------------------------------
     def _restore(self) -> None:
         """Rebuild the world from the store after a hard kill.
 
@@ -182,7 +164,6 @@ class Kernel:
             proc.checkpoint = len(self._journals.get(proc.pid, []))
             if not proc.alive:
                 continue
-            # Alive at the crash: re-create from spec, replay from journal.
             proc.state = AgentState.READY
             proc.waiting_on = None
             self.agents[proc.pid] = self._create_agent(proc.spec)
@@ -194,8 +175,6 @@ class Kernel:
                 f"{proc.name} restored; replaying {proc.checkpoint} journaled syscall(s)",
             )
 
-        # The event bus continues, it does not start over: history and the
-        # sequence counter pick up where the dead runtime left them.
         for row in self.store.events():
             self.bus.history.append(
                 Event(row["type"], row["payload"], row["source_pid"], row["seq"])
@@ -219,8 +198,6 @@ class Kernel:
             return None
         entry = entries[0]
         if entry["req_id"] != call.req_id or entry["op"] != call.op:
-            # The agent did not make the same syscalls it made last time —
-            # nondeterminism outside the boundary. Stop replaying, go live.
             self._log(
                 proc.pid,
                 "recover",
@@ -235,7 +212,6 @@ class Kernel:
             self._log(proc.pid, "recover", f"{proc.name} caught up; live from here")
         return entry
 
-    # -- public API (AgentOS.pdf p.9) ------------------------------------
     def spawn(self, agent: Agent, parent: int | None = None) -> int:
         proc = self.table.create(
             name=agent.name,
@@ -267,9 +243,8 @@ class Kernel:
         self.deps.cancel(pid)
         if proc.task is not None and not proc.task.done():
             proc.exit_reason = reason  # _on_fail preserves a reason already set
-            proc.task.cancel()  # surfaces as FAILED(killed) via the executor
+            proc.task.cancel()
         else:
-            # Never started: it was sitting in the ready queue.
             self._discard_ready(proc)
             proc.exit_reason = reason
             self.table.transition(proc, AgentState.FAILED)
@@ -284,8 +259,6 @@ class Kernel:
         proc.pause_requested = True
         if proc.state is not AgentState.RUNNING:
             self._discard_ready(proc)
-            # The timer keeps running: if it fires while suspended, the wake is
-            # stashed on the process (see _requeue) and delivered at resume.
             self.table.transition(proc, AgentState.SUSPENDED, waiting_on="resume")
             proc.pause_requested = False
             self._log(pid, "pause", f"{proc.name} suspended")
@@ -300,9 +273,6 @@ class Kernel:
             and proc.pending is None
             and (self.deps.is_waiting(pid) or proc.timer is not None)
         ):
-            # Suspended mid-wait, and the wait has not resolved yet. Waking it
-            # now would hand it nothing. It stays suspended; the resolution is
-            # stashed when it arrives, and a later resume delivers it.
             self._log(
                 pid,
                 "resume",
@@ -324,9 +294,8 @@ class Kernel:
 
     def publish(self, event_type: str, source_pid: int | None = None, **payload: Any):
         """Announce an event. The bus decides who hears it (p.5)."""
-        # Who is mid-wait on this event type? They receive THIS publish through
-        # dependency resolution, so the copy the bus is about to buffer for
-        # them must be consumed too — one publish, one delivery, never two.
+        # Mid-wait subscribers receive this publish through dependency resolution,
+        # so the copy buffered for them must be consumed too.
         waiting_pids = set(self.deps.dependents(dg.key(dg.EVENT, event_type)))
 
         event = self.bus.publish(event_type, payload, source_pid)
@@ -344,7 +313,6 @@ class Kernel:
             consumed = self.bus.consume(pid, event_type)
             if consumed is not None:
                 self.store.record_consumption(pid, consumed.seq)
-        # Anyone whose dependency this satisfies becomes runnable.
         for w in self.deps.resolve(dg.key(dg.EVENT, event_type), payload):
             self._wake_waiter(w)
         return event
@@ -365,11 +333,8 @@ class Kernel:
             now = time.time()
             polled = now - self._last_poll >= self.tick
             if polled:
-                # Everything that reads the outside world — the permission
-                # file, the command and approval tables, the heartbeat — is
-                # rate-limited to the tick. These are the expensive ones.
                 self._last_poll = now
-                self.perms.refresh()  # a revocation applies to a running system
+                self.perms.refresh()
                 self._drain_commands()
                 self._drain_approvals()
                 self.store.heartbeat()
@@ -377,19 +342,17 @@ class Kernel:
             await self._drain_mailbox()
             self._admit()
 
-            # Cheap and in-memory, so it runs every pass: an agent that just
-            # finished should not wait out a tick for the runtime to notice.
             if self._quiescent() and not self.daemon_mode:
                 break
             if polled:
                 self._detect_deadlock()
             await self._idle(self.tick)
-        for task in list(self._io_tasks):  # no owners remain for these
+        for task in list(self._io_tasks):
             task.cancel()
         if self._io_tasks:
             await asyncio.gather(*self._io_tasks, return_exceptions=True)
         close = getattr(self.executor, "aclose", None)
-        if close is not None:  # the socket transport's listener
+        if close is not None:
             await close()
 
     async def run_until_done(self, agent: Agent) -> Any:
@@ -420,7 +383,6 @@ class Kernel:
                 f"pid {pid} admitted with {', '.join(sorted(grant)) or 'nothing'}",
             )
         if budget_usd is not None:
-            # On the root, where the whole tree will look it up.
             proc.budget_usd = float(budget_usd)
             self._log(None, "budget", f"pid {pid} admitted with ${budget_usd:.4f}")
         if grant is not None or budget_usd is not None:
@@ -434,7 +396,7 @@ class Kernel:
             "policy": self.policy.name,
             "slots": self.slots,
             "transport": self.transport,
-            "gpu": gpu.summary(),  # None on a machine without one
+            "gpu": gpu.summary(),
             "running": sorted(self.running),
             "ready": [p.pid for p in self.ready],
             "processes": [p.row() for p in self.table.all()],
@@ -444,7 +406,6 @@ class Kernel:
             ],
         }
 
-    # -- scheduling ------------------------------------------------------
     def _view(self) -> SchedulerView:
         return SchedulerView(dependents=self.deps.agent_dependents())
 
@@ -466,7 +427,6 @@ class Kernel:
             if proc.task is None:
                 self.executor.start(proc, self.agents[proc.pid])
             else:
-                # Resuming: the reply it has been owed since it gave up its slot.
                 reply, proc.pending = proc.pending, None
                 proc.inbox.put_nowait(reply)
 
@@ -487,9 +447,9 @@ class Kernel:
             return
         self._journal(proc, reply.req_id, proc.current_op or "?", reply.value, reply.error)
         proc.pending = reply
-        self._nudge()  # something became runnable: do not doze until the tick
+        self._nudge()
         if proc.state is AgentState.SUSPENDED:
-            return  # stashed; delivered when a human resumes it
+            return
         self.table.transition(proc, AgentState.READY, waiting_on=None)
         self.ready.append(proc)
 
@@ -498,7 +458,6 @@ class Kernel:
         proc = self.table.get(w.pid)
         self._requeue(proc, Reply(req_id=w.req_id, value=_shape(w.results)))
 
-    # -- syscalls --------------------------------------------------------
     def _nudge(self) -> None:
         """Cut the current idle short: there is work the loop should see now."""
         if self._wakeup is not None:
@@ -538,8 +497,8 @@ class Kernel:
             proc = self.table.get(call.pid)
             try:
                 self._handle(proc, call)
-            except Exception as exc:  # kernel refuses; the agent sees the error
-                if proc.state is AgentState.WAITING:  # it already gave up its slot
+            except Exception as exc:
+                if proc.state is AgentState.WAITING:
                     self._requeue(proc, Reply(req_id=call.req_id, error=str(exc)))
                 else:
                     self._journal(proc, call.req_id, call.op, None, str(exc))
@@ -548,9 +507,8 @@ class Kernel:
     def _handle(self, proc: AgentProcess, call: Syscall) -> None:
         entry = self._replay_entry(proc, call)
         if entry is not None:
-            # Replaying: the world already changed once; do not change it
-            # again. Subscribe is the exception — it rebuilds kernel state
-            # that died with the old runtime, so it re-executes.
+            # Replaying: do not change the world twice. Subscribe is the exception --
+            # it rebuilds kernel state that died with the old runtime.
             if call.op == "subscribe":
                 self._sys_subscribe(proc, **call.args)
             proc.inbox.put_nowait(
@@ -624,8 +582,6 @@ class Kernel:
             kid.publishes = list(dict.fromkeys(publishes))
         if subscribes is not None:
             kid.subscribes = list(dict.fromkeys(subscribes))
-            # Subscribe on the child's behalf, now: an event fired before it
-            # gets a slot must still be waiting in its inbox when it asks.
             for event_type in kid.subscribes:
                 self.bus.subscribe(pid, event_type)
         if publishes or subscribes:
@@ -669,10 +625,6 @@ class Kernel:
         self, proc: AgentProcess, event_type: str, payload: dict[str, Any]
     ) -> None:
         if proc.publishes is not None and event_type not in proc.publishes:
-            # The parent wired this agent for a specific vocabulary. Publishing
-            # outside it is almost always a name the model invented on the
-            # spot, which nobody is waiting for — so say so now, while there
-            # is still something to correct.
             allowed = ", ".join(proc.publishes) or "nothing"
             raise InvalidEvent(
                 f"{proc.name} was not wired to publish {event_type!r}; "
@@ -694,7 +646,7 @@ class Kernel:
         for other in self.table.all():
             if not other.alive:
                 continue
-            if other.publishes is None:  # unrestricted: it might
+            if other.publishes is None:
                 return False
             if event_type in other.publishes:
                 return False
@@ -775,17 +727,13 @@ class Kernel:
                 resolved[dg.key(dg.AGENT, pid)] = target.result
 
         for event_type in events:
-            self.bus.subscribe(proc.pid, event_type)  # idempotent
+            self.bus.subscribe(proc.pid, event_type)
             buffered = self.bus.consume(proc.pid, event_type)
-            if buffered is not None:  # it already fired while we were busy
+            if buffered is not None:
                 self.store.record_consumption(proc.pid, buffered.seq)
                 resolved[dg.key(dg.EVENT, event_type)] = buffered.payload
                 continue
             if timer is None and self._unpublishable(event_type):
-                # Nobody alive is wired to publish this and the kernel never
-                # will, so this wait can only end in the deadlock detector.
-                # Failing here names the actual mistake — usually a
-                # misremembered event name — while the waiter can still act.
                 self._log(
                     proc.pid, "deadlock",
                     f"refused wait on {event_type!r}: nobody publishes it",
@@ -811,7 +759,7 @@ class Kernel:
             self._timers += 1
             proc.timer = loop.call_later(timer, self._on_dep_timer, proc, timer_key)
 
-        if w.satisfied:  # everything was already done — still costs a queue trip
+        if w.satisfied:
             self.deps.waiting.pop(proc.pid, None)
             self._wake_waiter(w)
 
@@ -837,9 +785,6 @@ class Kernel:
                 "denied",
                 f"{proc.name} requested {capability!r}: permission denied",
             )
-            # Point at the right lever. An agent whose authority was delegated
-            # cannot be fixed by editing the matrix — its parent decided this,
-            # and widening the file would not (and must not) change it.
             if proc.pid in self.perms.pid_grants:
                 held = ", ".join(sorted(self.perms.pid_grants[proc.pid])) or "nothing"
                 remedy = (
@@ -887,15 +832,13 @@ class Kernel:
                 result = {"value": None, "error": str(exc)}
         except ToolError as exc:
             result = {"value": None, "error": str(exc)}
-        except Exception as exc:  # a driver bug must not take the kernel down
+        except Exception as exc:
             result = {"value": None, "error": f"{type(exc).__name__}: {exc}"}
         finally:
             self._io_calls -= 1
 
         elapsed = asyncio.get_running_loop().time() - started
         ok = result["error"] is None
-        # p.8: the shared runtime knows all tool usage, the same way it knows
-        # all model usage. One row per dispatch, whoever's application it was.
         self.store.record_tool_call(
             pid=proc.pid, agent=proc.name, capability=capability, op=op,
             latency=elapsed, ok=ok, error=result["error"],
@@ -1056,7 +999,7 @@ class Kernel:
             result = {"value": value, "error": None}
         except ModelError as exc:
             result = {"value": None, "error": str(exc)}
-        except Exception as exc:  # a provider bug must not take the kernel down
+        except Exception as exc:
             result = {"value": None, "error": f"{type(exc).__name__}: {exc}"}
         finally:
             self._io_calls -= 1
@@ -1065,7 +1008,7 @@ class Kernel:
         ok = result["error"] is None
         value = result["value"] or {}
         if ok and value.get("model"):
-            proc.model = value["model"]  # the p.3 card's "Model:" line
+            proc.model = value["model"]
         self.store.record_model_call(
             pid=proc.pid,
             agent=proc.name,
@@ -1118,9 +1061,6 @@ class Kernel:
         key = dg.key(dg.APPROVAL, row["id"])
 
         if row["status"] == "granted":
-            # Granted before we asked — e.g. while the runtime was down. It is
-            # honored and consumed, and still costs a queue trip: an approval
-            # is scheduling, not a shortcut.
             self.store.consume_approval(row["id"])
             self._log(proc.pid, "approval", f"{role} had already approved: {reason}")
             self._requeue(
@@ -1147,7 +1087,7 @@ class Kernel:
             key = dg.key(dg.APPROVAL, row["id"])
             freed = self.deps.resolve(key, _approval_value(row))
             if not freed:
-                continue  # a pre-grant: nobody in this runtime is blocked on it
+                continue
             self.store.consume_approval(row["id"])
             self._log(row["pid"], "approval", f"{row['role']} approved: {row['reason']}")
             self.publish(
@@ -1160,18 +1100,15 @@ class Kernel:
                 self._wake_waiter(w)
 
     def _on_dep_timer(self, proc: AgentProcess, timer_key: str) -> None:
-        # Clear the handle on the owner even if other dependencies are still
-        # outstanding, so a later _cancel_timer cannot decrement _timers twice.
+        # Cleared even while other dependencies are outstanding, so a later
+        # _cancel_timer cannot decrement _timers twice.
         self._timers -= 1
         proc.timer = None
         for w in self.deps.resolve(timer_key, True):
             self._wake_waiter(w)
 
-    # -- process exit ----------------------------------------------------
     def _on_finish(self, proc: AgentProcess, result: Any) -> None:
         try:
-            # A result crosses the boundary too: parents receive it via
-            # wait(), and recovery re-serves it after a crash.
             assert_serializable(f"{proc.name} result", result)
         except NotSerializable as exc:
             self._on_fail(proc, exc)
@@ -1187,8 +1124,6 @@ class Kernel:
     def _on_fail(self, proc: AgentProcess, exc: BaseException) -> None:
         killed = isinstance(exc, asyncio.CancelledError)
         if killed:
-            # kill() and the deadlock detector set a reason before cancelling;
-            # "killed" is only the fallback for a bare cancellation.
             proc.exit_reason = proc.exit_reason or "killed"
         else:
             proc.exit_reason = f"{type(exc).__name__}: {exc}"
@@ -1198,8 +1133,6 @@ class Kernel:
         self.deps.cancel(proc.pid)
         if proc.state not in TERMINAL:
             self.table.transition(proc, AgentState.FAILED)
-        # The failure is real and recorded before a restart is considered:
-        # what a retry does is come back out of Failed, not skip it.
         if not killed and self._retry(proc):
             return
         self._log(proc.pid, "exit", f"{proc.name} {proc.exit_reason}")
@@ -1227,12 +1160,8 @@ class Kernel:
             f"restart {proc.retries}/{budget}",
         )
         journal = self.store.load_journals().get(proc.pid, [])
-        # Drop the failed tail before replaying. A journaled *failure* replays
-        # as the same failure — a retry that replays its own fatal error fails
-        # identically forever, which is a restart in name only. A failed
-        # syscall had no side effect, so re-executing it live is safe, and is
-        # the entire point: replay every success, re-attempt the failure.
-        # Failures the agent caught mid-run stay put — only the tail falls.
+        # Drop the failed tail before replaying: a journaled failure replays as the
+        # same failure forever. A failed syscall had no side effect to repeat.
         while journal and self._entry_failed(journal[-1]):
             journal.pop()
         self._journals[proc.pid] = journal
@@ -1240,9 +1169,8 @@ class Kernel:
         proc.ended_at = None
         proc.pending = None
         proc.current_op = None
-        # A dead task must not be mistaken for a live one: _admit starts a
-        # fresh task when this is None, and delivers an owed reply when it
-        # is not. A restart needs the former.
+        # _admit starts a fresh task when this is None and delivers an owed reply
+        # when it is not; a restart needs the former.
         proc.task = None
         self.agents[proc.pid] = self._create_agent(proc.spec)
         self.table.transition(proc, AgentState.READY, waiting_on=None)
@@ -1269,10 +1197,10 @@ class Kernel:
 
     def _announce_exit(self, proc: AgentProcess) -> None:
         """A terminated agent is an event and a resolved dependency (p.5)."""
-        self._nudge()  # a process just went terminal: re-evaluate immediately
+        self._nudge()
         self.bus.forget(proc.pid)
-        self.memory.forget_process(proc.pid)  # private memory dies with the pid
-        self.perms.forget_process(proc.pid)  # so does anything delegated to it
+        self.memory.forget_process(proc.pid)
+        self.perms.forget_process(proc.pid)
         finished = proc.state is AgentState.FINISHED
         self.publish(
             "AgentFinished" if finished else "AgentFailed",
@@ -1327,7 +1255,6 @@ class Kernel:
                 ))
                 break
 
-    # -- deadlock (p.4: the scheduler must not simply hang) ---------------
     def _detect_deadlock(self) -> None:
         """Nobody can run, nobody is asleep, no timer is pending: nothing will
         ever happen again. Say so, instead of hanging forever."""
@@ -1350,7 +1277,6 @@ class Kernel:
             else:
                 self.table.transition(proc, AgentState.FAILED)
 
-    # -- plumbing --------------------------------------------------------
     def _quiescent(self) -> bool:
         return not any(p.alive for p in self.table.all())
 

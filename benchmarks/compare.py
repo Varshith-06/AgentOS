@@ -75,10 +75,9 @@ HAVE = {
     "temporal": have("temporalio"),
 }
 
-# Framework imports stay inside the functions that use them: a child process
-# doing an AgentOS run must not pay CrewAI's multi-second import, or the
-# recovery timings measure this file's import graph instead of the runtimes.
-# The timed measurements call _warm() first so no import lands inside a timer.
+# Framework imports stay inside the functions that use them, or one
+# runtime's multi-second import lands in another's timings. _warm() runs
+# before every timed measurement for the same reason.
 
 
 def _quiet():
@@ -92,8 +91,6 @@ def _quiet():
     import io
     return contextlib.redirect_stdout(io.StringIO())
 
-
-# -- the shared tally ---------------------------------------------------------
 
 def tally_init(path: str) -> None:
     conn = sqlite3.connect(path, isolation_level=None)
@@ -118,8 +115,6 @@ def bill(tally: str, i: int, delay: float = 0.0) -> None:
     if delay:
         time.sleep(delay)
 
-
-# ============================ AgentOS =======================================
 
 class BillingAgent(Agent):
     """Six billable calls through the sql capability. Each crosses the syscall
@@ -170,8 +165,6 @@ def _kernel(rundir: str, tally: str, recover: bool = False, tick: float = TICK):
         tools={"sql": {"db": tally}}, permissions={"*": ["sql"]},
     )
 
-
-# ============================ LangGraph =====================================
 
 def _lg_billing(tally: str, per_node: bool):
     """Two shapes: everything in one node (the obvious way to write it), or
@@ -244,8 +237,6 @@ def _lg_run(graph, ckpt: str, thread: str, resume: bool) -> None:
     conn.close()
 
 
-# ============================ CrewAI Flows ==================================
-
 def _crewai_flow(tally: str, db: str, n: int, delay: float):
     """A persisted Flow, one method per call — CrewAI's own chaining idiom.
 
@@ -277,16 +268,12 @@ def _crewai_flow(tally: str, db: str, n: int, delay: float):
     return persist(SQLiteFlowPersistence(db_path=db))(cls), S
 
 
-# ============================ AutoGen =======================================
-
 async def _autogen_run(tally: str, statefile: str, n: int, delay: float,
                        resume: bool) -> None:
     from benchmarks import _autogen_defs as ad
 
     await ad.run(tally, statefile, n, delay)
 
-
-# ============================ child entry point =============================
 
 def _child(kind: str, rundir: str, tally: str, resume: bool) -> int:
     ckpt = os.path.join(rundir, "ckpt.db")
@@ -311,8 +298,6 @@ def _child(kind: str, rundir: str, tally: str, resume: bool) -> int:
             tally, os.path.join(rundir, "state.json"), CALLS, OP_DELAY, resume))
     return 0
 
-
-# ============================ 1. recovery ===================================
 
 def bench_recovery(kind: str) -> dict:
     """Start the workload, kill it hard once KILL_AFTER calls have landed,
@@ -406,8 +391,6 @@ def bench_recovery_temporal() -> dict:
     return asyncio.run(go())
 
 
-# ============================ 2. step overhead ==============================
-
 async def steps_agentos(delay: float, n: int = STEPS, tick: float = TICK) -> float:
     tmp = tempfile.mkdtemp()
     tally = os.path.join(tmp, "tally.db")
@@ -476,15 +459,8 @@ def steps_temporal(delay: float) -> float:
     return asyncio.run(go())
 
 
-# ============ 2c. cost under multi-application load (p.17) ==================
-#
-# The third axis Phase 8 asks for, and the one that is not really a race.
-# AgentOS runs one daemon that every application submits to, so there is a
-# single ledger and the question "what did all of this cost" has an answer.
-# LangGraph and CrewAI are libraries: each application owns its own state, so
-# the same question can only be answered by whoever remembered to add the
-# numbers up. Both columns are measured the same way — count what the shared
-# tally saw, and check the framework's own accounting against it.
+# Not really a race: AgentOS has one ledger every application submits to,
+# while a library leaves the adding-up to whoever remembered.
 
 def load_agentos() -> tuple[float, int, bool]:
     """Every app submits to one daemon; the kernel's ledger is the answer."""
@@ -552,13 +528,10 @@ def load_crewai() -> tuple[float, int, bool]:
                 tally, os.path.join(tmp, f"cw{i}-{a}.db"), APP_CALLS, 0.0)
             flow_cls().kickoff()
 
-    # Quiet the whole run, not each thread: redirect_stdout swaps a global,
-    # so per-thread use would race and leak panels into the table.
+    # redirect_stdout swaps a global, so quiet the whole run, not each thread.
     with _quiet():
         return _load_library(one_app)
 
-
-# ============================ 3. human in the loop ==========================
 
 async def hitl_agentos(rounds: int = 5) -> tuple[float, float]:
     from agentos.kernel.states import AgentState
@@ -629,7 +602,7 @@ def hitl_temporal(rounds: int = 3) -> tuple[float, float]:
                     h = await client.start_workflow(
                         "GatedWorkflow", id=f"cmp-gate-{i}",
                         task_queue=td.TASK_QUEUE)
-                    await asyncio.sleep(0.3)  # let it reach the wait
+                    await asyncio.sleep(0.3)
                     t0 = time.perf_counter()
                     await h.signal("approve")
                     await h.result()
@@ -638,8 +611,6 @@ def hitl_temporal(rounds: int = 3) -> tuple[float, float]:
 
     return asyncio.run(go())
 
-
-# ============================ the table =====================================
 
 def _row(label, *cells) -> None:
     print(f"   {label:<24}" + "".join(f"{c:>16}" for c in cells))
@@ -654,9 +625,8 @@ def main() -> int:
         print(f"skipped (not installed): {', '.join(missing)}")
     print()
 
-    # Temporal runs last within every section: its server is a live process
-    # that would otherwise be competing for CPU during everyone else's timings.
-    # -- 1. recovery
+    # Temporal runs last in every section: its server is a live process that
+    # would otherwise compete for CPU during everyone else's timings.
     print(f"1. RECOVERY — billable calls REPEATED after a hard kill"
           f" ({CALLS} calls, killed after {KILL_AFTER})")
     _row("framework", "ran before", "total ran", "repeated", "recovery")
@@ -680,8 +650,8 @@ def main() -> int:
     print(f"\n   repeated = calls that executed twice: work redone, and in a"
           f" real system\n   model spend paid twice. Lower is better.\n")
 
-    # -- 2. overhead. Warm each framework first: a one-step run pays the
-    # import and any first-compile cost so it lands outside the timers.
+    # Warm each framework first, so import and first-compile cost land outside
+    # the timers.
     print(f"2. OVERHEAD — one durable step, no real work ({STEPS} steps)")
     asyncio.run(steps_agentos(0.0, n=1))
     if HAVE["langgraph"]:
@@ -706,7 +676,6 @@ def main() -> int:
         v = steps_temporal(0.0)
         _row("temporal", f"{v:.2f}s", f"{v/STEPS*1000:.1f}ms")
 
-    # -- 2b. the same, with realistic work per step
     print(f"\n2b. the same {STEPS} steps with {int(REAL_WORK*1000)}ms of real"
           f" work each\n    (one modest model call) — overhead as a share of"
           f" the total")
@@ -727,8 +696,6 @@ def main() -> int:
         v = steps_temporal(REAL_WORK)
         _row("temporal", f"{v:.2f}s", f"+{(v-floor)/floor*100:.1f}%")
 
-    # -- 3. human in the loop
-    # -- 2c. cost under multi-application load (the third p.17 axis)
     print(f"\n2c. COST UNDER MULTI-APPLICATION LOAD — {APPS} independent apps,"
           f"\n    {PER_APP} agents each, {APP_CALLS} billed calls per agent:"
           f" does one ledger see them all?")

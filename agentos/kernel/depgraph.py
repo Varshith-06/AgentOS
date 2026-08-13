@@ -18,9 +18,9 @@ from typing import Any
 AGENT = "agent"
 EVENT = "event"
 TIMER = "timer"
-APPROVAL = "approval"  # a human, keyed by the durable approval id in the store
-TOOL = "tool"  # a running tool call, keyed per request
-MODEL = "model"  # a running model call, keyed per request
+APPROVAL = "approval"
+TOOL = "tool"
+MODEL = "model"
 
 
 def key(kind: str, name: Any) -> str:
@@ -48,11 +48,8 @@ class Waiting:
 class DependencyGraph:
     def __init__(self) -> None:
         self.waiting: dict[int, Waiting] = {}
-        #: dependency key -> pids blocked on it. The scheduler reads this to see
-        #: which ready process would unblock the most work if it ran next.
         self.blocked_on: dict[str, set[int]] = {}
 
-    # -- queries ---------------------------------------------------------
     def is_waiting(self, pid: int) -> bool:
         return pid in self.waiting
 
@@ -97,7 +94,6 @@ class DependencyGraph:
                 return [frm, *path]
         return None
 
-    # -- mutation --------------------------------------------------------
     def add(self, pid: int, req_id: int, deps: set[str]) -> Waiting:
         w = Waiting(pid=pid, req_id=req_id, remaining=set(deps))
         self.waiting[pid] = w

@@ -61,8 +61,7 @@ class Family(Agent):
 
 class DaemonTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        # Cleanups run LIFO: the daemon (registered later, in _daemon) must
-        # stop BEFORE the store it is ticking against gets closed.
+        # Cleanups run LIFO: the daemon must stop before the store it ticks against.
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.store = Store(self.tmp.name)
@@ -72,7 +71,7 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
         
         kw.setdefault("models", {"classes": {"fast": [
             {"provider": "mock", "model": "mock-1",
-             "cost_per_mtok": [1_000_000, 1_000_000]},  # $1/token: visible cost
+             "cost_per_mtok": [1_000_000, 1_000_000]},
         ]}})
         d = Daemon(store=self.store, host="127.0.0.1", port=0, tick=0.01, **kw)
         task = asyncio.create_task(d.start())
@@ -82,10 +81,9 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(task, timeout=LIMIT)
 
         self.addAsyncCleanup(stop)
-        await asyncio.sleep(0.05)  # let the kernel loop spin up
+        await asyncio.sleep(0.05)
         return d
 
-    # -- the p.17 bar ---------------------------------------------------------
     async def test_two_applications_one_runtime_one_table(self):
         d = await self._daemon()
         app1 = RuntimeClient(url=d.url)
@@ -97,7 +95,7 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
         r2 = await asyncio.to_thread(app2.wait, pid2, 10)
         self.assertEqual((r1["app"], r2["app"]), ("research", "support"))
 
-        ps = await asyncio.to_thread(app1.ps)  # either client sees everyone
+        ps = await asyncio.to_thread(app1.ps)
         pids = {row["pid"] for row in ps["processes"]}
         self.assertEqual(pids, {pid1, pid2})
 
@@ -111,7 +109,7 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.to_thread(app2.wait, pid2, 10)
 
         costs = (await asyncio.to_thread(app1.ps))["costs"]
-        self.assertEqual(set(costs), {str(pid1), str(pid2)})  # JSON keys
+        self.assertEqual(set(costs), {str(pid1), str(pid2)})
         self.assertGreater(sum(c["cost"] for c in costs.values()), 0)
 
     async def test_the_daemon_outlives_its_work(self):
@@ -119,7 +117,7 @@ class DaemonTest(unittest.IsolatedAsyncioTestCase):
         d = await self._daemon()
         client = RuntimeClient(url=d.url)
         await asyncio.to_thread(client.run, Napper(app="early"), 10)
-        await asyncio.sleep(0.1)  # fully idle — an embedded kernel would have exited
+        await asyncio.sleep(0.1)
         result = await asyncio.to_thread(client.run, Napper(app="late"), 10)
         self.assertEqual(result["app"], "late")
 
@@ -266,10 +264,8 @@ class SocketAuthTest(unittest.IsolatedAsyncioTestCase):
         reader, writer = await asyncio.open_connection("127.0.0.1", k.executor._port)
         writer.write(b'{"token": "bogus"}\n')
         await writer.drain()
-        # The executor hangs up without ever sending a header line.
         self.assertEqual(await asyncio.wait_for(reader.readline(), timeout=LIMIT), b"")
         writer.close()
-        # The impostor cost the real agent nothing.
         await asyncio.wait_for(run, timeout=LIMIT)
         self.assertEqual(k.table.get(pid).state.value, "Finished")
 

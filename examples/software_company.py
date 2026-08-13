@@ -76,7 +76,7 @@ class Reviewer(Agent):
         await ctx.log(f"reviewed {result['agents'][coder]['files']}")
         approval = await ctx.request_approval(
             role="Release Manager", reason="ship v1.0"
-        )  # state: Blocked, until the human decides
+        )
         return {"shipped": True, "approved_by": approval["by"]}
 
 

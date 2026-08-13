@@ -63,17 +63,9 @@ class Daemon:
         token: str | None = None,
         insecure: bool = False,
     ) -> None:
-        #: The most a submitted task may spend on models. A request may ask
-        #: for less and never more; None leaves submitted work unmetered,
-        #: which is only sane on a runtime nobody else can reach.
         self.task_budget_usd = task_budget_usd
-        # Authentication. A daemon with no token is unauthenticated, which is
-        # only defensible because nothing outside this machine can reach
-        # loopback. Bind anywhere else without one and every route -- submit,
-        # kill, read everyone's results, shut down -- is open to whoever can
-        # route to the port, so refuse rather than let that be a typo. The
-        # escape hatch exists because a private network behind a proxy that
-        # already authenticates is a real deployment.
+        # A daemon with no token is unauthenticated, which is only defensible
+        # because nothing off this machine can reach loopback.
         self.token = token or os.environ.get("AGENTOS_TOKEN") or None
         if not self.token and not _is_loopback(host) and not insecure:
             raise ValueError(
@@ -83,16 +75,8 @@ class Daemon:
                 "of this already authenticates."
             )
         self.store = store if store is not None else Store(dirpath)
-        #: What POST /task is allowed to grant. The operator decides this when
-        #: starting the runtime; a caller may request any subset and nothing
-        #: outside it. Empty means submitted tasks get no tools at all, which
-        #: is the right default for an endpoint that accepts a sentence from
-        #: the network and builds a team out of it.
         self.task_tools: set[str] = set(task_tools or ())
 
-        # First boot convenience: a daemon with no routing table would refuse
-        # every request_model, so seed the default chain (frontier -> local ->
-        # mock). Editing the file afterwards is the whole point of Phase 5.
         models_path = self.store.dir / "models.json"
         if models is None and not models_path.exists():
             models_path.write_text(
@@ -108,9 +92,6 @@ class Daemon:
             recover=recover,
             models=models,
             permissions=permissions,
-            # Driver configuration belongs to the operator, not the caller:
-            # the filesystem root a hosted runtime sandboxes agents to is
-            # exactly the sort of thing a submitted task must not choose.
             tools=tools,
         )
         # Bind synchronously so self.url is real before start() is awaited.
@@ -119,14 +100,10 @@ class Daemon:
         self.url = f"http://{bound_host}:{bound_port}"
         self.loop: asyncio.AbstractEventLoop | None = None
 
-    # -- lifecycle -----------------------------------------------------------
     async def start(self) -> None:
         self.loop = asyncio.get_running_loop()
         endpoint = self.store.dir / "daemon.json"
-        # The token goes in the endpoint file so a client on this machine
-        # needs no configuration — the same trust boundary the runtime
-        # database already sits behind. A client elsewhere reads AGENTOS_TOKEN
-        # instead, and this file should not travel with it.
+        # The token goes in the endpoint file so a local client needs no config.
         endpoint.write_text(
             json.dumps({
                 "url": self.url,
@@ -143,10 +120,9 @@ class Daemon:
             target=self.server.serve_forever, daemon=True, name="agentos-api"
         ).start()
         try:
-            await self.kernel.run()  # forever, until stop()
+            await self.kernel.run()
         finally:
-            # Take the children with us — with process isolation these are
-            # real OS processes that would otherwise be orphaned.
+            # Agents are real OS processes: they would be orphaned otherwise.
             tasks = [
                 p.task
                 for p in self.kernel.table.all()
@@ -164,7 +140,6 @@ class Daemon:
         if self.loop is not None:
             self.loop.call_soon_threadsafe(setattr, self.kernel, "_shutdown", True)
 
-    # -- the bridge HTTP threads use -----------------------------------------
     def call(self, fn: Callable[[], Any], timeout: float = 10.0) -> Any:
         """Run `fn` on the kernel's event loop and return its result.
 

@@ -42,13 +42,8 @@ ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_MAX_TOKENS = 1024
 DEFAULT_TIMEOUT = 120.0
 
-#: The seeded routing table (examples, daemon first boot). Candidates in
-#: preference order; unavailable ones are skipped, failing ones fall through.
-#: Prices are USD per million tokens (input, output).
-#: One open-weight model, four ways to reach it: Groq and OpenRouter serve
-#: gpt-oss-120b hosted (set the matching key and the router uses it), Ollama
-#: serves the same weights locally (needs ~64GB), and the mock always
-#: answers so everything stays runnable offline. Same agent code either way.
+# Candidates in preference order. Prices are USD per million tokens
+# (input, output).
 DEFAULT_MODELS_CONFIG: dict[str, Any] = {
     "classes": {
         "fast": [
@@ -117,7 +112,6 @@ class ModelManager:
         self.classes = classes or {}
         self.path = Path(path) if path is not None else None
         self._log = log or (lambda message: None)
-        #: How far through each scripted mock candidate we are (see _call_mock).
         self._script_pos: dict[int, int] = {}
         if self.path is not None and self.path.exists():
             data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -131,9 +125,8 @@ class ModelManager:
             return cls(classes=source.get("classes", source), log=log)
         if isinstance(source, (str, Path)):
             return cls(path=source, log=log)
-        return cls(path=default_path, log=log)  # None: the standard location
+        return cls(path=default_path, log=log)
 
-    # -- routing -------------------------------------------------------------
     async def request(
         self,
         need: str,
@@ -180,7 +173,7 @@ class ModelManager:
                     + raw["output_tokens"] * rates[1] / 1e6,
                     "latency": round(loop.time() - started, 3),
                 }
-            except Exception as exc:  # this candidate failed: try the next one
+            except Exception as exc:
                 failures.append(f"{label}: {type(exc).__name__}: {exc}")
                 self._log(f"{label} failed, trying next candidate: {exc}")
         raise ModelError(
@@ -215,8 +208,7 @@ class ModelManager:
 
         def projected_cost(c: dict) -> float:
             rates = c.get("cost_per_mtok") or [0.0, 0.0]
-            # Output length is unknown before the call; assume it mirrors the
-            # prompt. Wrong in detail, right in ordering, which is all rank needs.
+            # Output length is unknown before the call; assume it mirrors the prompt.
             return (estimated * rates[0] + estimated * rates[1]) / 1e6
 
         keys = {
@@ -251,7 +243,6 @@ class ModelManager:
             env = cand.get("api_key_env", "ANTHROPIC_API_KEY")
             return None if os.environ.get(env) else f"{env} is not set"
         if provider == "openai":
-            # A local endpoint (base_url given, api_key_env null) needs no key.
             env = cand.get(
                 "api_key_env", None if "base_url" in cand else "OPENAI_API_KEY"
             )
@@ -260,7 +251,6 @@ class ModelManager:
             return None
         return f"unknown provider {provider!r}"
 
-    # -- transports ------------------------------------------------------------
     async def _call(
         self, cand: dict[str, Any], prompt: str, system: str | None, max_tokens: int
     ) -> dict[str, Any]:
@@ -288,11 +278,8 @@ class ModelManager:
             f"[{cand.get('model', 'mock')}] deterministic offline reply "
             f"to your {words}-word prompt."
         )
-        # A `script` turns the mock into a fake *reasoner*: successive calls
-        # get successive replies. That is what makes a model-driven agent
-        # loop testable with no API key — the p.12 rule that the kernel must
-        # be demonstrable with fake agents, extended to fake reasoning. The
-        # last entry repeats, so a loop that runs long cannot fall off the end.
+        # A `script` makes the mock a fake reasoner: successive calls get successive
+        # replies, and the last entry repeats.
         script = cand.get("script")
         if script:
             key = id(cand)
@@ -320,7 +307,7 @@ class ModelManager:
         if system:
             body["system"] = system
         try:
-            import anthropic  # the official SDK, when installed
+            import anthropic
         except ImportError:
             return await asyncio.to_thread(self._anthropic_http, key, body)
         client = anthropic.AsyncAnthropic(api_key=key)
@@ -404,9 +391,8 @@ def _post_json(url: str, body: dict[str, Any], headers: dict[str, str]) -> dict:
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
-        # The User-Agent matters: several providers sit behind Cloudflare,
-        # which rejects urllib's default signature outright (403, code 1010).
-        # Groq does; this header is the difference between working and not.
+        # Several providers sit behind Cloudflare, which rejects urllib's default
+        # User-Agent outright (403, code 1010). Groq does.
         headers={
             "Content-Type": "application/json",
             "User-Agent": "agentos/1.0",

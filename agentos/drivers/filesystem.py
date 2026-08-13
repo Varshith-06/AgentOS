@@ -11,7 +11,7 @@ from .base import ToolDriver, ToolError
 class Filesystem(ToolDriver):
     name = "filesystem"
     timeout = 10.0
-    cacheable = ("read", "list", "exists")  # writes are never served stale
+    cacheable = ("read", "list", "exists")
 
     def __init__(self, root: str | Path = ".", **kw: Any) -> None:
         super().__init__(**kw)
@@ -33,7 +33,7 @@ class Filesystem(ToolDriver):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
         if not existed:
-            self._publish("FileCreated", path=str(p))  # p.5 kernel event
+            self._publish("FileCreated", path=str(p))
         return {"path": str(p), "bytes": len(content.encode("utf-8"))}
 
     async def op_list(self, path: str = ".") -> list[str]:

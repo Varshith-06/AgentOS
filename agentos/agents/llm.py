@@ -72,7 +72,7 @@ from .base import Agent
 
 MAX_STEPS = 12
 MAX_CHILDREN = 8
-TRANSCRIPT_CHARS = 6000  # keep the prompt bounded on long runs
+TRANSCRIPT_CHARS = 6000
 
 SYSTEM = """You are {role}, one agent in a multi-agent runtime.
 
@@ -115,9 +115,6 @@ HUMAN_OPTION = (
     '"reason": "<why>"}}  (blocks until a human approves; use before anything '
     'irreversible)'
 )
-# Said to a planner. The names are the planner's to invent; what it must not
-# do is invent them twice differently, which is the one failure the runtime
-# cannot recover from on its own.
 WIRING_NOTE = """- You choose the event names for the agents you create. Pick
   clear ones (e.g. "MeasurementsReady") and use the SAME name in the
   publisher's "publishes" and the waiter's "subscribes" — an agent waiting for
@@ -145,20 +142,15 @@ class LLMAgent(Agent):
 
     @property
     def name(self) -> str:
-        # Every dynamic agent would otherwise be called "LLMAgent" in ps.
-        # The role is what a human reading the process table wants to see.
         role = self.params.get("role")
         return str(role) if role else "LLMAgent"
 
-    # -- the loop ------------------------------------------------------------
     async def run(self, ctx: Any) -> Any:
         tools: list[str] = list(self.params.get("tools") or [])
         may_spawn = bool(self.params.get("may_spawn"))
         max_steps = int(self.params.get("max_steps", MAX_STEPS))
         max_children = int(self.params.get("max_children", MAX_CHILDREN))
         model = self.params.get("model", "fast")
-        # What my parent wired me to announce, and what it wired me to wait
-        # for. Empty for a root planner, which invents the vocabulary instead.
         publishes: list[str] = list(self.params.get("publishes") or [])
         awaits: list[str] = list(self.params.get("subscribes") or [])
 
@@ -189,9 +181,6 @@ class LLMAgent(Agent):
             transcript.append(f"Context from whoever created you: {context}")
         children: list[int] = []
 
-        # Wired to wait for something? Then that is the first thing to do, and
-        # it is the kernel's job to wake us — not something to ask a model
-        # about. The scheduler resolves the dependency; we resume after.
         if awaits:
             arrived = await ctx.wait_all(events=list(awaits))
             transcript.append(
@@ -205,9 +194,6 @@ class LLMAgent(Agent):
                     model, prompt=self._prompt(transcript), system=system
                 )
             except Exception as exc:
-                # The usual cause is the task's budget running out. There is
-                # no asking the model what to do when the model is what was
-                # refused, so stop and report honestly rather than spin.
                 return {
                     "incomplete": True,
                     "reason": str(exc),
@@ -221,9 +207,6 @@ class LLMAgent(Agent):
                 continue
 
             kind = action.get("action")
-            # The decision itself goes on the record before it runs: the
-            # kernel logs every syscall, but the model's choices between them
-            # are the part an operator reading `agent logs` actually wants.
             await ctx.log(f"decided: {_describe(action)}")
             if kind == "done":
                 return action.get("result")
@@ -251,15 +234,12 @@ class LLMAgent(Agent):
                 )
             transcript.append(observation)
 
-        # Out of steps. Say so rather than pretending: the caller can see how
-        # far it got, and the journal has every step.
         return {
             "incomplete": True,
             "reason": f"stopped after {max_steps} steps",
             "transcript": transcript[-3:],
         }
 
-    # -- actions -------------------------------------------------------------
     async def _do_tool(self, ctx, action: dict, tools: list[str]) -> str:
         capability = action.get("capability")
         if capability not in tools:
@@ -267,10 +247,7 @@ class LLMAgent(Agent):
                 f"Refused: you may not use {capability!r}. "
                 f"Your tools are: {', '.join(tools) or 'none'}."
             )
-        # Models flatten arguments as often as they nest them. Accept both:
-        # {"op": "write", "params": {"path": ...}} and {"op": "write",
-        # "path": ...}. Being strict here costs a turn every time and teaches
-        # the model nothing the error message could not.
+        # Models flatten arguments as often as they nest them; accept both.
         params = action.get("params")
         if not isinstance(params, dict):
             params = {k: v for k, v in action.items()
@@ -279,7 +256,7 @@ class LLMAgent(Agent):
             value = await ctx.request_tool(
                 capability, action.get("op", ""), **params
             )
-        except Exception as exc:  # a denial or a tool failure is an observation
+        except Exception as exc:
             return f"{capability}.{action.get('op')} failed: {exc}"
         return f"{capability}.{action.get('op')} returned: {_clip(value)}"
 
@@ -291,8 +268,6 @@ class LLMAgent(Agent):
         wanted = list(action.get("tools") or [])
         over = [t for t in wanted if t not in tools]
         if over:
-            # The kernel would refuse this too; failing here makes the reason
-            # legible to the model so it can retry with a smaller set.
             return (
                 f"Refused: you cannot grant {', '.join(over)} — you do not hold it. "
                 f"You may grant any of: {', '.join(tools) or 'nothing'}."
@@ -303,21 +278,16 @@ class LLMAgent(Agent):
             role=action.get("role", "worker"),
             goal=action.get("goal", ""),
             tools=wanted,
-            # Children may be routed to a different capability class than the
-            # planner: reasoning to plan, something cheap to execute. The
-            # planner may name one per child, bounded by the classes the
-            # operator configured — asking for an unknown class fails the
-            # child's first call, not the runtime.
             model=action.get("model")
             or self.params.get("child_model", self.params.get("model", "fast")),
-            may_spawn=False,  # one level of delegation per spawn, by default
+            may_spawn=False,
             max_steps=int(self.params.get("child_max_steps", MAX_STEPS)),
             publishes=publishes,
             subscribes=subscribes,
         )
         priority = action.get("priority")
         if priority in ("High", "Normal", "Low"):
-            child.priority = priority  # spec_of reads it; the scheduler uses it
+            child.priority = priority
         budget = action.get("retries")
         if isinstance(budget, int) and budget > 0:
             child.params["retries"] = min(budget, 3)
@@ -338,8 +308,6 @@ class LLMAgent(Agent):
     async def _do_publish(self, ctx, action: dict, publishes: list[str]) -> str:
         event = action.get("event") or action.get("type")
         if event not in publishes:
-            # Refused here as well as in the kernel, so the model is told what
-            # it may say rather than just that it said the wrong thing.
             return (
                 f"Refused: you were not wired to publish {event!r}. "
                 f"You may publish: {', '.join(publishes) or 'nothing'}."
@@ -364,8 +332,6 @@ class LLMAgent(Agent):
         try:
             results = await ctx.wait_all(agents=agents, events=events)
         except Exception as exc:
-            # Waiting on a name nobody publishes is refused by the kernel
-            # rather than hanging. Hand the reason back so it can be fixed.
             return f"That wait was refused: {exc}"
         parts = []
         if results.get("agents"):
@@ -405,7 +371,6 @@ class LLMAgent(Agent):
         key = action.get("key")
         if not isinstance(key, str) or not key.strip():
             return 'Refused: "recall" needs a "key" or a "query".'
-        # Team state first, then my own notes, then what past runs left behind.
         for kind in ("shared", "working", "longterm"):
             value = await ctx.memory.retrieve(key, kind=kind)
             if value is not None:
@@ -422,7 +387,6 @@ class LLMAgent(Agent):
         by = approval.get("by") if isinstance(approval, dict) else None
         return f"A human ({by or role}) approved: {reason!r}. Proceed."
 
-    # -- parsing -------------------------------------------------------------
     @staticmethod
     def _prompt(transcript: list[str]) -> str:
         if not transcript:

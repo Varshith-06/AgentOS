@@ -23,27 +23,10 @@ from __future__ import annotations
 
 import os
 
-#: Seconds a wait may take before the test treats it as a deadlock.
+# Seconds a wait may take before the test treats it as a deadlock.
 LIMIT = float(os.environ.get("AGENTOS_TEST_TIMEOUT", "60"))
 
-#: How long a publisher waits for its subscribers to reach their first syscall.
-#:
-#: `subscribe` buffers everything that fires after it returns, so a subscriber
-#: only misses an event published before it got that far.
-#:
-#: Waiting for the subscriber to reach WAITING and only then spawning the
-#: publisher would be exact, and does not work: a kernel whose every agent is
-#: WAITING has nothing runnable, which is indistinguishable from a deadlock,
-#: so `run()` returns before the publisher is ever spawned. (The same trick in
-#: test_events works only because that subscriber is SLEEPING — a pending
-#: timer keeps the kernel alive.) Nor can the subscriber announce readiness;
-#: doing so means publishing an event, which races the same way one level up.
-#:
-#: So the publisher has to be spawned upfront and allow time, and the
-#: allowance has to clear the real floor — an agent is an OS process, so
-#: reaching its first syscall costs a process start, about 100ms idle and
-#: considerably more when several start at once on a busy machine.
-#:
-#: The old allowance was 50ms, below that floor even when idle. It passed on a
-#: fast desktop and failed reproducibly on a loaded four-core runner.
+# How long a publisher waits for its subscribers to reach their first
+# syscall. An agent is an OS process, so that costs a process start:
+# ~100ms idle and more when several start at once. 50ms was below the floor.
 STARTUP = float(os.environ.get("AGENTOS_TEST_STARTUP", "2.0"))

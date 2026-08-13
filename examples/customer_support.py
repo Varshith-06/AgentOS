@@ -30,7 +30,7 @@ TICKETS = [
 
 class Intake(Agent):
     async def run(self, ctx):
-        await ctx.sleep(0.05)  # let Triage subscribe first
+        await ctx.sleep(0.05)
         for ticket in self.params["tickets"]:
             await ctx.publish("TicketReceived", text=ticket)
         return {"received": len(self.params["tickets"])}

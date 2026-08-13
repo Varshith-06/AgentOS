@@ -28,7 +28,7 @@ class Research(Agent):
     async def run(self, ctx):
         topic = self.params["topic"]
         await ctx.log(f"researching {topic}")
-        # Long enough that you can actually reach a second terminal and kill it.
+        # Long enough to reach a second terminal and kill it.
         await ctx.sleep(self.params.get("duration", 8))
         await ctx.log(f"done researching {topic}")
         return {"topic": topic, "findings": f"3 sources on {topic}"}
@@ -61,7 +61,7 @@ class Planner(Agent):
 
         results = []
         for pid in kids:
-            result = await ctx.wait(pid)  # status becomes Waiting
+            result = await ctx.wait(pid)
             await ctx.log(f"pid {pid} returned: {result}")
             results.append(result)
 

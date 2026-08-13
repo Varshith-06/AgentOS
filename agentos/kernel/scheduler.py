@@ -20,7 +20,6 @@ PRIORITY_RANK = {"High": 0, "Normal": 1, "Low": 2}
 class SchedulerView:
     """What the kernel tells the policy about the world beyond the ready queue."""
 
-    #: pid -> number of processes blocked waiting on that pid to finish
     dependents: dict[int, int] = field(default_factory=dict)
 
 
@@ -49,7 +48,7 @@ class Priority:
     """
 
     name = "priority"
-    #: after this many picks, the oldest waiting process wins regardless of band
+    # after this many picks, the oldest waiting process wins regardless of band
     ANTI_STARVATION_PICKS = 20
 
     def __init__(self) -> None:
@@ -59,7 +58,7 @@ class Priority:
         self._picks_since_oldest += 1
         if self._picks_since_oldest > self.ANTI_STARVATION_PICKS:
             self._picks_since_oldest = 0
-            return ready.popleft()  # oldest, whatever its band
+            return ready.popleft()
 
         best = min(
             range(len(ready)),
@@ -69,7 +68,7 @@ class Priority:
         del ready[best]
         if PRIORITY_RANK.get(proc.priority, 1) == 0:
             return proc
-        self._picks_since_oldest = 0  # a non-High ran: nobody is starving
+        self._picks_since_oldest = 0
         return proc
 
 

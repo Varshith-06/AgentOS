@@ -18,8 +18,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
-#: The kernel-emitted event types from p.5. Applications may publish their own
-#: named events too (the doc's own example, ResearchCompleted, is one of those).
 KERNEL_EVENTS: frozenset[str] = frozenset(
     {
         "AgentFinished",
@@ -54,7 +52,7 @@ class Event:
 
 @dataclass(slots=True)
 class EventBus:
-    #: pid -> event type -> buffered events not yet consumed by that subscriber
+    # pid -> event type -> buffered events not yet consumed
     inboxes: dict[int, dict[str, deque[Event]]] = field(default_factory=dict)
     history: list[Event] = field(default_factory=list)
     _seq: int = 0

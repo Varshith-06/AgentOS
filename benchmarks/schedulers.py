@@ -44,8 +44,6 @@ STEP = 0.02          # one unit of agent work
 POLICY_ORDER = ["fifo", "priority", "dependency"]
 
 
-# -- workload agents ----------------------------------------------------------
-
 class Work(Agent):
     """Fixed work in yielding steps, so the scheduler sees it more than once."""
 
@@ -74,8 +72,6 @@ class Blocked(Agent):
         return "done"
 
 
-# -- harness ------------------------------------------------------------------
-
 async def _run(policy: str, slots: int, build) -> tuple[Kernel, float, float]:
     """Run one workload under one policy. `build` spawns and returns nothing;
     it receives the kernel. Returns (kernel, t0, wall)."""
@@ -101,8 +97,6 @@ def _turnaround(k: Kernel, t0: float, predicate) -> list[float]:
     ]
 
 
-# -- A. independent agents: what does a policy cost? --------------------------
-
 async def bench_independent(policy: str, agents: int = 24, slots: int = 4) -> dict:
     def build(k):
         for i in range(agents):
@@ -116,11 +110,7 @@ async def bench_independent(policy: str, agents: int = 24, slots: int = 4) -> di
     }
 
 
-# -- B. mixed urgency: how long does an urgent agent wait? --------------------
-
 async def bench_urgency(policy: str, per_band: int = 5, slots: int = 2) -> dict:
-    # Submitted worst-case for the urgent work: every Low and Normal agent is
-    # already in the queue before the first High one arrives.
     def build(k):
         for band in ("Low", "Normal", "High"):
             for i in range(per_band):
@@ -135,11 +125,9 @@ async def bench_urgency(policy: str, per_band: int = 5, slots: int = 2) -> dict:
         "wall_s": wall,
         "high_mean_s": statistics.mean(high),
         "high_worst_s": max(high),
-        "low_mean_s": statistics.mean(low),  # the cost of the preference
+        "low_mean_s": statistics.mean(low),
     }
 
-
-# -- C. bottleneck: how long do blocked agents stay blocked? ------------------
 
 async def bench_bottleneck(
     policy: str,
@@ -148,13 +136,9 @@ async def bench_bottleneck(
     filler: int = 20,
     slots: int = 2,
 ) -> dict:
-    # The filler queue has to be long for this to be a real question. FIFO
-    # round-robins, so a short queue comes back to the bottleneck often enough
-    # that jumping it buys almost nothing; the starvation only bites when the
-    # bottleneck waits behind a full cycle of everyone else for every step.
+    # The filler queue has to be long: FIFO round-robins back to the bottleneck
+    # often enough that jumping it buys almost nothing when the queue is short.
     def build(k):
-        # Bottlenecks first so their pids exist to be waited on; the contrast
-        # between policies comes from re-queueing, not from this order.
         targets = [k.spawn(Bottleneck(steps=4)) for _ in range(bottlenecks)]
         for target in targets:
             for _ in range(blocked_each):
@@ -164,9 +148,6 @@ async def bench_bottleneck(
 
     k, t0, wall = await _run(policy, slots, build)
     blocked = _turnaround(k, t0, lambda p: p.name == "Blocked")
-    # Did the policy actually front-run the bottleneck? That is the mechanism;
-    # whether it improves the makespan is a separate question, since the total
-    # work is identical either way.
     blockers = _turnaround(k, t0, lambda p: p.name == "Bottleneck")
     return {
         "wall_s": wall,
@@ -175,8 +156,6 @@ async def bench_bottleneck(
         "blocked_worst_s": max(blocked),
     }
 
-
-# -- the table ----------------------------------------------------------------
 
 def table(title: str, subtitle: str, columns: list[str], rows: dict) -> None:
     print(f"\n{title}")

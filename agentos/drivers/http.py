@@ -14,8 +14,8 @@ from .base import ToolDriver, Transient
 class Http(ToolDriver):
     name = "http"
     timeout = 15.0
-    cacheable = ("get",)  # POST changes something; GET is the cacheable one
-    retries = 2  # 5xx and dropped connections are worth another try
+    cacheable = ("get",)
+    retries = 2
 
     async def op_get(self, url: str, headers: dict | None = None) -> dict[str, Any]:
         return await asyncio.to_thread(self._fetch, "GET", url, None, headers or {})

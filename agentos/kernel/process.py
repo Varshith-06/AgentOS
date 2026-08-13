@@ -17,7 +17,7 @@ class AgentProcess:
     pid: int
     name: str
     parent: int | None
-    spec: dict[str, Any]  # import path + params: enough to re-create this agent
+    spec: dict[str, Any]
     priority: str = "Normal"
     state: AgentState = AgentState.READY
     children: list[int] = field(default_factory=list)
@@ -26,35 +26,16 @@ class AgentProcess:
     exit_reason: str | None = None
     started_at: float = field(default_factory=time.time)
     ended_at: float | None = None
-    #: Completed (journaled) syscalls — the p.3 card's "Checkpoint: #31".
     checkpoint: int = 0
-    #: The p.3 card's "Model: GPT-5" — whatever the router last picked for
-    #: this agent. None until it makes its first request_model.
     model: str | None = None
-    #: The p.3 card's "Permissions: Browser, Python". Filled by the kernel
-    #: from the permission matrix, so ps shows what this agent may reach.
     permissions: list[str] = field(default_factory=list)
-    #: Times this agent has been restarted after a failure (p.4: the
-    #: scheduler is responsible for retries).
     retries: int = 0
-    #: Event types this process was told it may publish, assigned by whoever
-    #: spawned it. None means unrestricted — a hand-written agent, or the
-    #: root of a task, which is where a vocabulary comes from in the first
-    #: place. A list (including an empty one) is a contract: publishing
-    #: anything else is refused, so a model's typo is an error rather than a
-    #: subscriber that never wakes.
-    #: The pid at the top of this process's task — itself, for anything
-    #: submitted directly. Spending is metered against the whole tree, and a
-    #: tree is what a submitted task actually is.
     root: int = 0
-    #: Dollars this task may spend on models before the kernel stops serving
-    #: it. Set on the root; descendants inherit by looking up the tree. None
-    #: means unmetered, which is the right default for a runtime you own and
-    #: the wrong one for a runtime taking work from outside.
+    # Dollars this task may spend on models; None is unmetered. Set on the
+    # root, inherited by looking up the tree.
     budget_usd: float | None = None
+    # None is unrestricted; a list (including an empty one) the kernel enforces.
     publishes: list[str] | None = None
-    #: Event types this process was wired to wait for. Recorded for the same
-    #: reason: so `agent ps` can show what a runtime-invented agent is for.
     subscribes: list[str] | None = None
 
     # Runtime-only handles. Never cross the message boundary, never persisted.
@@ -62,12 +43,9 @@ class AgentProcess:
     inbox: asyncio.Queue = field(
         default_factory=asyncio.Queue, repr=False, compare=False
     )
-    #: Reply owed to this agent, held until the scheduler grants it a slot.
     pending: Any = field(default=None, repr=False, compare=False)
-    #: A pause lands at the next syscall boundary, like a preemption point.
     pause_requested: bool = field(default=False, repr=False, compare=False)
-    #: The op of the blocking syscall currently holding this agent, so the
-    #: kernel can journal its eventual reply under the right name.
+    # Op of the blocking syscall, so its reply is journaled under that name.
     current_op: str | None = field(default=None, repr=False, compare=False)
     timer: asyncio.TimerHandle | None = field(
         default=None, repr=False, compare=False
@@ -135,8 +113,6 @@ class ProcessTable:
         proc = AgentProcess(
             pid=pid, name=name, parent=parent, spec=spec, priority=priority
         )
-        # A child belongs to whatever task its parent belongs to, so budgets
-        # and accounting follow the tree rather than the individual agent.
         proc.root = pid if parent is None else self._procs[parent].root
         self._procs[pid] = proc
         if parent is not None:

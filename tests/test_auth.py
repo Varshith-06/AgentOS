@@ -63,7 +63,6 @@ class AuthenticatedDaemonTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(self.task, timeout=LIMIT)
         self.store.close()
 
-    # -- nothing gets through unauthenticated --------------------------------
     async def test_every_route_refuses_without_a_token(self):
         routes = [
             ("GET", "/state"), ("GET", "/ps"), ("GET", "/health"),
@@ -84,7 +83,6 @@ class AuthenticatedDaemonTest(unittest.IsolatedAsyncioTestCase):
             code, _ = await asyncio.to_thread(
                 call, self.url, path, None, None, "POST", body)
             self.assertEqual(code, 401, f"POST {path} was not refused")
-        # And the daemon is still up, i.e. /shutdown really was refused.
         code, _ = await asyncio.to_thread(call, self.url, "/health", TOKEN)
         self.assertEqual(code, 200)
 
@@ -111,7 +109,6 @@ class AuthenticatedDaemonTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("Bearer", await asyncio.to_thread(send))
 
-    # -- the right token works -----------------------------------------------
     async def test_the_header_form_is_accepted(self):
         code, body = await asyncio.to_thread(call, self.url, "/health", TOKEN)
         self.assertEqual(code, 200)
