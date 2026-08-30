@@ -63,7 +63,7 @@ config at a real one and the same code runs live.
 | **Capability ceiling** | **0 escapes** in 10 adversarial attacks — a real model actively trying |
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
 | **Auth** | bearer token on every route; refuses to bind non-loopback without one |
-| **Test suite** | 194 tests, zero dependencies, fully offline |
+| **Test suite** | 201 tests, zero dependencies, fully offline |
 | **Verified** | the correctness claims above are re-checked on every push — Linux, macOS, Windows × Python 3.11–3.14. Timings are reported, never asserted |
 
 ---
@@ -452,7 +452,10 @@ shared crosses agents through the kernel with an access list; longterm is
 keyed by agent *name* and survives restarts, and text stored there is embedded
 on the way in so the same kind answers `key=` and `query=`; episodic is the
 kernel's own record, read-only. The embedding is a deterministic stdlib
-placeholder a real model can replace without any agent changing.
+placeholder a real model can replace without any agent changing, and the
+search over it is a scan — `pip install agentos[vector]` puts sqlite-vec
+behind it for the same ranking at index speed, and nothing requires it to
+be there.
 
 **Models by capability class.** Agents ask for `"fast"` or `"reasoning"`,
 never a model name. The default chain is **gpt-oss-120b** four ways — Groq,

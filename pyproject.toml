@@ -7,6 +7,11 @@ requires-python = ">=3.11"
 license = "MIT"
 dependencies = []  # Phase 1 is stdlib-only, on purpose
 
+[project.optional-dependencies]
+# Indexes longterm memory's KNN search. Nothing else changes: without it
+# the same ranking is computed by scan, which is what CI runs.
+vector = ["sqlite-vec>=0.1.6"]
+
 [tool.hatch.version]
 path = "agentos/__init__.py"
 

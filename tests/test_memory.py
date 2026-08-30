@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agentos import Agent, Kernel  # noqa: E402
-from agentos.kernel.store import Store  # noqa: E402
+from agentos.kernel import store as memory_store  # noqa: E402
+from agentos.kernel.store import Store, unpack_vector  # noqa: E402
 
 from tests._timing import LIMIT, STARTUP  # noqa: E402
 
@@ -117,6 +120,36 @@ class Librarian(Agent):
             "ranked": [h["key"] for h in hits],
             "by_key": await ctx.memory.retrieve("tally", kind="longterm"),
         }
+
+
+class Cataloguer(Agent):
+    """Files a spread of texts, then reports the ranking in full."""
+
+    NOTES = {
+        "scheduler": "the scheduler picks which ready agent runs next",
+        "memory": "working memory dies with the process that wrote it",
+        "kernel": "the kernel is the only writer of runtime state",
+        "fruit": "bananas are a yellow fruit rich in potassium",
+        "weather": "it rained for most of the afternoon",
+    }
+
+    async def run(self, ctx):
+        for key, text in self.NOTES.items():
+            await ctx.memory.store(key, text, kind="longterm")
+        return await ctx.memory.retrieve(
+            kind="longterm", query=self.params["query"], top=3
+        )
+
+
+class Forgetful(Agent):
+    """Files three notes, then withdraws one and overwrites another."""
+
+    async def run(self, ctx):
+        for key in ("kept", "dropped", "retyped"):
+            await ctx.memory.store(key, f"a note about {key}", kind="longterm")
+        await ctx.memory.delete("dropped", kind="longterm")
+        await ctx.memory.store("retyped", {"no": "text"}, kind="longterm")
+        return True
 
 
 class Antiquarian(Agent):
@@ -232,6 +265,105 @@ class MemoryTest(unittest.IsolatedAsyncioTestCase):
             "SELECT * FROM memory WHERE mtype = 'working' AND owner = ?", (str(pid),)
         ).fetchall()
         self.assertEqual(rows, [], "a dead process holds no private memory")
+
+    async def test_longterm_embeddings_are_stored_as_packed_floats(self):
+        await asyncio.wait_for(
+            self.kernel().run_until_done(Librarian()), timeout=LIMIT
+        )
+        rows = self.store.db.execute(
+            "SELECT typeof(vector) AS t, vector FROM memory"
+            " WHERE mtype = 'longterm' AND vector IS NOT NULL"
+        ).fetchall()
+        self.assertTrue(rows, "Librarian stores text, so it stores embeddings")
+        for r in rows:
+            self.assertEqual(r["t"], "blob")
+            self.assertEqual(len(unpack_vector(r["vector"])), 128)
+
+    async def test_json_embeddings_from_an_older_db_are_migrated(self):
+        self.store.db.execute(
+            "INSERT INTO memory VALUES ('longterm', 'ann', 'k', ?, ?, NULL, 'ann', 0)",
+            (json.dumps("hello"), json.dumps([0.5, 0.25, 0.125] + [0.0] * 125)),
+        )
+        self.store.register_runtime("fair", 4)
+        row = self.store.db.execute(
+            "SELECT typeof(vector) AS t, vector FROM memory WHERE key = 'k'"
+        ).fetchone()
+        self.assertEqual(row["t"], "blob", "startup rewrites text vectors")
+        self.assertEqual(unpack_vector(row["vector"])[:3], (0.5, 0.25, 0.125))
+
+    def test_episodic_memory_is_bounded(self):
+        store = self.store
+        with mock.patch.object(memory_store, "LOG_LIMIT", 200),                 mock.patch.object(memory_store, "_TRIM_EVERY", 50):
+            for i in range(2000):
+                store.append_log(7, "info", f"m{i}")
+        rows = store.db.execute("SELECT COUNT(*) AS c FROM log").fetchone()
+        self.assertLessEqual(rows["c"], 250, "the log is a ring buffer")
+        self.assertEqual(store.logs(pid=7, limit=1)[0]["message"], "m1999")
+
+
+class VectorIndexTest(unittest.IsolatedAsyncioTestCase):
+    """sqlite-vec is optional, so the scan it replaces must stay equivalent."""
+
+    def setUp(self):
+        if memory_store.sqlite_vec is None:
+            self.skipTest("sqlite-vec is not installed")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)  # LIFO: after every store.close()
+
+    def store(self, indexed: bool) -> Store:
+        with mock.patch.object(
+            memory_store, "sqlite_vec", memory_store.sqlite_vec if indexed else None
+        ):
+            store = Store(Path(self.tmp.name) / ("on" if indexed else "off"))
+        self.assertIs(store.vec, indexed)
+        self.addCleanup(store.close)
+        return store
+
+    async def ranked(self, store: Store, query: str) -> list[dict]:
+        return await asyncio.wait_for(
+            Kernel(store=store, tick=0.01).run_until_done(Cataloguer(query=query)),
+            timeout=LIMIT,
+        )
+
+    async def test_the_index_ranks_exactly_as_the_scan_does(self):
+        for query in ("scheduler", "a stack of unrelated words"):
+            indexed = await self.ranked(self.store(True), query)
+            scanned = await self.ranked(self.store(False), query)
+            self.assertEqual(
+                [r["score"] for r in indexed],
+                [r["score"] for r in scanned],
+                f"{query!r} must rank the same with and without sqlite-vec",
+            )
+
+    async def test_the_index_tracks_the_table_it_mirrors(self):
+        store = self.store(True)
+        await asyncio.wait_for(
+            Kernel(store=store, tick=0.01).run_until_done(Forgetful()), timeout=LIMIT
+        )
+        indexed = {
+            r["mkey"] for r in store.db.execute("SELECT mkey FROM memory_vec")
+        }
+        table = {
+            r["key"]
+            for r in store.db.execute(
+                "SELECT key FROM memory"
+                " WHERE mtype = 'longterm' AND vector IS NOT NULL"
+            )
+        }
+        self.assertEqual(indexed, table, "a delete must unindex too")
+        self.assertEqual(indexed, {"kept"}, "and a re-store without text must too")
+
+    def test_a_stale_index_is_rebuilt_at_startup(self):
+        store = self.store(True)
+        store.db.execute(
+            "INSERT INTO memory VALUES ('longterm', 'ann', 'k', ?, ?, NULL, 'ann', 0)",
+            (json.dumps("scheduler notes"), memory_store.pack_vector([0.1] * 128)),
+        )
+        store.register_runtime("fair", 4)  # the index knew nothing of that row
+        self.assertEqual(
+            [k for k, _ in store.nearest("ann", memory_store.pack_vector([0.1] * 128), 5)],
+            ["k"],
+        )
 
 
 if __name__ == "__main__":

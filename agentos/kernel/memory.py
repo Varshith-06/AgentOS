@@ -9,7 +9,7 @@ import re
 import time
 from typing import Any
 
-from .store import Store
+from .store import VECTOR_DIM, Store, pack_vector, unpack_vector
 
 EPHEMERAL = ("working", "shared")
 PERSISTENT = ("longterm",)
@@ -21,15 +21,13 @@ RETIRED = {
     "semantic": "use 'longterm' — it embeds text; search it with query=...",
 }
 
-_DIM = 128
-
 
 def _embed(text: str) -> list[float]:
     """A stable, dependency-free placeholder embedding."""
-    vec = [0.0] * _DIM
+    vec = [0.0] * VECTOR_DIM
     for token in re.findall(r"[a-z0-9]+", text.lower()):
         digest = hashlib.md5(token.encode()).digest()
-        vec[int.from_bytes(digest[:4], "big") % _DIM] += 1.0
+        vec[int.from_bytes(digest[:4], "big") % VECTOR_DIM] += 1.0
     norm = math.sqrt(sum(v * v for v in vec))
     return [v / norm for v in vec] if norm else vec
 
@@ -69,7 +67,7 @@ class MemoryManager:
             raise MemoryError_("memory keys must be non-empty strings")
 
         vector = (
-            json.dumps(_embed(value))
+            pack_vector(_embed(value))
             if kind == "longterm" and isinstance(value, str)
             else None
         )
@@ -92,11 +90,13 @@ class MemoryManager:
             )
             return
 
+        owner = self._owner(proc, kind)
         self.db.execute(
             "INSERT OR REPLACE INTO memory VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
-            (kind, self._owner(proc, kind), key, json.dumps(value), vector,
-             proc.name, time.time()),
+            (kind, owner, key, json.dumps(value), vector, proc.name, time.time()),
         )
+        if kind == "longterm":
+            self.store.index_vector(owner, key, vector)
 
     def retrieve(
         self,
@@ -189,10 +189,13 @@ class MemoryManager:
                 (key,),
             )
             return True
+        owner = self._owner(proc, kind)
         cur = self.db.execute(
             "DELETE FROM memory WHERE mtype = ? AND owner = ? AND key = ?",
-            (kind, self._owner(proc, kind), key),
+            (kind, owner, key),
         )
+        if kind == "longterm":
+            self.store.index_vector(owner, key, None)
         return cur.rowcount > 0
 
     def forget_process(self, pid: int) -> None:
@@ -215,18 +218,42 @@ class MemoryManager:
 
     def _search_by_meaning(self, proc: Any, query: str, top: int) -> list[dict[str, Any]]:
         needle = _embed(query)
+        top = max(1, top)
+        if self.store.vec:
+            return self._nearest(proc, needle, top)
         rows = self.db.execute(
             "SELECT key, value, vector FROM memory WHERE mtype = 'longterm' AND owner = ?",
             (proc.name,),
         ).fetchall()
-        scored = [
-            {
-                "key": r["key"],
-                "text": json.loads(r["value"]),
-                "score": round(_similarity(needle, json.loads(r["vector"])), 4),
-            }
-            for r in rows
-            if r["vector"]
+        scored = sorted(
+            (
+                (_similarity(needle, unpack_vector(r["vector"])), r)
+                for r in rows
+                if r["vector"]
+            ),
+            key=lambda pair: -pair[0],
+        )
+        # Only the survivors are worth a JSON parse.
+        return [
+            {"key": r["key"], "text": json.loads(r["value"]), "score": round(score, 4)}
+            for score, r in scored[:top]
         ]
-        scored.sort(key=lambda s: -s["score"])
-        return scored[: max(1, top)]
+
+    def _nearest(self, proc: Any, needle: list[float], top: int) -> list[dict[str, Any]]:
+        """The same ranking as the scan, done by sqlite-vec instead of Python."""
+        hits = self.store.nearest(proc.name, pack_vector(needle), top)
+        if not hits:
+            return []
+        values = {
+            r["key"]: r["value"]
+            for r in self.db.execute(
+                "SELECT key, value FROM memory WHERE mtype = 'longterm'"
+                " AND owner = ? AND key IN (%s)" % ",".join("?" * len(hits)),
+                (proc.name, *(k for k, _ in hits)),
+            ).fetchall()
+        }
+        return [
+            {"key": k, "text": json.loads(values[k]), "score": round(score, 4)}
+            for k, score in hits
+            if k in values
+        ]

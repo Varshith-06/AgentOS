@@ -5,9 +5,15 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import struct
 import time
 from pathlib import Path
 from typing import Any
+
+try:  # optional: turns the KNN scan into an index seek, nothing else
+    import sqlite_vec
+except ImportError:  # pragma: no cover - exercised by the stdlib-only CI
+    sqlite_vec = None
 
 DEFAULT_DIR = Path(".agentos")
 
@@ -63,7 +69,7 @@ CREATE TABLE IF NOT EXISTS memory (
     owner       TEXT    NOT NULL,
     key         TEXT    NOT NULL,
     value       TEXT    NOT NULL,
-    vector      TEXT,
+    vector      BLOB,
     shared_with TEXT,
     created_by  TEXT,
     updated_at  REAL    NOT NULL,
@@ -108,10 +114,55 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     ok         INTEGER NOT NULL DEFAULT 1,
     error      TEXT
 );
+-- logs(pid=...) backs episodic memory: without this it walks the whole table
+-- backwards to find one dead agent's rows.
+CREATE INDEX IF NOT EXISTS log_by_pid ON log (pid, id);
+-- take_commands() runs every kernel tick; consumed rows stay until the next
+-- runtime start, so the scan grows with the run. Partial: only the live ones.
+CREATE INDEX IF NOT EXISTS commands_pending ON commands (id) WHERE consumed = 0;
+CREATE INDEX IF NOT EXISTS approvals_by_pid ON approvals (pid, status);
+"""
+
+# Episodic memory is a ring buffer, not an archive. Trimmed every _TRIM_EVERY
+# inserts so the cost amortises to nothing.
+LOG_LIMIT = 50_000
+_TRIM_EVERY = 1_000
+
+VECTOR_DIM = 128
+_VECTOR = "<%df"
+
+# vec0 cannot live in SCHEMA: without the extension the whole script would fail.
+VEC_SCHEMA = f"""
+CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec USING vec0(
+    owner     TEXT partition key,
+    mkey      TEXT,
+    embedding float[{VECTOR_DIM}] distance_metric=cosine
+);
 """
 
 
+def pack_vector(values: list[float]) -> bytes:
+    """Little-endian float32, the on-disk form of an embedding."""
+    return struct.pack(_VECTOR % len(values), *values)
+
+
+def unpack_vector(blob: bytes) -> tuple[float, ...]:
+    return struct.unpack(_VECTOR % (len(blob) // 4), blob)
+
+
 class Store:
+    """Externally visible runtime state, in one SQLite file.
+
+    The kernel holds the only writing connection; the CLI and the API thread
+    each open their own and read. WAL serialises one writer against many
+    readers, so a second writer would meet the 5s timeout as SQLITE_BUSY rather
+    than queue behind the first: writes belong behind a syscall.
+
+    `vec` reports whether sqlite-vec loaded. It is an accelerator for longterm
+    search and never a source of truth: the `memory` table alone is, and the
+    index is rebuilt from it at every runtime start.
+    """
+
     def __init__(self, dirpath: Path | str = DEFAULT_DIR) -> None:
         self.dir = Path(dirpath)
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -123,6 +174,23 @@ class Store:
         # process still cannot lose committed data, and 400 writes save ~273ms.
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.executescript(SCHEMA)
+        self.vec = self._load_vec()
+
+    def _load_vec(self) -> bool:
+        if sqlite_vec is None:
+            return False
+        try:
+            self.db.enable_load_extension(True)
+            sqlite_vec.load(self.db)
+            self.db.executescript(VEC_SCHEMA)
+        except (AttributeError, sqlite3.Error):
+            return False  # built without extension support, or no wheel here
+        finally:
+            try:
+                self.db.enable_load_extension(False)
+            except AttributeError:
+                pass
+        return True
 
     def register_runtime(self, policy: str, slots: int) -> None:
         now = time.time()
@@ -135,10 +203,12 @@ class Store:
         self.db.execute("UPDATE approvals SET pid = NULL WHERE status = 'pending'")
         self.db.execute("DELETE FROM memory WHERE mtype IN ('working', 'shared')")
         self.db.execute("DELETE FROM model_calls")
+        self.db.execute("DELETE FROM tool_calls")
         self.db.execute(
             "INSERT OR REPLACE INTO runtime VALUES (1, ?, ?, ?, ?, ?)",
             (os.getpid(), policy, slots, now, now),
         )
+        self.sync_vectors()
 
     def resume_runtime(self, policy: str, slots: int) -> None:
         """Take over after a crash. Nothing is wiped: all of it is what recovery needs."""
@@ -148,6 +218,54 @@ class Store:
             "INSERT OR REPLACE INTO runtime VALUES (1, ?, ?, ?, ?, ?)",
             (os.getpid(), policy, slots, now, now),
         )
+        self.sync_vectors()
+
+    def sync_vectors(self) -> None:
+        """Migrate JSON-text embeddings to float32, then rebuild the KNN index."""
+        for r in self.db.execute(
+            "SELECT owner, key, vector FROM memory"
+            " WHERE mtype = 'longterm' AND typeof(vector) = 'text'"
+        ).fetchall():
+            self.db.execute(
+                "UPDATE memory SET vector = ?"
+                " WHERE mtype = 'longterm' AND owner = ? AND key = ?",
+                (pack_vector(json.loads(r["vector"])), r["owner"], r["key"]),
+            )
+        if not self.vec:
+            return
+        # A run without the extension leaves the index stale, so never trust it:
+        # longterm rows are few and this is once per start.
+        self.db.execute("DELETE FROM memory_vec")
+        self.db.executemany(
+            "INSERT INTO memory_vec (owner, mkey, embedding) VALUES (?, ?, ?)",
+            self.db.execute(
+                "SELECT owner, key, vector FROM memory"
+                " WHERE mtype = 'longterm' AND LENGTH(vector) = ?",
+                (VECTOR_DIM * 4,),  # vec0 rejects the row; the table is the truth
+            ).fetchall(),
+        )
+
+    def index_vector(self, owner: str, key: str, blob: bytes | None) -> None:
+        """Mirror one longterm row into the KNN index. A None vector unindexes."""
+        if not self.vec:
+            return
+        self.db.execute(
+            "DELETE FROM memory_vec WHERE owner = ? AND mkey = ?", (owner, key)
+        )
+        if blob is not None:
+            self.db.execute(
+                "INSERT INTO memory_vec (owner, mkey, embedding) VALUES (?, ?, ?)",
+                (owner, key, blob),
+            )
+
+    def nearest(self, owner: str, needle: bytes, top: int) -> list[tuple[str, float]]:
+        """(key, cosine similarity) for the closest `top` of one agent's memories."""
+        rows = self.db.execute(
+            "SELECT mkey, distance FROM memory_vec"
+            " WHERE owner = ? AND embedding MATCH ? AND k = ?",
+            (owner, needle, top),
+        ).fetchall()
+        return [(r["mkey"], 1.0 - r["distance"]) for r in rows]
 
     def heartbeat(self) -> None:
         self.db.execute("UPDATE runtime SET heartbeat = ? WHERE id = 1", (time.time(),))
@@ -193,10 +311,15 @@ class Store:
         return [(r["op"], json.loads(r["args"])) for r in rows]
 
     def append_log(self, pid: int | None, kind: str, message: str) -> None:
-        self.db.execute(
+        cur = self.db.execute(
             "INSERT INTO log (ts, pid, kind, message) VALUES (?, ?, ?, ?)",
             (time.time(), pid, kind, message),
         )
+        # AUTOINCREMENT ids never repeat, so this keeps the newest LOG_LIMIT.
+        if cur.lastrowid % _TRIM_EVERY == 0:
+            self.db.execute(
+                "DELETE FROM log WHERE id <= ?", (cur.lastrowid - LOG_LIMIT,)
+            )
 
     def logs(self, pid: int | None = None, limit: int = 200) -> list[dict[str, Any]]:
         if pid is None:
