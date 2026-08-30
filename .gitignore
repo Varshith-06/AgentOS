@@ -20,6 +20,10 @@ graphify-out/
 # Machine-local tooling config
 .claude/settings.local.json
 
+# Private notes: names, contacts, and unpublished paper strategy. This repo
+# is public, and an anonymized submission cannot outrun a public draft.
+agentos-paper-playbook.md
+
 # Editors / OS
 .vscode/
 .idea/
