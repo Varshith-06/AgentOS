@@ -1,0 +1,8 @@
+[1/3] agentos         key=n ok                   dup=1 t=0.96
+[2/3] autogen         key=n ok                   dup=0 t=0.34
+[3/3] autogen         key=y ok                   dup=0 t=0.73
+
+framework        key    n  ok  P(dup)  E[dup]  max  in-call  recov s  other
+agentos          no     1   1    1.00    1.00    1        1     3.19  
+autogen          no     1   1    0.00    0.00    0        0     3.04  
+autogen          yes    1   1    0.00    0.00    0        1     4.52  

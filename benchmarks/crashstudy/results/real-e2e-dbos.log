@@ -1,0 +1,201 @@
+21:10:37 [    INFO] (dbos:_dbos.py:537) Initializing DBOS (v3.2.0)
+21:10:37 [    INFO] (dbos:_dbos.py:620) Executor ID: local
+21:10:37 [    INFO] (dbos:_dbos.py:621) Application version: 459c5c5b802556f7aef19636edbfaa5f
+21:10:37 [    INFO] (dbos:_dbos.py:622) Application name: crashstudy
+21:10:37 [    INFO] (dbos:_sys_db.py:709) Initializing DBOS system database with URL: sqlite:///benchmarks/crashstudy/results/real-e2e/dbos/calib-0/dbos.sqlite (schema: dbos)
+21:10:37 [    INFO] (dbos:_sys_db.py:713) Using SQLite as a system database. The SQLite system database is for development and testing. PostgreSQL is recommended for production use.
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 1
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 2
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 3
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 4
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 5
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 6
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 7
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 8
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 9
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 10
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 11
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 12
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 13
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 14
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 15
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 16
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 17
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 18
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 19
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 20
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 21
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 22
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 23
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 24
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 25
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 26
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 27
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 28
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 29
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 30
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 31
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 32
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 33
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 34
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 35
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 36
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 37
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 38
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 39
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 40
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 100
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 101
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 102
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 103
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 104
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 106
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 107
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 108
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 109
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 110
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 111
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 112
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 114
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 115
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 116
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 117
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 118
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 119
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 120
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 121
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 122
+21:10:37 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 123
+21:10:37 [    INFO] (dbos:_dbos.py:708) No workflows to recover from application version 459c5c5b802556f7aef19636edbfaa5f
+21:10:37 [    INFO] (dbos:_dbos.py:819) DBOS launched!
+21:10:37 [    INFO] (dbos:_queue.py:950) Listening to 0 queues:
+21:10:37 [    INFO] (dbos:_dbos.py:827) To view and manage workflows, connect to DBOS Conductor at: https://console.dbos.dev/self-host?appname=crashstudy
+21:10:40 [    INFO] (dbos:_queue.py:888) Stopping queue manager, joining all worker threads...
+21:10:40 [    INFO] (dbos:_dbos.py:444) DBOS successfully shut down
+calibration 0: admitted=+6.000 (expect 6)
+21:10:53 [    INFO] (dbos:_dbos.py:537) Initializing DBOS (v3.2.0)
+21:10:53 [    INFO] (dbos:_dbos.py:620) Executor ID: local
+21:10:53 [    INFO] (dbos:_dbos.py:621) Application version: 459c5c5b802556f7aef19636edbfaa5f
+21:10:53 [    INFO] (dbos:_dbos.py:622) Application name: crashstudy
+21:10:53 [    INFO] (dbos:_sys_db.py:709) Initializing DBOS system database with URL: sqlite:///benchmarks/crashstudy/results/real-e2e/dbos/calib-1/dbos.sqlite (schema: dbos)
+21:10:53 [    INFO] (dbos:_sys_db.py:713) Using SQLite as a system database. The SQLite system database is for development and testing. PostgreSQL is recommended for production use.
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 1
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 2
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 3
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 4
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 5
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 6
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 7
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 8
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 9
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 10
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 11
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 12
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 13
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 14
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 15
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 16
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 17
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 18
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 19
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 20
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 21
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 22
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 23
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 24
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 25
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 26
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 27
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 28
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 29
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 30
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 31
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 32
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 33
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 34
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 35
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 36
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 37
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 38
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 39
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 40
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 100
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 101
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 102
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 103
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 104
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 106
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 107
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 108
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 109
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 110
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 111
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 112
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 114
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 115
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 116
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 117
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 118
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 119
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 120
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 121
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 122
+21:10:53 [    INFO] (dbos:_sys_db_sqlite.py:109) Applying DBOS SQLite system database schema migration 123
+21:10:53 [    INFO] (dbos:_dbos.py:708) No workflows to recover from application version 459c5c5b802556f7aef19636edbfaa5f
+21:10:53 [    INFO] (dbos:_dbos.py:819) DBOS launched!
+21:10:53 [    INFO] (dbos:_queue.py:950) Listening to 0 queues:
+21:10:53 [    INFO] (dbos:_dbos.py:827) To view and manage workflows, connect to DBOS Conductor at: https://console.dbos.dev/self-host?appname=crashstudy
+21:11:32 [    INFO] (dbos:_queue.py:888) Stopping queue manager, joining all worker threads...
+21:11:33 [    INFO] (dbos:_dbos.py:444) DBOS successfully shut down
+calibration 1: admitted=+7.000 (expect 6)
+median call 0.211s, cycle 0.364s, horizon 2.03s
+[1/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[2, 0.03069925308227539]]
+[2/50] key=y ok       admitted=+6.000 dup=0 outstanding=[[1, 0.007680416107177734]]
+[3/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 0.05773329734802246]]
+[4/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.15064120292663574]]
+[5/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.7442035675048828]]
+[6/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.23715972900390625]]
+[7/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[1, 0.02232980728149414]]
+[8/50] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[9/50] key=n provider-error admitted=+7.000 dup=1 outstanding=[]
+[10/50] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.011538267135620117]]
+[11/50] key=n provider-error admitted=+8.000 dup=2 outstanding=[[3, 0.4559032917022705]]
+[12/50] key=y provider-error admitted=+8.000 dup=2 outstanding=[[3, 0.14965176582336426]]
+[13/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.1370832920074463]]
+[14/50] key=y ok       admitted=+6.000 dup=0 outstanding=[[1, 0.5212156772613525]]
+[15/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[5, 0.08725857734680176]]
+[16/50] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.030363082885742188]]
+[17/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.612415075302124]]
+[18/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 1.1831872463226318]]
+[19/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.10235023498535156]]
+[20/50] key=y ok       admitted=+6.000 dup=0 outstanding=[[5, 0.1821293830871582]]
+[21/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 0.46593475341796875]]
+[22/50] key=y provider-error admitted=+7.000 dup=1 outstanding=[[2, 0.17312860488891602]]
+[23/50] key=n provider-error admitted=+7.000 dup=1 outstanding=[[1, 0.5399484634399414]]
+[24/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[5, 0.10945820808410645]]
+[25/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[1, 0.5696096420288086]]
+[26/50] key=y provider-error admitted=+8.000 dup=2 outstanding=[[0, 0.18539881706237793]]
+[27/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.07669925689697266]]
+[28/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.08456826210021973]]
+[29/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[1, 0.27812647819519043]]
+[30/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.2705955505371094]]
+[31/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[2, 0.02689194679260254]]
+[32/50] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[33/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[3, 0.15820646286010742]]
+[34/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.09010648727416992]]
+[35/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 0.5611960887908936]]
+[36/50] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.035691022872924805]]
+[37/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.17975258827209473]]
+[38/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.1537463665008545]]
+[39/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 1.0750584602355957]]
+[40/50] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[41/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[1, 0.3217439651489258]]
+[42/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.28802490234375]]
+[43/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[1, 0.014349699020385742]]
+[44/50] key=y ok       admitted=+6.000 dup=0 outstanding=[[4, 0.042452335357666016]]
+[45/50] key=n ok       admitted=+6.000 dup=0 outstanding=[[3, 0.023580074310302734]]
+[46/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.09831690788269043]]
+[47/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.20257258415222168]]
+[48/50] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 0.12169456481933594]]
+[49/50] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.17431974411010742]]
+[50/50] key=y ok       admitted=+6.000 dup=0 outstanding=[]

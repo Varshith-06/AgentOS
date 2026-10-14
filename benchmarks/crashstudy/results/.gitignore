@@ -1,0 +1,7 @@
+# Framework-internal state from the real-provider runs; the analysis reads only
+# the call logs (calls.jsonl, notes.jsonl), the result rows, and the ledgers.
+lg.db
+dbos.sqlite
+*.err
+*-shm
+*-wal

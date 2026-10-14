@@ -1,0 +1,180 @@
+[1/60] agentos         key=n ok                   dup=1 t=0.72
+[2/60] langgraph-node  key=n ok                   dup=1 t=1.78
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 54489)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[3/60] dbos            key=n ok                   dup=0 t=1.79
+[4/60] agentos         key=n ok                   dup=1 t=0.13
+[5/60] langgraph-node  key=n ok                   dup=1 t=1.75
+[6/60] dbos            key=n ok                   dup=1 t=0.96
+[7/60] agentos         key=n ok                   dup=1 t=0.04
+[8/60] langgraph-node  key=n ok                   dup=1 t=1.37
+[9/60] dbos            key=n ok                   dup=1 t=1.21
+[10/60] agentos         key=n ok                   dup=1 t=1.49
+[11/60] langgraph-node  key=n ok                   dup=1 t=0.45
+[12/60] dbos            key=n ok                   dup=1 t=0.44
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 54316)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[13/60] agentos         key=n ok                   dup=0 t=1.39
+[14/60] langgraph-node  key=n ok                   dup=1 t=0.94
+[15/60] dbos            key=n ok                   dup=1 t=1.16
+[16/60] agentos         key=n ok                   dup=1 t=1.55
+[17/60] langgraph-node  key=n ok                   dup=1 t=0.94
+[18/60] dbos            key=n ok                   dup=1 t=1.69
+[19/60] agentos         key=n ok                   dup=1 t=0.86
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 57791)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[20/60] langgraph-node  key=n ok                   dup=0 t=1.68
+[21/60] dbos            key=n ok                   dup=1 t=1.24
+[22/60] agentos         key=n ok                   dup=1 t=0.92
+[23/60] langgraph-node  key=n ok                   dup=1 t=0.67
+[24/60] dbos            key=n ok                   dup=1 t=0.92
+[25/60] agentos         key=n ok                   dup=1 t=1.44
+[26/60] langgraph-node  key=n ok                   dup=1 t=0.67
+[27/60] dbos            key=n ok                   dup=1 t=1.30
+[28/60] agentos         key=n ok                   dup=1 t=0.95
+[29/60] langgraph-node  key=n ok                   dup=1 t=1.24
+[30/60] dbos            key=n ok                   dup=1 t=1.48
+[31/60] agentos         key=n ok                   dup=1 t=0.48
+[32/60] langgraph-node  key=n ok                   dup=1 t=1.56
+[33/60] dbos            key=n ok                   dup=1 t=1.51
+[34/60] agentos         key=n ok                   dup=1 t=1.04
+[35/60] langgraph-node  key=n ok                   dup=1 t=0.26
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 60870)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[36/60] dbos            key=n ok                   dup=0 t=0.69
+[37/60] agentos         key=n ok                   dup=1 t=1.37
+[38/60] langgraph-node  key=n ok                   dup=1 t=1.63
+[39/60] dbos            key=n ok                   dup=1 t=0.86
+[40/60] agentos         key=n ok                   dup=1 t=0.88
+[41/60] langgraph-node  key=n ok                   dup=1 t=1.03
+[42/60] dbos            key=n ok                   dup=1 t=0.44
+[43/60] agentos         key=n ok                   dup=1 t=0.19
+[44/60] langgraph-node  key=n ok                   dup=1 t=1.33
+[45/60] dbos            key=n ok                   dup=1 t=0.21
+[46/60] agentos         key=n ok                   dup=1 t=0.04
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55719)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[47/60] langgraph-node  key=n ok                   dup=0 t=1.37
+[48/60] dbos            key=n ok                   dup=1 t=0.93
+[49/60] agentos         key=n ok                   dup=1 t=1.08
+[50/60] langgraph-node  key=n ok                   dup=1 t=1.26
+[51/60] dbos            key=n ok                   dup=1 t=0.80
+[52/60] agentos         key=n ok                   dup=1 t=1.17
+[53/60] langgraph-node  key=n ok                   dup=1 t=0.30
+[54/60] dbos            key=n ok                   dup=1 t=0.52
+[55/60] agentos         key=n ok                   dup=1 t=1.48
+[56/60] langgraph-node  key=n ok                   dup=1 t=1.39
+[57/60] dbos            key=n ok                   dup=1 t=0.49
+[58/60] agentos         key=n ok                   dup=1 t=1.34
+[59/60] langgraph-node  key=n ok                   dup=1 t=1.68
+[60/60] dbos            key=n ok                   dup=1 t=0.08
+
+framework        key    n  ok  P(dup)  E[dup]  max  in-call  recov s  other
+agentos          no    20  20    0.95    0.95    1       19     2.41  
+dbos             no    20  20    0.90    0.90    1       17     5.46  
+langgraph-node   no    20  20    0.90    0.90    1       16     3.37  

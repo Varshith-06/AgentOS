@@ -1,0 +1,77 @@
+[1/40] delay=0.69 http=200 first_token=True  done=False admitted=+1.034
+[2/40] delay=0.42 http=200 first_token=True  done=False admitted=+1.037
+[3/40] delay=0.30 http=None first_token=False done=False admitted=+1.029
+[4/40] delay=1.64 http=200 first_token=True  done=True  admitted=+1.045
+[5/40] delay=1.04 http=200 first_token=True  done=False admitted=+1.039
+[6/40] delay=1.24 http=200 first_token=True  done=False admitted=+1.041
+[7/40] delay=1.00 http=200 first_token=True  done=False admitted=+1.038
+[8/40] delay=0.69 http=None first_token=False done=False admitted=+1.034
+[9/40] delay=1.32 http=200 first_token=True  done=False admitted=+1.040
+[10/40] delay=1.04 http=200 first_token=True  done=False admitted=+1.039
+[11/40] delay=1.41 http=200 first_token=True  done=True  admitted=+1.040
+[12/40] delay=1.19 http=200 first_token=True  done=False admitted=+1.039
+[13/40] delay=1.51 http=200 first_token=True  done=True  admitted=+1.042
+[14/40] delay=0.79 http=200 first_token=True  done=False admitted=+1.038
+[15/40] delay=0.28 http=None first_token=False done=False admitted=+1.030
+[16/40] delay=0.27 http=None first_token=False done=False admitted=+1.028
+[17/40] delay=1.30 http=200 first_token=True  done=True  admitted=+1.043
+[18/40] delay=0.30 http=None first_token=False done=False admitted=+1.029
+[19/40] delay=1.18 http=200 first_token=True  done=False admitted=+1.040
+[20/40] delay=1.12 http=200 first_token=True  done=False admitted=+1.039
+[21/40] delay=0.11 http=None first_token=False done=False admitted=+1.028
+[22/40] delay=1.41 http=200 first_token=True  done=False admitted=+1.043
+[23/40] delay=0.06 http=None first_token=False done=False admitted=+1.025
+[24/40] delay=1.56 http=200 first_token=True  done=True  admitted=+1.045
+[25/40] delay=1.51 http=200 first_token=True  done=False admitted=+1.045
+[26/40] delay=0.39 http=200 first_token=True  done=False admitted=+1.032
+[27/40] delay=1.31 http=200 first_token=True  done=False admitted=+1.040
+[28/40] delay=1.32 http=200 first_token=True  done=False admitted=+1.044
+[29/40] delay=0.23 http=None first_token=False done=False admitted=+1.035
+[30/40] delay=1.21 http=200 first_token=True  done=False admitted=+1.040
+[31/40] delay=0.22 http=None first_token=False done=False admitted=+1.032
+[32/40] delay=1.64 http=200 first_token=True  done=True  admitted=+1.041
+[33/40] delay=1.24 http=200 first_token=True  done=False admitted=+1.043
+[34/40] delay=1.76 http=200 first_token=True  done=False admitted=+1.046
+[35/40] delay=0.10 http=None first_token=False done=False admitted=+1.029
+[36/40] delay=0.57 http=200 first_token=True  done=False admitted=+1.039
+[37/40] delay=1.12 http=200 first_token=True  done=False admitted=+1.038
+[38/40] delay=1.09 http=200 first_token=True  done=False admitted=+1.047
+[39/40] delay=0.33 http=None first_token=False done=False admitted=+1.032
+[40/40] delay=1.60 http=200 first_token=True  done=False admitted=+1.046
+[1/20] delay=1.15 http=200 first_token=True  done=False admitted=+1.000
+[2/20] delay=0.05 http=None first_token=False done=False admitted=+1.000
+[3/20] delay=0.50 http=200 first_token=True  done=False admitted=+1.000
+[4/20] delay=0.40 http=200 first_token=True  done=False admitted=+1.000
+[5/20] delay=1.33 http=200 first_token=True  done=False admitted=+1.000
+[6/20] delay=1.22 http=200 first_token=True  done=False admitted=+1.000
+[7/20] delay=1.61 http=200 first_token=True  done=False admitted=+1.000
+[8/20] delay=0.16 http=200 first_token=True  done=False admitted=+1.000
+[9/20] delay=0.76 http=200 first_token=True  done=False admitted=+1.000
+[10/20] delay=0.05 http=None first_token=False done=False admitted=+1.000
+[11/20] delay=0.39 http=200 first_token=True  done=False admitted=+1.000
+[12/20] delay=0.91 http=200 first_token=True  done=False admitted=+1.000
+[13/20] delay=0.05 http=None first_token=False done=False admitted=+1.000
+[14/20] delay=0.36 http=200 first_token=True  done=False admitted=+1.000
+[15/20] delay=1.17 http=200 first_token=True  done=False admitted=+1.000
+[16/20] delay=0.98 http=200 first_token=True  done=False admitted=+1.000
+[17/20] delay=0.40 http=None first_token=False done=False admitted=+1.000
+[18/20] delay=1.06 http=200 first_token=True  done=False admitted=+1.000
+[19/20] delay=1.46 http=200 first_token=True  done=False admitted=+1.000
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\Varshith\Documents\AgentOS\benchmarks\crashstudy\realprovider.py", line 336, in <module>
+    print(f"idem {model}: pairs {len(rs)}, both admitted {sum(round(r['admitted']) == 2 for r in rs)}, "
+         ^^^^^^
+  File "C:\Users\Varshith\Documents\AgentOS\benchmarks\crashstudy\realprovider.py", line 331, in main
+    f"completed {len(whole)}, admitted {sum(round(r['admitted']) == 1 for r in whole)}; "
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\Documents\AgentOS\benchmarks\crashstudy\realprovider.py", line 146, in inflight
+    after = quota.probe()
+  File "C:\Users\Varshith\Documents\AgentOS\benchmarks\crashstudy\realprovider.py", line 71, in probe
+    r.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Temp\claude\C--Users-Varshith-Documents-AgentOS\e48c7a2e-05b0-4386-b1b6-785ca541e96d\scratchpad\bench13\Lib\site-packages\httpx\_models.py", line 829, in raise_for_status
+    raise HTTPStatusError(message, request=request, response=self)
+httpx.HTTPStatusError: Server error '503 Service Unavailable' for url 'https://api.groq.com/openai/v1/chat/completions'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503

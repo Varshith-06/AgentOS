@@ -23,6 +23,7 @@ graphify-out/
 # Private notes: names, contacts, and unpublished paper strategy. This repo
 # is public, and an anonymized submission cannot outrun a public draft.
 agentos-paper-playbook.md
+paper/
 
 # Editors / OS
 .vscode/

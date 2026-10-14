@@ -1,0 +1,257 @@
+[1/202] autogen         key=n ok                   dup=1 t=1.79
+[2/202] autogen         key=y ok                   dup=0 t=1.27
+[3/202] agentos         key=n ok                   dup=1 t=0.86
+[4/202] agentos         key=y ok                   dup=0 t=0.29
+[5/202] langgraph-node  key=n ok                   dup=1 t=1.35
+[6/202] langgraph-node  key=y ok                   dup=0 t=1.58
+[7/202] langgraph-loop  key=n ok                   dup=1 t=0.20
+[8/202] langgraph-loop  key=y ok                   dup=0 t=1.63
+[9/202] dbos            key=n ok                   dup=0 t=0.32
+[10/202] dbos            key=y ok                   dup=0 t=0.87
+[11/202] autogen         key=n ok                   dup=1 t=1.56
+[12/202] autogen         key=y ok                   dup=0 t=0.55
+[13/202] agentos         key=n ok                   dup=1 t=0.25
+[14/202] agentos         key=y ok                   dup=0 t=1.97
+[15/202] langgraph-node  key=n ok                   dup=0 t=0.39
+[16/202] langgraph-node  key=y ok                   dup=0 t=0.39
+[17/202] langgraph-loop  key=n ok                   dup=2 t=0.74
+[18/202] langgraph-loop  key=y ok                   dup=0 t=1.66
+[19/202] dbos            key=n ok                   dup=1 t=0.89
+[20/202] dbos            key=y ok                   dup=0 t=1.54
+[21/202] autogen         key=n ok                   dup=1 t=2.27
+[22/202] autogen         key=y ok                   dup=0 t=0.08
+[23/202] agentos         key=n ok                   dup=1 t=1.76
+[24/202] agentos         key=y ok                   dup=0 t=0.73
+[25/202] langgraph-node  key=n ok                   dup=1 t=1.45
+[26/202] langgraph-node  key=y ok                   dup=0 t=0.54
+[27/202] langgraph-loop  key=n ok                   dup=5 t=2.05
+[28/202] langgraph-loop  key=y ok                   dup=0 t=0.44
+[29/202] dbos            key=n ok                   dup=0 t=2.06
+[30/202] dbos            key=y ok                   dup=0 t=1.60
+[31/202] autogen         key=n ok                   dup=1 t=2.18
+[32/202] autogen         key=y ok                   dup=0 t=1.34
+[33/202] agentos         key=n ok                   dup=1 t=0.08
+[34/202] agentos         key=y ok                   dup=0 t=1.69
+[35/202] langgraph-node  key=n ok                   dup=0 t=1.59
+[36/202] langgraph-node  key=y ok                   dup=0 t=0.08
+[37/202] langgraph-loop  key=n ok                   dup=4 t=1.52
+[38/202] langgraph-loop  key=y ok                   dup=0 t=1.11
+[39/202] dbos            key=n ok                   dup=1 t=1.16
+[40/202] dbos            key=y ok                   dup=0 t=2.14
+[41/202] autogen         key=n ok                   dup=0 t=0.82
+[42/202] autogen         key=y ok                   dup=0 t=1.22
+[43/202] agentos         key=n ok                   dup=1 t=0.71
+[44/202] agentos         key=y ok                   dup=0 t=1.76
+[45/202] langgraph-node  key=n ok                   dup=1 t=0.19
+[46/202] langgraph-node  key=y ok                   dup=0 t=0.77
+[47/202] langgraph-loop  key=n ok                   dup=2 t=0.64
+[48/202] langgraph-loop  key=y ok                   dup=0 t=1.56
+[49/202] dbos            key=n ok                   dup=1 t=1.80
+[50/202] dbos            key=y ok                   dup=0 t=0.78
+[51/202] autogen         key=n ok                   dup=1 t=2.24
+[52/202] autogen         key=y ok                   dup=0 t=0.97
+[53/202] agentos         key=n ok                   dup=1 t=0.50
+[54/202] agentos         key=y ok                   dup=0 t=1.69
+[55/202] langgraph-node  key=n ok                   dup=1 t=1.06
+[56/202] langgraph-node  key=y ok                   dup=0 t=1.56
+[57/202] langgraph-loop  key=n ok                   dup=3 t=0.84
+[58/202] langgraph-loop  key=y ok                   dup=0 t=0.08
+[59/202] dbos            key=n ok                   dup=0 t=0.83
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51149)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[60/202] dbos            key=y ok                   dup=0 t=2.15
+[61/202] autogen         key=n ok                   dup=1 t=2.23
+[62/202] autogen         key=y ok                   dup=0 t=1.67
+[63/202] agentos         key=n ok                   dup=1 t=1.97
+[64/202] agentos         key=y ok                   dup=0 t=1.56
+[65/202] langgraph-node  key=n ok                   dup=1 t=1.37
+[66/202] langgraph-node  key=y ok                   dup=0 t=1.00
+[67/202] langgraph-loop  key=n ok                   dup=5 t=1.73
+[68/202] langgraph-loop  key=y ok                   dup=0 t=0.06
+[69/202] dbos            key=n ok                   dup=0 t=2.13
+[70/202] dbos            key=y ok                   dup=0 t=0.23
+[71/202] autogen         key=n ok                   dup=0 t=0.38
+[72/202] autogen         key=y ok                   dup=0 t=0.41
+[73/202] agentos         key=n ok                   dup=1 t=0.64
+[74/202] agentos         key=y ok                   dup=0 t=0.25
+[75/202] langgraph-node  key=n ok                   dup=1 t=0.18
+[76/202] langgraph-node  key=y ok                   dup=0 t=1.70
+[77/202] langgraph-loop  key=n ok                   dup=4 t=1.36
+[78/202] langgraph-loop  key=y ok                   dup=0 t=0.20
+[79/202] dbos            key=n ok                   dup=1 t=0.28
+[80/202] dbos            key=y ok                   dup=0 t=1.04
+[81/202] autogen         key=n ok                   dup=1 t=1.54
+[82/202] autogen         key=y ok                   dup=0 t=2.28
+[83/202] agentos         key=n ok                   dup=0 t=1.26
+[84/202] agentos         key=y ok                   dup=0 t=0.55
+[85/202] langgraph-node  key=n ok                   dup=1 t=1.03
+[86/202] langgraph-node  key=y ok                   dup=0 t=0.29
+[87/202] langgraph-loop  key=n ok                   dup=1 t=0.31
+[88/202] langgraph-loop  key=y ok                   dup=0 t=1.25
+[89/202] dbos            key=n ok                   dup=1 t=0.15
+[90/202] dbos            key=y ok                   dup=0 t=1.00
+[91/202] autogen         key=n ok                   dup=0 t=0.75
+[92/202] autogen         key=y ok                   dup=0 t=1.05
+[93/202] agentos         key=n ok                   dup=0 t=2.03
+[94/202] agentos         key=y ok                   dup=0 t=0.16
+[95/202] langgraph-node  key=n ok                   dup=0 t=0.32
+[96/202] langgraph-node  key=y ok                   dup=0 t=0.04
+[97/202] langgraph-loop  key=n ok                   dup=2 t=0.83
+[98/202] langgraph-loop  key=y ok                   dup=0 t=2.25
+[99/202] dbos            key=n ok                   dup=1 t=2.26
+[100/202] dbos            key=y ok                   dup=0 t=1.22
+[101/202] autogen         key=n ok                   dup=0 t=1.18
+[102/202] autogen         key=y ok                   dup=0 t=1.68
+[103/202] agentos         key=n ok                   dup=0 t=0.39
+[104/202] agentos         key=y ok                   dup=0 t=0.37
+[105/202] langgraph-node  key=n ok                   dup=1 t=0.57
+[106/202] langgraph-node  key=y ok                   dup=0 t=0.92
+[107/202] langgraph-loop  key=n ok                   dup=4 t=1.60
+[108/202] langgraph-loop  key=y ok                   dup=0 t=1.60
+[109/202] dbos            key=n ok                   dup=1 t=0.66
+[110/202] dbos            key=y ok                   dup=0 t=2.11
+[111/202] autogen         key=n ok                   dup=1 t=2.00
+[112/202] autogen         key=y ok                   dup=0 t=2.28
+[113/202] agentos         key=n ok                   dup=1 t=0.26
+[114/202] agentos         key=y ok                   dup=0 t=1.50
+[115/202] langgraph-node  key=n ok                   dup=1 t=0.71
+[116/202] langgraph-node  key=y ok                   dup=0 t=0.03
+[117/202] langgraph-loop  key=n ok                   dup=3 t=1.01
+[118/202] langgraph-loop  key=y ok                   dup=0 t=2.23
+[119/202] dbos            key=n ok                   dup=1 t=0.67
+[120/202] dbos            key=y ok                   dup=0 t=1.44
+[121/202] autogen         key=n ok                   dup=1 t=1.44
+[122/202] autogen         key=y ok                   dup=0 t=1.38
+[123/202] agentos         key=n ok                   dup=1 t=1.05
+[124/202] agentos         key=y ok                   dup=0 t=0.70
+[125/202] langgraph-node  key=n ok                   dup=1 t=2.12
+[126/202] langgraph-node  key=y ok                   dup=0 t=2.01
+[127/202] langgraph-loop  key=n ok                   dup=3 t=1.13
+[128/202] langgraph-loop  key=y ok                   dup=0 t=0.11
+[129/202] dbos            key=n ok                   dup=0 t=1.66
+[130/202] dbos            key=y ok                   dup=0 t=0.04
+[131/202] autogen         key=n ok                   dup=1 t=1.57
+[132/202] autogen         key=y ok                   dup=0 t=1.39
+[133/202] agentos         key=n ok                   dup=1 t=1.11
+[134/202] agentos         key=y ok                   dup=0 t=2.28
+[135/202] langgraph-node  key=n ok                   dup=0 t=0.37
+[136/202] langgraph-node  key=y ok                   dup=0 t=1.00
+[137/202] langgraph-loop  key=n ok                   dup=3 t=1.22
+[138/202] langgraph-loop  key=y ok                   dup=0 t=0.01
+[139/202] dbos            key=n ok                   dup=0 t=2.06
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51692)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[140/202] dbos            key=y ok                   dup=0 t=1.71
+[141/202] autogen         key=n ok                   dup=1 t=0.56
+[142/202] autogen         key=y ok                   dup=0 t=0.03
+[143/202] agentos         key=n ok                   dup=1 t=0.10
+[144/202] agentos         key=y ok                   dup=0 t=1.17
+[145/202] langgraph-node  key=n ok                   dup=0 t=1.23
+[146/202] langgraph-node  key=y ok                   dup=0 t=0.40
+[147/202] langgraph-loop  key=n ok                   dup=2 t=0.60
+[148/202] langgraph-loop  key=y ok                   dup=0 t=0.77
+[149/202] dbos            key=n ok                   dup=1 t=1.59
+[150/202] dbos            key=y ok                   dup=0 t=0.03
+[151/202] autogen         key=n ok                   dup=1 t=0.18
+[152/202] autogen         key=y ok                   dup=0 t=0.42
+[153/202] agentos         key=n ok                   dup=1 t=1.94
+[154/202] agentos         key=y ok                   dup=0 t=2.14
+[155/202] langgraph-node  key=n ok                   dup=1 t=1.38
+[156/202] langgraph-node  key=y ok                   dup=0 t=1.99
+[157/202] langgraph-loop  key=n ok                   dup=5 t=1.71
+[158/202] langgraph-loop  key=y ok                   dup=0 t=0.22
+[159/202] dbos            key=n ok                   dup=1 t=0.18
+[160/202] dbos            key=y ok                   dup=0 t=0.99
+[161/202] autogen         key=n ok                   dup=1 t=0.02
+[162/202] autogen         key=y ok                   dup=0 t=0.98
+[163/202] agentos         key=n ok                   dup=1 t=1.14
+[164/202] agentos         key=y ok                   dup=0 t=0.35
+[165/202] langgraph-node  key=n ok                   dup=0 t=2.08
+[166/202] langgraph-node  key=y ok                   dup=0 t=0.86
+[167/202] langgraph-loop  key=n ok                   dup=4 t=1.46
+[168/202] langgraph-loop  key=y ok                   dup=0 t=1.11
+[169/202] dbos            key=n ok                   dup=1 t=1.84
+[170/202] dbos            key=y ok                   dup=0 t=0.96
+[171/202] autogen         key=n ok                   dup=1 t=9.99
+[172/202] autogen         key=y ok                   dup=0 t=2652.61
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 52938)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[173/202] agentos         key=n ok                   dup=0 t=6143.10
+[174/202] agentos         key=y ok                   dup=0 t=2.02
+[175/202] langgraph-node  key=n ok                   dup=0 t=0.75
+[176/202] langgraph-node  key=y ok                   dup=0 t=1.62
+[177/202] langgraph-loop  key=n ok                   dup=1 t=0.39
+[178/202] langgraph-loop  key=y ok                   dup=0 t=0.90
+[179/202] dbos            key=n ok                   dup=1 t=0.59
+[180/202] dbos            key=y ok                   dup=0 t=0.10
+[181/202] autogen         key=n ok                   dup=1 t=1.61
+[182/202] autogen         key=y ok                   dup=0 t=0.12
+[183/202] agentos         key=n ok                   dup=0 t=1.29
+[184/202] agentos         key=y ok                   dup=0 t=1.15
+[185/202] langgraph-node  key=n ok                   dup=1 t=1.55
+[186/202] langgraph-node  key=y ok                   dup=0 t=1.09
+[187/202] langgraph-loop  key=n ok                   dup=5 t=1.95
+[188/202] langgraph-loop  key=y ok                   dup=0 t=2.23

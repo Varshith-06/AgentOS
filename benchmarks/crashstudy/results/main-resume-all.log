@@ -1,0 +1,314 @@
+time=2026-10-13T11:28:22.501 level=WARN msg="Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id" component=metadata-initializer
+time=2026-10-13T11:28:22.560 level=ERROR msg="Queue reader unable to retrieve tasks" shard-id=1 address=127.0.0.1:56640 component=visibility-queue-processor queue-reader-id=0 error="shard status unknown"
+time=2026-10-13T11:28:22.560 level=ERROR msg="Queue reader unable to retrieve tasks" shard-id=1 address=127.0.0.1:56640 component=transfer-queue-processor queue-reader-id=0 error="shard status unknown"
+[1/175] prefect         key=y ok                   dup=0 t=0.68
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 50485)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[2/175] temporal        key=n ok                   dup=0 t=1.35
+[3/175] temporal        key=y ok                   dup=0 t=1.38
+[4/175] crewai          key=n ok                   dup=3 t=1.13
+[5/175] crewai          key=y ok                   dup=0 t=0.35
+[6/175] crewai-guarded  key=n ok                   dup=1 t=0.03
+[7/175] crewai-guarded  key=y ok                   dup=0 t=1.66
+[8/175] prefect         key=n ok                   dup=1 t=2.18
+[9/175] prefect         key=y ok                   dup=0 t=0.35
+[10/175] temporal        key=n ok                   dup=1 t=1.55
+[11/175] temporal        key=y ok                   dup=0 t=1.85
+[12/175] crewai          key=n ok                   dup=1 t=0.30
+[13/175] crewai          key=y ok                   dup=0 t=2.16
+[14/175] crewai-guarded  key=n ok                   dup=1 t=0.06
+[15/175] crewai-guarded  key=y ok                   dup=0 t=1.86
+[16/175] prefect         key=n ok                   dup=1 t=1.64
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 57930)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[17/175] prefect         key=y ok                   dup=0 t=1.28
+[18/175] temporal        key=n ok                   dup=1 t=0.11
+[19/175] temporal        key=y ok                   dup=0 t=1.40
+[20/175] crewai          key=n ok                   dup=1 t=0.23
+[21/175] crewai          key=y ok                   dup=0 t=0.93
+[22/175] crewai-guarded  key=n ok                   dup=1 t=0.33
+[23/175] crewai-guarded  key=y ok                   dup=0 t=0.88
+[24/175] prefect         key=n ok                   dup=1 t=1.79
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 57074)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[25/175] prefect         key=y ok                   dup=0 t=0.43
+[26/175] temporal        key=n ok                   dup=0 t=1.27
+[27/175] temporal        key=y ok                   dup=0 t=1.58
+[28/175] crewai          key=n ok                   dup=3 t=1.25
+[29/175] crewai          key=y ok                   dup=0 t=0.61
+[30/175] crewai-guarded  key=n ok                   dup=1 t=1.60
+[31/175] crewai-guarded  key=y ok                   dup=0 t=0.27
+[32/175] prefect         key=n ok                   dup=1 t=1.04
+[33/175] prefect         key=y ok                   dup=0 t=0.20
+[34/175] temporal        key=n ok                   dup=1 t=1.42
+[35/175] temporal        key=y ok                   dup=0 t=1.45
+[36/175] crewai          key=n ok                   dup=1 t=0.36
+[37/175] crewai          key=y ok                   dup=0 t=1.58
+[38/175] crewai-guarded  key=n ok                   dup=1 t=0.60
+[39/175] crewai-guarded  key=y ok                   dup=0 t=0.61
+[40/175] prefect         key=n ok                   dup=1 t=1.32
+[41/175] prefect         key=y ok                   dup=0 t=0.62
+[42/175] temporal        key=n ok                   dup=0 t=0.33
+[43/175] temporal        key=y ok                   dup=0 t=2.22
+[44/175] crewai          key=n ok                   dup=2 t=0.45
+[45/175] crewai          key=y ok                   dup=0 t=1.88
+[46/175] crewai-guarded  key=n ok                   dup=1 t=1.67
+[47/175] crewai-guarded  key=y ok                   dup=0 t=0.53
+[48/175] prefect         key=n ok                   dup=1 t=1.10
+[49/175] prefect         key=y ok                   dup=0 t=1.63
+[50/175] temporal        key=n ok                   dup=1 t=0.14
+[51/175] temporal        key=y ok                   dup=0 t=0.11
+[52/175] crewai          key=n ok                   dup=2 t=0.63
+[53/175] crewai          key=y ok                   dup=0 t=0.05
+[54/175] crewai-guarded  key=n ok                   dup=1 t=1.62
+[55/175] crewai-guarded  key=y ok                   dup=0 t=1.01
+[56/175] prefect         key=n ok                   dup=0 t=2.29
+[57/175] prefect         key=y ok                   dup=0 t=0.03
+[58/175] temporal        key=n ok                   dup=1 t=0.62
+[59/175] temporal        key=y ok                   dup=0 t=1.51
+[60/175] crewai          key=n ok                   dup=5 t=1.82
+[61/175] crewai          key=y ok                   dup=0 t=0.87
+[62/175] crewai-guarded  key=n ok                   dup=1 t=2.27
+[63/175] crewai-guarded  key=y ok                   dup=0 t=2.30
+[64/175] prefect         key=n ok                   dup=1 t=1.61
+[65/175] prefect         key=y ok                   dup=0 t=0.97
+[66/175] temporal        key=n ok                   dup=1 t=0.59
+[67/175] temporal        key=y ok                   dup=0 t=2.23
+[68/175] crewai          key=n ok                   dup=1 t=0.24
+[69/175] crewai          key=y ok                   dup=0 t=1.26
+[70/175] crewai-guarded  key=n ok                   dup=0 t=1.83
+[71/175] crewai-guarded  key=y ok                   dup=0 t=1.72
+[72/175] prefect         key=n ok                   dup=1 t=1.59
+[73/175] prefect         key=y ok                   dup=0 t=0.22
+[74/175] temporal        key=n ok                   dup=1 t=1.95
+[75/175] temporal        key=y ok                   dup=0 t=0.58
+[76/175] crewai          key=n ok                   dup=1 t=0.13
+[77/175] crewai          key=y ok                   dup=0 t=1.49
+[78/175] crewai-guarded  key=n ok                   dup=1 t=0.76
+[79/175] crewai-guarded  key=y ok                   dup=0 t=2.16
+[80/175] prefect         key=n ok                   dup=0 t=1.65
+[81/175] prefect         key=y ok                   dup=0 t=0.88
+[82/175] temporal        key=n ok                   dup=1 t=0.98
+[83/175] temporal        key=y ok                   dup=0 t=0.31
+[84/175] crewai          key=n ok                   dup=4 t=1.78
+[85/175] crewai          key=y ok                   dup=0 t=0.37
+[86/175] crewai-guarded  key=n ok                   dup=1 t=1.58
+[87/175] crewai-guarded  key=y ok                   dup=0 t=0.10
+[88/175] prefect         key=n ok                   dup=1 t=0.07
+[89/175] prefect         key=y ok                   dup=0 t=0.59
+[90/175] temporal        key=n ok                   dup=1 t=2.02
+[91/175] temporal        key=y ok                   dup=0 t=1.40
+[92/175] crewai          key=n ok                   dup=2 t=0.63
+[93/175] crewai          key=y ok                   dup=0 t=0.90
+[94/175] crewai-guarded  key=n ok                   dup=0 t=1.29
+[95/175] crewai-guarded  key=y ok                   dup=0 t=1.17
+[96/175] prefect         key=n ok                   dup=1 t=0.95
+[97/175] prefect         key=y ok                   dup=0 t=0.93
+[98/175] temporal        key=n ok                   dup=1 t=2.28
+[99/175] temporal        key=y ok                   dup=0 t=1.09
+[100/175] crewai          key=n ok                   dup=1 t=0.25
+[101/175] crewai          key=y ok                   dup=0 t=1.96
+[102/175] crewai-guarded  key=n ok                   dup=1 t=2.01
+[103/175] crewai-guarded  key=y ok                   dup=0 t=1.48
+[104/175] prefect         key=n ok                   dup=0 t=1.23
+[105/175] prefect         key=y ok                   dup=0 t=0.03
+[106/175] temporal        key=n ok                   dup=1 t=1.40
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 50140)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[107/175] temporal        key=y ok                   dup=0 t=0.44
+[108/175] crewai          key=n ok                   dup=3 t=1.27
+[109/175] crewai          key=y ok                   dup=0 t=2.06
+[110/175] crewai-guarded  key=n ok                   dup=1 t=1.58
+[111/175] crewai-guarded  key=y ok                   dup=0 t=0.90
+[112/175] prefect         key=n ok                   dup=0 t=1.67
+[113/175] prefect         key=y ok                   dup=0 t=1.38
+[114/175] temporal        key=n ok                   dup=1 t=0.64
+[115/175] temporal        key=y ok                   dup=0 t=0.92
+[116/175] crewai          key=n ok                   dup=3 t=1.11
+[117/175] crewai          key=y ok                   dup=0 t=0.91
+[118/175] crewai-guarded  key=n ok                   dup=1 t=1.15
+[119/175] crewai-guarded  key=y ok                   dup=0 t=0.25
+[120/175] prefect         key=n ok                   dup=1 t=1.34
+[121/175] prefect         key=y ok                   dup=0 t=2.08
+[122/175] temporal        key=n ok                   dup=0 t=0.42
+time=2026-10-13T12:14:23.718 level=ERROR msg="ContextMetadataInterceptor: Failed to set trailer" error="rpc error: code = Internal desc = transport: SendHeader called multiple times" fullMethod=/temporal.server.api.historyservice.v1.HistoryService/RespondWorkflowTaskCompleted
+[123/175] temporal        key=y ok                   dup=0 t=0.80
+[124/175] crewai          key=n ok                   dup=3 t=1.25
+[125/175] crewai          key=y ok                   dup=0 t=1.20
+[126/175] crewai-guarded  key=n ok                   dup=1 t=0.94
+[127/175] crewai-guarded  key=y ok                   dup=0 t=1.56
+[128/175] prefect         key=n ok                   dup=1 t=0.66
+[129/175] prefect         key=y ok                   dup=0 t=1.50
+[130/175] temporal        key=n ok                   dup=1 t=2.21
+[131/175] temporal        key=y ok                   dup=0 t=0.50
+[132/175] crewai          key=n ok                   dup=2 t=0.55
+[133/175] crewai          key=y ok                   dup=0 t=0.16
+[134/175] crewai-guarded  key=n ok                   dup=1 t=1.90
+[135/175] crewai-guarded  key=y ok                   dup=0 t=1.91
+[136/175] prefect         key=n ok                   dup=1 t=1.85
+[137/175] prefect         key=y ok                   dup=0 t=0.84
+[138/175] temporal        key=n ok                   dup=1 t=1.84
+[139/175] temporal        key=y ok                   dup=0 t=1.68
+[140/175] crewai          key=n ok                   dup=2 t=0.79
+[141/175] crewai          key=y ok                   dup=0 t=1.04
+[142/175] crewai-guarded  key=n ok                   dup=1 t=1.08
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 56575)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[143/175] crewai-guarded  key=y ok                   dup=0 t=2.27
+[144/175] prefect         key=n ok                   dup=1 t=0.57
+[145/175] prefect         key=y ok                   dup=0 t=1.59
+[146/175] temporal        key=n ok                   dup=1 t=0.77
+[147/175] temporal        key=y ok                   dup=0 t=0.47
+[148/175] dbos            key=n ok                   dup=1 t=2.25
+[149/175] dbos            key=y ok                   dup=0 t=1.65
+[150/175] crewai          key=n ok                   dup=3 t=1.04
+[151/175] crewai          key=y ok                   dup=0 t=1.45
+[152/175] crewai-guarded  key=n ok                   dup=1 t=0.61
+[153/175] crewai-guarded  key=y ok                   dup=0 t=1.33
+[154/175] prefect         key=n ok                   dup=1 t=1.93
+[155/175] prefect         key=y ok                   dup=0 t=0.99
+[156/175] autogen         key=n ok                   dup=1 t=0.19
+[157/175] autogen         key=y ok                   dup=0 t=1.79
+[158/175] agentos         key=n ok                   dup=1 t=0.34
+[159/175] agentos         key=y ok                   dup=0 t=0.78
+[160/175] langgraph-node  key=n ok                   dup=1 t=2.19
+[161/175] langgraph-node  key=y ok                   dup=0 t=0.60
+[162/175] langgraph-loop  key=n ok                   dup=2 t=0.76
+[163/175] langgraph-loop  key=y ok                   dup=0 t=0.31
+[164/175] temporal        key=n ok                   dup=1 t=0.74
+[165/175] temporal        key=y ok                   dup=0 t=0.83
+[166/175] dbos            key=n ok                   dup=1 t=1.11
+[167/175] dbos            key=y ok                   dup=0 t=0.74
+[168/175] crewai          key=n ok                   dup=2 t=0.55
+[169/175] crewai          key=y ok                   dup=0 t=0.48
+[170/175] crewai-guarded  key=n ok                   dup=0 t=0.86
+[171/175] crewai-guarded  key=y ok                   dup=0 t=1.22
+[172/175] prefect         key=n ok                   dup=1 t=1.45
+[173/175] prefect         key=y ok                   dup=0 t=1.42
+[174/175] autogen         key=n ok                   dup=0 t=1.27
+[175/175] autogen         key=y ok                   dup=0 t=0.53
+
+framework        key    n  ok  P(dup)  E[dup]  max  in-call  recov s  other
+agentos          no     1   1    1.00    1.00    1        0     3.49  
+agentos          yes    1   1    0.00    0.00    0        0     2.87  
+autogen          no     2   2    0.50    0.50    1        1     2.71  
+autogen          yes    2   2    0.00    0.00    0        2     1.99  
+crewai           no    20  20    1.00    2.25    5       12    11.78  
+crewai           yes   20  20    0.00    0.00    0       14    10.96  
+crewai-guarded   no    20  20    0.85    0.85    1       14    11.12  
+crewai-guarded   yes   20  20    0.00    0.00    0       12    10.72  
+dbos             no     2   2    1.00    1.00    1        2     4.97  
+dbos             yes    2   2    0.00    0.00    0        2     5.84  
+langgraph-loop   no     1   1    1.00    2.00    2        0     5.05  
+langgraph-loop   yes    1   1    0.00    0.00    0        0     4.62  
+langgraph-node   no     1   1    1.00    1.00    1        1     2.42  
+langgraph-node   yes    1   1    0.00    0.00    0        1     4.08  
+prefect          no    20  20    0.80    0.80    1       15    17.16  
+prefect          yes   21  21    0.00    0.00    0       16    16.27  
+temporal         no    20  20    0.80    0.80    1       15    15.27  
+temporal         yes   20  20    0.00    0.00    0       14    14.91  

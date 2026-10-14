@@ -1,0 +1,109 @@
+[1/80] langgraph-node  key=n ok                   dup=1 t=3.49
+[2/80] langgraph-loop  key=n ok                   dup=4 t=1.55
+[3/80] crewai          key=n ok                   dup=10 t=4.11
+[4/80] dbos            key=n ok                   dup=1 t=1.90
+[5/80] langgraph-node  key=n ok                   dup=1 t=3.88
+[6/80] langgraph-loop  key=n ok                   dup=1 t=0.22
+[7/80] crewai          key=n ok                   dup=5 t=2.14
+[8/80] dbos            key=n ok                   dup=1 t=0.22
+[9/80] langgraph-node  key=n ok                   dup=1 t=2.38
+[10/80] langgraph-loop  key=n ok                   dup=6 t=2.48
+[11/80] crewai          key=n ok                   dup=1 t=0.09
+[12/80] dbos            key=n ok                   dup=0 t=2.50
+[13/80] langgraph-node  key=n ok                   dup=1 t=3.19
+[14/80] langgraph-loop  key=n ok                   dup=12 t=4.63
+[15/80] crewai          key=n ok                   dup=1 t=0.39
+[16/80] dbos            key=n ok                   dup=1 t=0.99
+[17/80] langgraph-node  key=n ok                   dup=1 t=2.67
+[18/80] langgraph-loop  key=n ok                   dup=11 t=4.50
+[19/80] crewai          key=n ok                   dup=10 t=4.27
+[20/80] dbos            key=n ok                   dup=1 t=2.82
+[21/80] langgraph-node  key=n ok                   dup=0 t=4.14
+[22/80] langgraph-loop  key=n ok                   dup=7 t=2.77
+[23/80] crewai          key=n ok                   dup=10 t=4.19
+[24/80] dbos            key=n ok                   dup=1 t=1.77
+[25/80] langgraph-node  key=n ok                   dup=1 t=1.91
+[26/80] langgraph-loop  key=n ok                   dup=10 t=3.98
+[27/80] crewai          key=n ok                   dup=2 t=0.80
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51603)
+Traceback (most recent call last):
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Users\Varshith\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[28/80] dbos            key=n ok                   dup=0 t=0.42
+[29/80] langgraph-node  key=n ok                   dup=1 t=2.80
+[30/80] langgraph-loop  key=n ok                   dup=3 t=0.96
+[31/80] crewai          key=n ok                   dup=2 t=0.71
+[32/80] dbos            key=n ok                   dup=0 t=2.49
+[33/80] langgraph-node  key=n ok                   dup=1 t=0.14
+[34/80] langgraph-loop  key=n ok                   dup=6 t=2.45
+[35/80] crewai          key=n ok                   dup=4 t=1.54
+[36/80] dbos            key=n ok                   dup=1 t=3.99
+[37/80] langgraph-node  key=n ok                   dup=0 t=0.83
+[38/80] langgraph-loop  key=n ok                   dup=3 t=1.24
+[39/80] crewai          key=n ok                   dup=9 t=3.77
+[40/80] dbos            key=n ok                   dup=1 t=4.15
+[41/80] langgraph-node  key=n ok                   dup=1 t=0.86
+[42/80] langgraph-loop  key=n ok                   dup=12 t=4.63
+[43/80] crewai          key=n ok                   dup=10 t=4.12
+[44/80] dbos            key=n ok                   dup=1 t=0.66
+[45/80] langgraph-node  key=n ok                   dup=1 t=2.75
+[46/80] langgraph-loop  key=n ok                   dup=10 t=4.05
+[47/80] crewai          key=n ok                   dup=6 t=2.37
+[48/80] dbos            key=n ok                   dup=0 t=3.76
+[49/80] langgraph-node  key=n ok                   dup=1 t=1.88
+[50/80] langgraph-loop  key=n ok                   dup=9 t=3.36
+[51/80] crewai          key=n ok                   dup=1 t=0.32
+[52/80] dbos            key=n ok                   dup=1 t=2.17
+[53/80] langgraph-node  key=n ok                   dup=1 t=3.85
+[54/80] langgraph-loop  key=n ok                   dup=4 t=1.43
+[55/80] crewai          key=n ok                   dup=8 t=3.36
+[56/80] dbos            key=n ok                   dup=1 t=3.13
+[57/80] langgraph-node  key=n ok                   dup=0 t=1.58
+[58/80] langgraph-loop  key=n ok                   dup=6 t=2.39
+[59/80] crewai          key=n ok                   dup=1 t=0.32
+[60/80] dbos            key=n ok                   dup=1 t=2.18
+[61/80] langgraph-node  key=n ok                   dup=1 t=2.93
+[62/80] langgraph-loop  key=n ok                   dup=6 t=2.39
+[63/80] crewai          key=n ok                   dup=10 t=3.97
+[64/80] dbos            key=n ok                   dup=1 t=4.30
+[65/80] langgraph-node  key=n ok                   dup=1 t=2.98
+[66/80] langgraph-loop  key=n ok                   dup=7 t=2.55
+[67/80] crewai          key=n ok                   dup=7 t=2.64
+[68/80] dbos            key=n ok                   dup=1 t=1.44
+[69/80] langgraph-node  key=n ok                   dup=0 t=0.75
+[70/80] langgraph-loop  key=n ok                   dup=10 t=4.07
+[71/80] crewai          key=n ok                   dup=8 t=3.22
+[72/80] dbos            key=n ok                   dup=0 t=0.37
+[73/80] langgraph-node  key=n ok                   dup=1 t=0.30
+[74/80] langgraph-loop  key=n ok                   dup=8 t=3.19
+[75/80] crewai          key=n ok                   dup=2 t=0.71
+[76/80] dbos            key=n ok                   dup=1 t=2.41
+[77/80] langgraph-node  key=n ok                   dup=1 t=4.04
+[78/80] langgraph-loop  key=n ok                   dup=3 t=1.00
+[79/80] crewai          key=n ok                   dup=2 t=0.57
+[80/80] dbos            key=n ok                   dup=1 t=4.09
+
+framework        key    n  ok  P(dup)  E[dup]  max  in-call  recov s  other
+crewai           no    20  20    1.00    5.45   10       12    12.44  
+dbos             no    20  20    0.75    0.75    1       15     6.87  
+langgraph-loop   no    20  20    1.00    6.90   12       17     6.43  
+langgraph-node   no    20  20    0.80    0.80    1       16     3.92  

@@ -1,0 +1,65 @@
+[1/60] agentos         key=n failed               dup=0 t=823.70
+[2/60] langgraph-node  key=n ok                   dup=1 t=0.77
+[3/60] dbos            key=n ok                   dup=1 t=1.93
+[4/60] agentos         key=n ok                   dup=0 t=0.96
+[5/60] langgraph-node  key=n ok                   dup=1 t=1.29
+[6/60] dbos            key=n ok                   dup=1 t=1.87
+[7/60] agentos         key=n ok                   dup=0 t=1.02
+[8/60] langgraph-node  key=n ok                   dup=0 t=0.34
+[9/60] dbos            key=n ok                   dup=1 t=2.64
+[10/60] agentos         key=n ok                   dup=1 t=1.91
+[11/60] langgraph-node  key=n ok                   dup=1 t=0.86
+[12/60] dbos            key=n ok                   dup=1 t=0.22
+[13/60] agentos         key=n ok                   dup=1 t=0.02
+[14/60] langgraph-node  key=n ok                   dup=1 t=2.61
+[15/60] dbos            key=n ok                   dup=0 t=1.20
+[16/60] agentos         key=n ok                   dup=0 t=2.92
+[17/60] langgraph-node  key=n ok                   dup=1 t=2.52
+[18/60] dbos            key=n ok                   dup=0 t=0.37
+[19/60] agentos         key=n ok                   dup=1 t=0.75
+[20/60] langgraph-node  key=n ok                   dup=1 t=0.27
+[21/60] dbos            key=n ok                   dup=1 t=0.07
+[22/60] agentos         key=n ok                   dup=1 t=0.14
+[23/60] langgraph-node  key=n ok                   dup=0 t=1.57
+[24/60] dbos            key=n ok                   dup=0 t=1.79
+[25/60] agentos         key=n ok                   dup=1 t=0.15
+[26/60] langgraph-node  key=n ok                   dup=0 t=0.31
+[27/60] dbos            key=n ok                   dup=1 t=2.17
+[28/60] agentos         key=n ok                   dup=0 t=0.43
+[29/60] langgraph-node  key=n ok                   dup=0 t=0.98
+[30/60] dbos            key=n ok                   dup=0 t=2.84
+[31/60] agentos         key=n ok                   dup=1 t=2.67
+[32/60] langgraph-node  key=n ok                   dup=1 t=2.62
+[33/60] dbos            key=n ok                   dup=0 t=3.00
+[34/60] agentos         key=n ok                   dup=0 t=0.98
+[35/60] langgraph-node  key=n ok                   dup=1 t=2.51
+[36/60] dbos            key=n ok                   dup=0 t=0.45
+[37/60] agentos         key=n ok                   dup=0 t=0.36
+[38/60] langgraph-node  key=n ok                   dup=0 t=1.17
+[39/60] dbos            key=n ok                   dup=1 t=2.16
+[40/60] agentos         key=n ok                   dup=1 t=1.94
+[41/60] langgraph-node  key=n ok                   dup=0 t=1.00
+[42/60] dbos            key=n ok                   dup=0 t=2.97
+[43/60] agentos         key=n ok                   dup=0 t=2.88
+[44/60] langgraph-node  key=n ok                   dup=0 t=1.04
+[45/60] dbos            key=n ok                   dup=1 t=0.87
+[46/60] agentos         key=n ok                   dup=1 t=0.11
+[47/60] langgraph-node  key=n ok                   dup=1 t=3.17
+[48/60] dbos            key=n ok                   dup=0 t=2.18
+[49/60] agentos         key=n ok                   dup=1 t=1.98
+[50/60] langgraph-node  key=n ok                   dup=1 t=1.36
+[51/60] dbos            key=n ok                   dup=1 t=2.60
+[52/60] agentos         key=n ok                   dup=1 t=0.11
+[53/60] langgraph-node  key=n ok                   dup=0 t=0.35
+[54/60] dbos            key=n ok                   dup=1 t=1.40
+[55/60] agentos         key=n ok                   dup=0 t=1.15
+[56/60] langgraph-node  key=n ok                   dup=1 t=2.04
+[57/60] dbos            key=n ok                   dup=1 t=0.71
+[58/60] agentos         key=n ok                   dup=0 t=1.17
+[59/60] langgraph-node  key=n ok                   dup=0 t=0.50
+[60/60] dbos            key=n ok                   dup=1 t=3.22
+
+framework        key    n  ok  P(dup)  E[dup]  max  in-call  recov s  other
+agentos          no    20  19    0.53    0.53    1       10     3.89  {'failed': 1}
+dbos             no    20  20    0.60    0.60    1       12     5.54  
+langgraph-node   no    20  20    0.55    0.55    1       11     3.84  

@@ -1,0 +1,339 @@
+time=2026-10-13T00:06:04.201 level=WARN msg="Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id" component=metadata-initializer
+[1/540] agentos         key=n ok                   dup=1 t=1.16
+[2/540] agentos         key=y ok                   dup=0 t=1.80
+[3/540] langgraph-node  key=n ok                   dup=1 t=1.73
+[4/540] langgraph-node  key=y ok                   dup=0 t=0.55
+[5/540] langgraph-loop  key=n ok                   dup=1 t=0.26
+[6/540] langgraph-loop  key=y ok                   dup=0 t=1.04
+[7/540] temporal        key=n ok                   dup=1 t=1.56
+[8/540] temporal        key=y ok                   dup=0 t=0.58
+[9/540] dbos            key=n ok                   dup=1 t=1.85
+[10/540] dbos            key=y ok                   dup=0 t=1.28
+[11/540] crewai          key=n ok                   dup=3 t=1.05
+[12/540] crewai          key=y ok                   dup=0 t=0.06
+[13/540] crewai-guarded  key=n ok                   dup=0 t=0.84
+[14/540] crewai-guarded  key=y ok                   dup=0 t=0.92
+[15/540] prefect         key=n ok                   dup=0 t=1.17
+[16/540] prefect         key=y ok                   dup=0 t=2.11
+[17/540] autogen         key=n ok                   dup=1 t=1.08
+[18/540] autogen         key=y ok                   dup=0 t=1.44
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 61746)
+Traceback (most recent call last):
+  File "C:\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 464, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[19/540] agentos         key=n ok                   dup=0 t=1.29
+[20/540] agentos         key=y ok                   dup=0 t=1.00
+[21/540] langgraph-node  key=n ok                   dup=1 t=0.08
+[22/540] langgraph-node  key=y ok                   dup=0 t=2.12
+[23/540] langgraph-loop  key=n ok                   dup=3 t=1.18
+[24/540] langgraph-loop  key=y ok                   dup=0 t=1.86
+[25/540] temporal        key=n ok                   dup=1 t=1.91
+[26/540] temporal        key=y ok                   dup=0 t=2.11
+[27/540] dbos            key=n ok                   dup=1 t=1.59
+[28/540] dbos            key=y ok                   dup=0 t=1.04
+[29/540] crewai          key=n ok                   dup=6 t=2.22
+[30/540] crewai          key=y ok                   dup=0 t=0.22
+[31/540] crewai-guarded  key=n ok                   dup=1 t=1.03
+[32/540] crewai-guarded  key=y ok                   dup=0 t=0.02
+[33/540] prefect         key=n ok                   dup=1 t=0.57
+[34/540] prefect         key=y ok                   dup=0 t=1.73
+[35/540] autogen         key=n ok                   dup=1 t=1.54
+[36/540] autogen         key=y ok                   dup=0 t=0.36
+[37/540] agentos         key=n ok                   dup=1 t=1.35
+[38/540] agentos         key=y ok                   dup=0 t=0.20
+[39/540] langgraph-node  key=n ok                   dup=1 t=2.15
+[40/540] langgraph-node  key=y ok                   dup=0 t=1.86
+[41/540] langgraph-loop  key=n ok                   dup=1 t=0.03
+[42/540] langgraph-loop  key=y ok                   dup=0 t=2.04
+[43/540] temporal        key=n ok                   dup=1 t=1.17
+[44/540] temporal        key=y ok                   dup=0 t=0.75
+[45/540] dbos            key=n ok                   dup=1 t=2.18
+[46/540] dbos            key=y ok                   dup=0 t=0.36
+[47/540] crewai          key=n ok                   dup=3 t=1.00
+[48/540] crewai          key=y ok                   dup=0 t=1.38
+[49/540] crewai-guarded  key=n ok                   dup=1 t=0.45
+[50/540] crewai-guarded  key=y ok                   dup=0 t=0.11
+[51/540] prefect         key=n ok                   dup=1 t=1.04
+[52/540] prefect         key=y ok                   dup=0 t=1.64
+[53/540] autogen         key=n ok                   dup=1 t=0.30
+[54/540] autogen         key=y ok                   dup=0 t=1.81
+[55/540] agentos         key=n ok                   dup=0 t=0.37
+[56/540] agentos         key=y ok                   dup=0 t=0.90
+[57/540] langgraph-node  key=n ok                   dup=1 t=0.70
+[58/540] langgraph-node  key=y ok                   dup=0 t=0.61
+[59/540] langgraph-loop  key=n ok                   dup=3 t=1.08
+[60/540] langgraph-loop  key=y ok                   dup=0 t=0.28
+[61/540] temporal        key=n ok                   dup=1 t=1.88
+[62/540] temporal        key=y ok                   dup=0 t=0.53
+[63/540] dbos            key=n ok                   dup=1 t=2.02
+[64/540] dbos            key=y ok                   dup=0 t=0.94
+[65/540] crewai          key=n ok                   dup=6 t=2.21
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 59204)
+Traceback (most recent call last):
+  File "C:\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 464, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[66/540] crewai          key=y ok                   dup=0 t=1.29
+[67/540] crewai-guarded  key=n ok                   dup=1 t=0.25
+[68/540] crewai-guarded  key=y ok                   dup=0 t=1.28
+[69/540] prefect         key=n ok                   dup=1 t=0.23
+[70/540] prefect         key=y ok                   dup=0 t=2.20
+[71/540] autogen         key=n ok                   dup=1 t=1.58
+[72/540] autogen         key=y ok                   dup=0 t=1.66
+[73/540] agentos         key=n ok                   dup=0 t=1.17
+[74/540] agentos         key=y ok                   dup=0 t=0.67
+[75/540] langgraph-node  key=n ok                   dup=1 t=0.60
+[76/540] langgraph-node  key=y ok                   dup=0 t=0.95
+[77/540] langgraph-loop  key=n ok                   dup=3 t=0.95
+[78/540] langgraph-loop  key=y ok                   dup=0 t=0.22
+[79/540] temporal        key=n ok                   dup=1 t=0.28
+[80/540] temporal        key=y ok                   dup=0 t=1.79
+[81/540] dbos            key=n ok                   dup=0 t=2.13
+[82/540] dbos            key=y ok                   dup=0 t=2.25
+[83/540] crewai          key=n ok                   dup=4 t=1.58
+[84/540] crewai          key=y ok                   dup=0 t=0.90
+[85/540] crewai-guarded  key=n ok                   dup=0 t=1.69
+[86/540] crewai-guarded  key=y ok                   dup=0 t=1.60
+[87/540] prefect         key=n ok                   dup=1 t=1.77
+[88/540] prefect         key=y ok                   dup=0 t=1.25
+[89/540] autogen         key=n ok                   dup=1 t=1.29
+[90/540] autogen         key=y ok                   dup=0 t=1.43
+[91/540] agentos         key=n ok                   dup=1 t=0.29
+[92/540] agentos         key=y ok                   dup=0 t=0.07
+[93/540] langgraph-node  key=n ok                   dup=0 t=0.82
+[94/540] langgraph-node  key=y ok                   dup=0 t=0.55
+[95/540] langgraph-loop  key=n ok                   dup=3 t=1.25
+[96/540] langgraph-loop  key=y ok                   dup=0 t=0.06
+[97/540] temporal        key=n ok                   dup=1 t=0.61
+[98/540] temporal        key=y ok                   dup=0 t=2.17
+[99/540] dbos            key=n ok                   dup=1 t=1.93
+[100/540] dbos            key=y ok                   dup=0 t=1.50
+[101/540] crewai          key=n ok                   dup=4 t=1.46
+[102/540] crewai          key=y ok                   dup=0 t=1.51
+[103/540] crewai-guarded  key=n ok                   dup=1 t=1.08
+[104/540] crewai-guarded  key=y ok                   dup=0 t=1.56
+[105/540] prefect         key=n ok                   dup=0 t=2.13
+[106/540] prefect         key=y ok                   dup=0 t=2.19
+[107/540] autogen         key=n ok                   dup=0 t=0.79
+[108/540] autogen         key=y ok                   dup=0 t=0.83
+[109/540] agentos         key=n ok                   dup=1 t=1.26
+[110/540] agentos         key=y ok                   dup=0 t=0.43
+[111/540] langgraph-node  key=n ok                   dup=0 t=0.35
+[112/540] langgraph-node  key=y ok                   dup=0 t=2.19
+[113/540] langgraph-loop  key=n ok                   dup=5 t=1.83
+[114/540] langgraph-loop  key=y ok                   dup=0 t=0.19
+[115/540] temporal        key=n ok                   dup=0 t=0.32
+[116/540] temporal        key=y ok                   dup=0 t=2.30
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 59744)
+Traceback (most recent call last):
+  File "C:\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 464, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[117/540] dbos            key=n ok                   dup=0 t=1.32
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 59760)
+Traceback (most recent call last):
+  File "C:\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 464, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[118/540] dbos            key=y ok                   dup=0 t=0.88
+[119/540] crewai          key=n ok                   dup=1 t=0.20
+[120/540] crewai          key=y ok                   dup=0 t=0.77
+[121/540] crewai-guarded  key=n ok                   dup=1 t=0.10
+[122/540] crewai-guarded  key=y ok                   dup=0 t=0.37
+[123/540] prefect         key=n ok                   dup=0 t=1.25
+[124/540] prefect         key=y ok                   dup=0 t=2.24
+[125/540] autogen         key=n ok                   dup=1 t=1.87
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 64871)
+Traceback (most recent call last):
+  File "C:\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 464, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[126/540] autogen         key=y ok                   dup=0 t=0.41
+[127/540] agentos         key=n ok                   dup=0 t=0.38
+[128/540] agentos         key=y ok                   dup=0 t=1.19
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51409)
+Traceback (most recent call last):
+  File "C:\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 464, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[129/540] langgraph-node  key=n ok                   dup=0 t=0.85
+[130/540] langgraph-node  key=y ok                   dup=0 t=0.29
+[131/540] langgraph-loop  key=n ok                   dup=3 t=1.12
+[132/540] langgraph-loop  key=y ok                   dup=0 t=0.88
+[133/540] temporal        key=n ok                   dup=1 t=1.49
+[134/540] temporal        key=y ok                   dup=0 t=2.09
+[135/540] dbos            key=n ok                   dup=1 t=1.91
+[136/540] dbos            key=y ok                   dup=0 t=0.19
+[137/540] crewai          key=n ok                   dup=4 t=1.73
+[138/540] crewai          key=y ok                   dup=0 t=0.75
+[139/540] crewai-guarded  key=n ok                   dup=0 t=2.09
+[140/540] crewai-guarded  key=y ok                   dup=0 t=0.93
+[141/540] prefect         key=n ok                   dup=1 t=1.86
+[142/540] prefect         key=y ok                   dup=0 t=0.94
+[143/540] autogen         key=n ok                   dup=0 t=0.36
+[144/540] autogen         key=y ok                   dup=0 t=0.62
+[145/540] agentos         key=n ok                   dup=1 t=0.74
+[146/540] agentos         key=y ok                   dup=0 t=0.34
+[147/540] langgraph-node  key=n ok                   dup=1 t=0.54
+[148/540] langgraph-node  key=y ok                   dup=0 t=1.29
+[149/540] langgraph-loop  key=n ok                   dup=2 t=0.68
+[150/540] langgraph-loop  key=y ok                   dup=0 t=0.05
+[151/540] temporal        key=n ok                   dup=1 t=1.55
+[152/540] temporal        key=y ok                   dup=0 t=1.56
+[153/540] dbos            key=n ok                   dup=0 t=2.09
+[154/540] dbos            key=y ok                   dup=0 t=0.81
+[155/540] crewai          key=n ok                   dup=5 t=2.12
+[156/540] crewai          key=y ok                   dup=0 t=0.03
+[157/540] crewai-guarded  key=n ok                   dup=0 t=0.77
+[158/540] crewai-guarded  key=y ok                   dup=0 t=0.78
+[159/540] prefect         key=n ok                   dup=1 t=0.04
+[160/540] prefect         key=y ok                   dup=0 t=0.18
+[161/540] autogen         key=n ok                   dup=0 t=1.24
+[162/540] autogen         key=y ok                   dup=0 t=0.76
+[163/540] agentos         key=n ok                   dup=1 t=1.40
+[164/540] agentos         key=y ok                   dup=0 t=1.31
+[165/540] langgraph-node  key=n ok                   dup=1 t=0.25
+[166/540] langgraph-node  key=y ok                   dup=0 t=0.43
+[167/540] langgraph-loop  key=n ok                   dup=6 t=2.27
+[168/540] langgraph-loop  key=y ok                   dup=0 t=1.51
+[169/540] temporal        key=n ok                   dup=0 t=0.80
+[170/540] temporal        key=y ok                   dup=0 t=0.59
+[171/540] dbos            key=n ok                   dup=1 t=1.93
+[172/540] dbos            key=y ok                   dup=0 t=0.05
+[173/540] crewai          key=n ok                   dup=2 t=0.59
+[174/540] crewai          key=y ok                   dup=0 t=0.46
+[175/540] crewai-guarded  key=n ok                   dup=1 t=0.50
+[176/540] crewai-guarded  key=y ok                   dup=0 t=0.73
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49945)
+Traceback (most recent call last):
+  File "C:\Python314\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 496, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Python314\Lib\http\server.py", line 464, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "C:\Python314\Lib\socket.py", line 729, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+[177/540] prefect         key=n ok                   dup=0 t=0.42

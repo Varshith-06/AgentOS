@@ -1,0 +1,16 @@
+# The exact versions behind the published results (Python 3.13.5).
+# CrewAI's dependencies have no wheels for Python 3.14.
+langgraph==1.2.14
+langgraph-checkpoint==4.2.0
+langgraph-checkpoint-sqlite==3.1.1
+temporalio==1.34.0
+dbos==3.2.0
+crewai==1.15.27
+prefect==3.8.8
+autogen-core==0.7.5
+pydantic==2.12.5
+httpx==0.28.1
+matplotlib==3.11.2
+# Only to re-check the SDK idempotency-header claim (paper, Section VI).
+openai==2.54.0
+anthropic==1.13.0

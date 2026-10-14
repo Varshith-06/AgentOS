@@ -3,7 +3,7 @@
 [![CI](https://github.com/Varshith-06/AgentOS/actions/workflows/ci.yml/badge.svg)](https://github.com/Varshith-06/AgentOS/actions/workflows/ci.yml)
 ![Python 3.11 – 3.14](https://img.shields.io/badge/python-3.11%20%E2%80%93%203.14-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 194 passing](https://img.shields.io/badge/tests-194%20passing-brightgreen)
+![Tests: 213 passing](https://img.shields.io/badge/tests-213%20passing-brightgreen)
 ![Model: gpt--oss--120b](https://img.shields.io/badge/default%20model-gpt--oss--120b-orange)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -12,9 +12,12 @@
 Agents run as OS processes with PIDs, a nine-state lifecycle, and a
 scheduler. Every tool call, model call, and message crosses a syscall
 boundary, is permission-checked, journaled, and billed. `kill -9` the runtime
-mid-task and it resumes with **zero work re-executed and zero calls
-re-billed** — measured, not claimed, against LangGraph, CrewAI, AutoGen, and
-Temporal on identical workloads.
+mid-task and it resumes from its last completed call. The one call that was
+*in flight* is the exception, for AgentOS and for every framework we measured:
+it gets re-issued under its original idempotency key when the tool honours
+one, and otherwise it is re-issued **and flagged**, never silently repeated.
+See [what a crash costs](#what-a-crash-costs) for nine configurations of seven
+frameworks, killed at random moments.
 
 And because an agent's identity is JSON, agents don't have to be written in
 advance. POST a sentence and a tool list; a planner **invents the team at
@@ -45,6 +48,7 @@ config at a real one and the same code runs live.
 
 **Contents:** [Runtime, not library](#a-runtime-not-a-library) ·
 [The numbers](#the-numbers) · [Head-to-head](#head-to-head) ·
+[What a crash costs](#what-a-crash-costs) ·
 [How it works](#how-it-works) · [Invented agents](#agents-invented-at-runtime) ·
 [Running it for real](#running-it-for-real) · [Try it](#try-it) ·
 [Layout](#layout)
@@ -55,7 +59,7 @@ config at a real one and the same code runs live.
 
 | | |
 |---|---|
-| **Crash recovery** | the only runtime measured that repeats **0** work after a hard kill |
+| **Crash recovery** | resumes from the last completed call; the call in flight is re-issued under its original idempotency key, or flagged `OutcomeAmbiguous` |
 | **Isolation** | every agent is a real OS process — not a mode, the only mode |
 | **Approval latency** | 1.9ms, approve → agent finished — 3× faster than Temporal |
 | **Durable step overhead** | 10.6ms per step, each crossing a real process boundary — 6× cheaper than Temporal |
@@ -63,7 +67,7 @@ config at a real one and the same code runs live.
 | **Capability ceiling** | **0 escapes** in 10 adversarial attacks — a real model actively trying |
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
 | **Auth** | bearer token on every route; refuses to bind non-loopback without one |
-| **Test suite** | 201 tests, zero dependencies, fully offline |
+| **Test suite** | 213 tests, zero dependencies, fully offline |
 | **Verified** | the correctness claims above are re-checked on every push — Linux, macOS, Windows × Python 3.11–3.14. Timings are reported, never asserted |
 
 ---
@@ -78,9 +82,10 @@ trade, in both directions.
 **What the runtime shape buys:**
 
 - **Durability nobody has to write.** Every syscall is journaled; a crashed
-  task resumes from its last completed call with nothing re-executed and no
-  model call billed twice. In a library, checkpointing is your application's
-  problem, at whatever granularity you remembered to implement.
+  task resumes from its last completed call, and every side-effecting call
+  carries an idempotency key the application never had to derive. In a
+  library, checkpointing is your application's problem, at whatever
+  granularity you remembered to implement.
 - **One view of everything.** Every application's agents in one `agent ps`,
   one dependency graph, one event timeline, one cost ledger exact to the
   token. "What did all of this cost today?" has an answer.
@@ -262,23 +267,11 @@ counted in a shared tally table — no framework grades its own homework — and
 the crash is a real OS kill delivered once every framework has completed the
 same work. Any comparator not installed is skipped.
 
-**Recovery — billable calls repeated after a hard kill** (6 calls, killed
-after 3):
-
-| framework | repeated | why |
-|---|---|---|
-| **AgentOS** | **0** | journals each syscall reply as it completes |
-| LangGraph (one node per call) | 1 | the in-flight node has no checkpoint |
-| Temporal | 1 | at-least-once activity semantics |
-| LangGraph (calls in one node) | 3 | a crash re-runs the whole node |
-| CrewAI Flows | 3 | `@persist` restores state, then replays from the start |
-| AutoGen | 3 | `save_state` restores state; the handler starts over |
-
-The axis is checkpoint granularity. Others persist at node or method
-boundaries; AgentOS journals at the syscall, so even the call *in flight* at
-the kill returns its recorded reply instead of running twice. LangGraph can
-approach this — if you restructure into one node per side effect. AgentOS
-gives it to code written the obvious way.
+The recovery comparison that used to sit here is gone: it killed every
+framework at one fixed moment, and that moment fell inside a separately
+journaled sleep for AgentOS but inside the billable call for everyone else.
+Its replacement kills at uniformly random moments; see
+[what a crash costs](#what-a-crash-costs).
 
 ### Why every agent is its own process
 
@@ -343,8 +336,8 @@ the wrong architecture for a fan-out of thousands of trivial ones.
 
 ### Speed: against Temporal only
 
-The recovery table above is a fair fight — checkpoint granularity has nothing
-to do with where code executes. **Timing tables are not.** LangGraph, CrewAI
+A crash comparison is a fair fight: checkpoint granularity has nothing to do
+with where code executes. **Timing tables are not.** LangGraph, CrewAI
 and AutoGen run a step as a function call inside one process; AgentOS crosses
 into a separate operating-system process every time. Putting those numbers in
 one column would flatter nobody and inform no one, so they are gone.
@@ -356,7 +349,6 @@ boundary on every step, and it also survives the machine its caller is on.
 |---|---|---|
 | per durable step | **10.6ms** — a socket into another address space | 68.7ms — gRPC to a server |
 | approve → agent finished | **2.2ms** (worst 2.5ms) | 7.3ms (worst 8.9ms) |
-| calls repeated after a hard kill | **0** | 1 (at-least-once, as documented) |
 | what it needs to run | one process, zero dependencies | a server cluster |
 | durability boundary | this machine | many machines |
 
@@ -387,6 +379,70 @@ publishing the numbers that cannot be read fairly.
 
 ---
 
+## What a crash costs
+
+`benchmarks/crashstudy/` asks every framework the same question. Six billable
+calls go to a separate process that charges on receipt and answers 300ms later,
+which is what a model API looks like to a client that dies. Each framework
+recovers the way its own documentation says to. The kill takes the whole
+process tree, at a uniformly random moment. The provider's ledger is the only
+thing counted.
+
+**Duplicate charges per crash, no idempotency keys** (30 crashes each; the
+model, at each framework's measured call cycle, is in
+[the crash study README](benchmarks/crashstudy/README.md)):
+
+| configuration | P(duplicate) | duplicates per crash | model |
+|---|---|---|---|
+| AgentOS | 0.73 | 0.73 | 0.73 |
+| LangGraph, node per call | 0.67 | 0.67 | 0.73 |
+| Temporal, activity per call | 0.80 | 0.80 | 0.69 |
+| DBOS, step per call | 0.70 | 0.70 | 0.70 |
+| CrewAI, steps guarded on restored state | 0.77 | 0.77 | 0.68 |
+| CrewAI, `CheckpointConfig` + `Flow.from_checkpoint` | 0.80 | 0.80 | 0.75 |
+| Prefect, cached tasks | 0.73 | 0.73 | 0.70 |
+| AutoGen, `save_state` after each call | 0.70 | 0.70 | 0.73 |
+| LangGraph, agent loop in one node | 1.00 | **3.03** | 3.23 |
+| CrewAI Flow + `@persist`, resumed by state id | 1.00 | **2.77** | 3.07 |
+
+**With a stable idempotency key the provider honours: zero, in all ten, in 300
+crashes.**
+
+Three things to take from it:
+
+- **Nobody escapes the call in flight, AgentOS included.** A kill between the
+  provider applying a call and the framework recording the reply re-bills that
+  call on every framework here: all 163 kills that landed inside a 300ms call
+  re-billed it. The window closes only once the framework has recorded the
+  reply, a few tens of milliseconds later. Real agents spend almost all their
+  time inside model calls, so for them most crashes cost one.
+- **Granularity decides how much more you pay.** A recovery unit that spans
+  the whole loop repeats everything it had done. CrewAI's documented resume
+  restores the flow's state and then runs it again from `@start`.
+- **Exactly-once lives in the provider contract.** Keys took every framework to
+  zero. For model calls, though, there is no contract to honour: the official
+  `openai` and `anthropic` Python SDKs generate an idempotency key and never
+  send it, and neither API documents deduplication. Against a real inference
+  API (Groq), all 53 requests killed mid-response were still admitted, a
+  repeated `Idempotency-Key` was ignored in 20 of 20 pairs, and keyed LangGraph
+  and DBOS re-billed a call in 16 of 21 and 11 of 21 crashes, no better than
+  without a key.
+- **Most duplicates are silent.** Only Temporal (an activity's attempt number)
+  and AgentOS (an `OutcomeAmbiguous` event) tell the application that a
+  re-executed call may be a repeat. Both flagged every duplicate; Temporal also
+  flagged 8 retries that never reached the provider, AgentOS 2.
+
+So AgentOS does what a runtime still can. Every side-effecting call gets an
+intent journaled with a fresh key before dispatch, and the intent is settled in
+the same transaction as the reply. On recovery, the one call with an open
+intent is re-issued under its *original* key if the driver deduplicates (the
+`sql` driver commits the statement and the key together, which is exactly-once
+for real). Otherwise it is re-issued with an `OutcomeAmbiguous` event on the
+record, or refused under `on_ambiguous="fail"`, so the agent can check first.
+A duplicate is never silent.
+
+---
+
 ## How it works
 
 ### The one decision everything hangs on
@@ -400,7 +456,9 @@ features:
 - **Crash recovery** — everything an agent does is JSON crossing a boundary,
   so the kernel journals every reply. Replay hands back recorded answers
   instead of re-executing; the agent fast-forwards to where it died and goes
-  live. Every completed syscall is a checkpoint.
+  live. Every completed syscall is a checkpoint. A call that was in flight
+  when the runtime died left an *intent* behind and no reply, so the kernel
+  knows that call's outcome is unknown instead of guessing.
 - **Real process isolation, always** — anything that survives `json.dumps`
   survives a socket. Every agent is its **own OS process**, syscalls crossing
   a token-authenticated loopback TCP connection as JSON lines. There is one
