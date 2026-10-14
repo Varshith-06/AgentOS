@@ -47,6 +47,8 @@ class AgentProcess:
     pause_requested: bool = field(default=False, repr=False, compare=False)
     # Op of the blocking syscall, so its reply is journaled under that name.
     current_op: str | None = field(default=None, repr=False, compare=False)
+    # The intents row of the side-effecting call in flight, settled with its reply.
+    intent: int | None = field(default=None, repr=False, compare=False)
     timer: asyncio.TimerHandle | None = field(
         default=None, repr=False, compare=False
     )

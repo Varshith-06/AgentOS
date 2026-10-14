@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from collections import deque
 from typing import Any
 
@@ -24,6 +25,11 @@ from .states import TERMINAL, AgentState
 from .store import Store
 
 NONBLOCKING = {"spawn", "log", "publish", "subscribe", "memory", "checkpoint"}
+AMBIGUITY_POLICIES = ("retry", "fail")
+
+
+class AmbiguousOutcome(Exception):
+    """A call was in flight at a crash and nothing recorded whether it ran."""
 
 LIVE = frozenset(
     {
@@ -50,7 +56,13 @@ class Kernel:
         recover: bool = False,
         retries: int = 0,
         daemon: bool = False,
+        on_ambiguous: str = "retry",
     ) -> None:
+        if on_ambiguous not in AMBIGUITY_POLICIES:
+            raise ValueError(
+                f"on_ambiguous must be one of {', '.join(AMBIGUITY_POLICIES)}"
+            )
+        self.on_ambiguous = on_ambiguous
         self.table = ProcessTable()
         self.policy = get_policy(policy)
         self.slots = slots
@@ -94,10 +106,12 @@ class Kernel:
         if recover:
             self.store.resume_runtime(self.policy.name, slots)
             self._journals = self.store.load_journals()
+            self._ambiguous = self.store.open_intents()
             self._restore()
         else:
             self.store.register_runtime(self.policy.name, slots)
             self._journals = {}
+            self._ambiguous = {}
 
     def _restore(self) -> None:
         """Rebuild the world from the store after a hard kill."""
@@ -140,9 +154,68 @@ class Kernel:
     def _journal(self, proc: AgentProcess, req_id: int, op: str, value: Any,
                  error: str | None) -> None:
         """A delivered reply is a checkpoint: everything up to here is safe."""
-        self.store.append_journal(proc.pid, req_id, op, value, error)
+        intent, proc.intent = proc.intent, None
+        self.store.append_journal(proc.pid, req_id, op, value, error, intent=intent)
         proc.checkpoint += 1
         self.store.publish(proc.row())
+
+    def _intend(
+        self, proc: AgentProcess, call: Syscall, target: str, idempotent: bool
+    ) -> str:
+        """Write the intent before dispatch; return the idempotency key to send.
+
+        A call that was in flight when the runtime died comes back here with the
+        same req_id. It keeps its original key, so an idempotent target applies
+        it at most once. Anything else is a call that may already have run, and
+        the policy decides: re-issue it and say so, or refuse to guess.
+        """
+        prior = self._ambiguous.pop(proc.pid, None)
+        key = uuid.uuid4().hex
+        if prior is not None and prior["target"] != target:
+            self._abandon(proc, prior)
+        elif prior is not None:
+            self.store.settle_intent(prior["id"])
+            if idempotent:
+                key = prior["key"]
+                self._log(
+                    proc.pid, "recover",
+                    f"{target} #{call.req_id} was in flight at the crash; "
+                    "re-issued under its original idempotency key",
+                )
+            else:
+                self.publish(
+                    "OutcomeAmbiguous", source_pid=proc.pid, pid=proc.pid,
+                    target=target, req_id=call.req_id, policy=self.on_ambiguous,
+                )
+                if self.on_ambiguous == "fail":
+                    self._log(
+                        proc.pid, "ambiguous",
+                        f"{target} #{call.req_id} may have run before the crash; "
+                        "not re-issued",
+                    )
+                    raise AmbiguousOutcome(
+                        f"{target} was in flight when the runtime crashed and may "
+                        "or may not have taken effect. It was not re-issued; "
+                        "check before repeating it."
+                    )
+                self._log(
+                    proc.pid, "ambiguous",
+                    f"{target} #{call.req_id} may have run before the crash; "
+                    "re-issued anyway, so it may now have run twice",
+                )
+        proc.intent = self.store.append_intent(
+            proc.pid, call.req_id, call.op, target, key
+        )
+        return key
+
+    def _abandon(self, proc: AgentProcess, prior: dict[str, Any]) -> None:
+        """The agent went live and asked for something else: the call stays unknown."""
+        self.store.settle_intent(prior["id"])
+        self._log(
+            proc.pid, "recover",
+            f"in-flight {prior['target']} #{prior['req_id']} was never asked "
+            "for again; its outcome stays unknown",
+        )
 
     def _replay_entry(self, proc: AgentProcess, call: Syscall) -> dict[str, Any] | None:
         """The journaled reply for this syscall, if we are replaying one."""
@@ -433,6 +506,9 @@ class Kernel:
                 Reply(req_id=call.req_id, value=entry["value"], error=entry["error"])
             )
             return
+        prior = self._ambiguous.get(proc.pid)
+        if prior is not None and (prior["req_id"], prior["op"]) != (call.req_id, call.op):
+            self._abandon(proc, self._ambiguous.pop(proc.pid))
         if call.op in NONBLOCKING:
             value = getattr(self, f"_sys_{call.op}")(proc, **call.args)
             self._journal(proc, call.req_id, call.op, value, None)
@@ -680,13 +756,16 @@ class Kernel:
                 f"{capability!r} — {remedy}"
             )
         driver = self._driver(capability)
+        idem = self._intend(
+            proc, call, f"{capability}.{op}", op in getattr(driver, "idempotent", ())
+        )
 
         self._yield_slot(proc, AgentState.WAITING, waiting_on=f"tool {capability}")
         key = dg.key(dg.TOOL, f"{proc.pid}.{call.req_id}")
         self.deps.add(proc.pid, call.req_id, {key})
         self._io_calls += 1
         task = asyncio.create_task(
-            self._run_tool(proc, key, driver, capability, op, params)
+            self._run_tool(proc, key, driver, capability, op, params, idem)
         )
         self._io_tasks.add(task)
         task.add_done_callback(self._io_tasks.discard)
@@ -699,10 +778,11 @@ class Kernel:
         capability: str,
         op: str,
         params: dict[str, Any],
+        idempotency_key: str | None = None,
     ) -> None:
         started = asyncio.get_running_loop().time()
         try:
-            value = await driver.execute(op, params)
+            value = await driver.execute(op, params, idempotency_key=idempotency_key)
             try:
                 assert_serializable(f"{capability}.{op} result", value)
                 result = {"value": value, "error": None}
@@ -826,6 +906,7 @@ class Kernel:
                 f"${budget:.6f} allowance. Finish with what you have."
             )
 
+        self._intend(proc, call, f"model:{need}", idempotent=False)
         self._yield_slot(proc, AgentState.WAITING, waiting_on=f"model {need}")
         key = dg.key(dg.MODEL, f"{proc.pid}.{call.req_id}")
         self.deps.add(proc.pid, call.req_id, {key})
@@ -1016,6 +1097,12 @@ class Kernel:
         while journal and self._entry_failed(journal[-1]):
             journal.pop()
         self._journals[proc.pid] = journal
+        # An agent that died mid-call left that call's intent open, exactly as a
+        # runtime crash would: the restart must not re-issue it blind.
+        intent = self.store.open_intents().get(proc.pid)
+        if intent is not None:
+            self._ambiguous[proc.pid] = intent
+        proc.intent = None
         proc.exit_reason = None
         proc.ended_at = None
         proc.pending = None

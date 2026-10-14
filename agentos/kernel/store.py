@@ -84,6 +84,19 @@ CREATE TABLE IF NOT EXISTS journal (
     value  TEXT    NOT NULL,
     error  TEXT
 );
+-- Written before a side-effecting call is dispatched and settled in the same
+-- transaction as its journal entry, so an unsettled row after a crash is a call
+-- whose outcome nobody recorded: it may or may not have happened.
+CREATE TABLE IF NOT EXISTS intents (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts      REAL    NOT NULL,
+    pid     INTEGER NOT NULL,
+    req_id  INTEGER NOT NULL,
+    op      TEXT    NOT NULL,
+    target  TEXT    NOT NULL,
+    key     TEXT    NOT NULL,
+    settled INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS consumptions (
     pid    INTEGER NOT NULL,
     seq    INTEGER NOT NULL,
@@ -199,6 +212,7 @@ class Store:
         self.db.execute("DELETE FROM events")
         self.db.execute("DELETE FROM log")
         self.db.execute("DELETE FROM journal")
+        self.db.execute("DELETE FROM intents")
         self.db.execute("DELETE FROM consumptions")
         self.db.execute("UPDATE approvals SET pid = NULL WHERE status = 'pending'")
         self.db.execute("DELETE FROM memory WHERE mtype IN ('working', 'shared')")
@@ -405,13 +419,43 @@ class Store:
         return [dict(r) for r in rows]
 
     def append_journal(
-        self, pid: int, req_id: int, op: str, value: Any, error: str | None
+        self, pid: int, req_id: int, op: str, value: Any, error: str | None,
+        intent: int | None = None,
     ) -> None:
-        self.db.execute(
-            "INSERT INTO journal (ts, pid, req_id, op, value, error)"
+        """Record a reply, settling the intent it answers in the same commit."""
+        self.db.execute("BEGIN")
+        try:
+            self.db.execute(
+                "INSERT INTO journal (ts, pid, req_id, op, value, error)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (time.time(), pid, req_id, op, json.dumps(value), error),
+            )
+            if intent is not None:
+                self.db.execute("UPDATE intents SET settled = 1 WHERE id = ?", (intent,))
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
+
+    def append_intent(
+        self, pid: int, req_id: int, op: str, target: str, key: str
+    ) -> int:
+        cur = self.db.execute(
+            "INSERT INTO intents (ts, pid, req_id, op, target, key)"
             " VALUES (?, ?, ?, ?, ?, ?)",
-            (time.time(), pid, req_id, op, json.dumps(value), error),
+            (time.time(), pid, req_id, op, target, key),
         )
+        return int(cur.lastrowid)
+
+    def settle_intent(self, intent: int) -> None:
+        self.db.execute("UPDATE intents SET settled = 1 WHERE id = ?", (intent,))
+
+    def open_intents(self) -> dict[int, dict[str, Any]]:
+        """pid -> the call it had in flight when the runtime died, if any."""
+        rows = self.db.execute(
+            "SELECT * FROM intents WHERE settled = 0 ORDER BY id"
+        ).fetchall()
+        return {r["pid"]: dict(r) for r in rows}
 
     def load_journals(self) -> dict[int, list[dict[str, Any]]]:
         """pid -> its syscall replies, in order. The replay script."""

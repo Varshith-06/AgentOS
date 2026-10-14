@@ -16,6 +16,7 @@ KERNEL_EVENTS: frozenset[str] = frozenset(
         "ModelFinished",
         "TimerExpired",
         "FileCreated",
+        "OutcomeAmbiguous",
     }
 )
 

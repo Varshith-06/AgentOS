@@ -26,6 +26,9 @@ class ToolDriver:
     cache_ttl: float = 0.0  # seconds a result stays fresh; 0 disables caching
     # Ops safe to serve from cache; caching a write would be a correctness bug.
     cacheable: tuple[str, ...] = ()
+    # Ops that take an `idempotency_key` and apply its effect at most once per
+    # key. Only these can be re-issued after a crash without risking a repeat.
+    idempotent: tuple[str, ...] = ()
 
     def __init__(
         self,
@@ -84,12 +87,16 @@ class ToolDriver:
             return False, None
         return True, value
 
-    async def execute(self, op: str, params: dict[str, Any]) -> Any:
+    async def execute(
+        self, op: str, params: dict[str, Any], idempotency_key: str | None = None
+    ) -> Any:
         handler = getattr(self, f"op_{op}", None)
         if handler is None:
             raise ToolError(
                 f"{self.name!r} driver has no op {op!r} (ops: {', '.join(self.ops())})"
             )
+        if idempotency_key is not None and op in self.idempotent:
+            params = {**params, "idempotency_key": idempotency_key}
         key = self._cache_key(op, params)
         fresh, value = self._cached(key)
         if fresh:
