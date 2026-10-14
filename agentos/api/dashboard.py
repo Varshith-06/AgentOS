@@ -33,7 +33,9 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   h1 { font-size: 18px; font-weight: 650; }
   h1 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 10px; }
   h2 { font-size: 12px; font-weight: 600; color: var(--ink-2);
-       text-transform: uppercase; letter-spacing: .06em; margin: 0 0 8px; }
+       text-transform: uppercase; letter-spacing: .06em; margin: 0 0 8px;
+       display: flex; justify-content: space-between; align-items: baseline;
+       gap: 12px; }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
            gap: 10px; margin: 16px 0; }
   .tile { background: var(--surface); border: 1px solid var(--border);
@@ -63,6 +65,21 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
          color: var(--ink-2); max-height: 260px; overflow-y: auto; }
   .log div { padding: 1px 0; border-bottom: 1px dotted var(--grid); }
   .log .kind { color: var(--muted); display: inline-block; width: 64px; }
+  /* Event rows: a fixed clock column keeps the types aligned however long
+     they are, which a 64px .kind could not do for "MemoryUpdated". */
+  .log .ev { display: grid; grid-template-columns: 58px 1fr auto; gap: 10px;
+             align-items: baseline; padding: 2px 0; }
+  .log .ev .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .log .ev .ty { color: var(--ink); }
+  .log .ev .woke { color: var(--accent); }
+  .log .ev .n { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  /* An event nobody was listening for is real, but it is not the signal. */
+  .log .ev.quiet .ty { color: var(--ink-2); }
+  .log .ev.quiet { opacity: .6; }
+  .filter { font-size: 11px; font-weight: 400; text-transform: none;
+            letter-spacing: 0; color: var(--muted); display: flex;
+            align-items: center; gap: 5px; cursor: pointer; }
+  .filter input { margin: 0; }
   svg text { font: 11px system-ui, sans-serif; fill: var(--ink); }
   svg .dep { fill: var(--muted); font-size: 10px; }
   .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
@@ -94,7 +111,12 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <div class="cols">
   <div>
     <section><h2>Dependency graph</h2><div id="graph" class="empty">nobody is waiting</div></section>
-    <section><h2>Event timeline</h2><div id="events" class="log"></div></section>
+    <section>
+      <h2>Event timeline
+        <label class="filter"><input type="checkbox" id="ev-woke">only ones that woke someone</label>
+      </h2>
+      <div id="events" class="log"></div>
+    </section>
   </div>
   <div>
     <section>
@@ -130,6 +152,43 @@ function fmtBytes(n) {
 }
 
 function badge(state) { return `<span class="badge ${esc(state)}">${esc(state)}</span>`; }
+
+const clock = ts => new Date(ts * 1000).toTimeString().slice(0, 8);
+
+// A busy runtime publishes the same event over and over -- one ModelFinished
+// per call, most of them waking nobody. Rendering each as its own line buries
+// the ones that actually coupled two agents, so identical neighbours collapse
+// into a single row with a count.
+let lastEvents = [];
+
+function renderEvents() {
+  const onlyWoke = $("ev-woke").checked;
+  let rows = lastEvents.slice().reverse();  // newest first
+  if (onlyWoke) rows = rows.filter(e => e.subscribers.length);
+  if (!rows.length) {
+    $("events").innerHTML = '<div class="empty">' +
+      (onlyWoke ? "nothing has woken a subscriber yet" : "no events yet") + "</div>";
+    return;
+  }
+  const groups = [];
+  rows.forEach(e => {
+    const sig = [e.type, e.source_pid, e.subscribers.join(",")].join("|");
+    const last = groups[groups.length - 1];
+    if (last && last.sig === sig) last.n++;
+    else groups.push({sig, e, n: 1});  // e is the newest of the run
+  });
+  $("events").innerHTML = groups.map(({e, n}) => {
+    const from = e.source_pid == null ? "kernel" : "pid " + e.source_pid;
+    const woke = e.subscribers.length
+      ? `<span class="woke">woke ${e.subscribers.map(p => "pid " + p).join(", ")}</span>`
+      : "no subscribers";
+    return `<div class="ev${e.subscribers.length ? "" : " quiet"}">
+      <span class="t">${clock(e.ts)}</span>
+      <span><span class="ty">${esc(e.type)}</span> from ${from} → ${woke}</span>
+      <span class="n">${n > 1 ? "×" + n : ""}</span>
+    </div>`;
+  }).join("");
+}
 
 function drawGraph(snapshot) {
   const byPid = Object.fromEntries(snapshot.processes.map(p => [p.pid, p]));
@@ -190,7 +249,7 @@ async function tick() {
     const [state, ps, events, logs] = await Promise.all([
       authed("/state"),
       authed("/ps"),
-      authed("/events?limit=15"),
+      authed("/events?limit=80"),
       authed("/logs?limit=25"),
     ]);
     $("err").style.display = "none";
@@ -243,10 +302,8 @@ async function tick() {
 
     drawGraph(state);
 
-    $("events").innerHTML = events.slice().reverse().map(e =>
-      `<div><span class="kind">${esc(e.type)}</span> from ${e.source_pid == null ? "kernel" : "pid " + e.source_pid}
-       → ${e.subscribers.length ? "woke " + e.subscribers.map(p => "pid " + p).join(", ") : "no subscribers"}</div>`
-    ).join("") || '<div class="empty">no events yet</div>';
+    lastEvents = events;
+    renderEvents();
 
     $("logs").innerHTML = logs.slice().reverse().map(l =>
       `<div><span class="kind">${esc(l.kind)}</span>${l.pid == null ? "" : "pid " + l.pid + " "}${esc(l.message)}</div>`
@@ -255,6 +312,7 @@ async function tick() {
     $("err").style.display = "inline";
   }
 }
+$("ev-woke").addEventListener("change", renderEvents);  // no wait for the next poll
 tick();
 setInterval(tick, 1000);
 </script>
