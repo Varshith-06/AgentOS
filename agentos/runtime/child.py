@@ -64,15 +64,25 @@ async def _main(endpoint: str, token: str) -> int:
     agent = agent_from_spec(header["spec"])
     proc, mailbox, ctx = _wire(header)
 
+    # A runtime that dies hard closes the channel without a goodbye: EOF on
+    # POSIX, usually a reset on Windows. Either way nobody is left to talk to,
+    # and an agent waiting on a reply that cannot come would wait forever.
     async def uplink() -> None:
         while True:
-            await emit(_syscall_line(await mailbox.get()))
+            call = await mailbox.get()
+            try:
+                await emit(_syscall_line(call))
+            except OSError:
+                os._exit(1)
 
     async def downlink() -> None:
         while True:
-            line = await reader.readline()
+            try:
+                line = await reader.readline()
+            except OSError:
+                line = b""
             if not line:
-                os._exit(1)  # the runtime died; there is nobody left to talk to
+                os._exit(1)
             proc.inbox.put_nowait(_reply_of(json.loads(line)))
 
     up = asyncio.create_task(uplink())
