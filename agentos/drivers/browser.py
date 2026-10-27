@@ -47,6 +47,7 @@ class Browser(Http):
     cacheable = ("get", "open")
 
     async def op_open(self, url: str) -> dict[str, Any]:
+        """Open a page; returns its title and visible text."""
         page = await self.op_get(url)
         if page["status"] != 200:
             raise ToolError(f"{url} answered {page['status']}")

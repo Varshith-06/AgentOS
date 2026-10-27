@@ -26,7 +26,15 @@ class SQL(ToolDriver):
             self._conn.row_factory = sqlite3.Row
         return self._conn
 
+    async def close(self) -> None:
+        """Let go of the file when the runtime stops; an in-memory database
+        would be lost, so it stays open."""
+        if self._conn is not None and self.db != ":memory:":
+            self._conn.close()
+            self._conn = None
+
     async def op_query(self, query: str, params: list | None = None) -> list[dict]:
+        """Run a read query; returns the rows."""
         rows = self._connect().execute(query, params or []).fetchall()
         return [dict(r) for r in rows]
 
@@ -34,6 +42,7 @@ class SQL(ToolDriver):
         self, statement: str, params: list | None = None,
         idempotency_key: str | None = None,
     ) -> dict:
+        """Run a statement that changes data; returns the row count."""
         conn = self._connect()
         if idempotency_key is None:
             cur = conn.execute(statement, params or [])

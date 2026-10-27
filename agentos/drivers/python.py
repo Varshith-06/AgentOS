@@ -14,6 +14,7 @@ class Python(ToolDriver):
     timeout = 30.0
 
     async def op_run(self, code: str) -> dict[str, Any]:
+        """Run Python code in a fresh interpreter; returns its output."""
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-c",

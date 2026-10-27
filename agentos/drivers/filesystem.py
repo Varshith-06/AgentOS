@@ -25,9 +25,11 @@ class Filesystem(ToolDriver):
         return p
 
     async def op_read(self, path: str) -> str:
+        """Read a text file under the sandbox root."""
         return self._resolve(path).read_text(encoding="utf-8")
 
     async def op_write(self, path: str, content: str) -> dict[str, Any]:
+        """Write a text file under the sandbox root, creating folders."""
         p = self._resolve(path)
         existed = p.exists()
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -37,7 +39,9 @@ class Filesystem(ToolDriver):
         return {"path": str(p), "bytes": len(content.encode("utf-8"))}
 
     async def op_list(self, path: str = ".") -> list[str]:
+        """List the names in a folder under the sandbox root."""
         return sorted(child.name for child in self._resolve(path).iterdir())
 
     async def op_exists(self, path: str) -> bool:
+        """Whether a path exists under the sandbox root."""
         return self._resolve(path).exists()

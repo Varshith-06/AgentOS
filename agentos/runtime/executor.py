@@ -161,6 +161,16 @@ class Context:
             raise KernelError(tool["error"])
         return tool["value"]
 
+    async def describe_tools(self, capabilities: list[str]) -> dict[str, Any]:
+        """capability -> op -> {"description", "params" (JSON Schema)}, for the
+        capabilities you hold; the rest are left out. An op the kernel will
+        refuse shows {"refused": why} instead."""
+        result = await self._syscall("describe_tools", capabilities=list(capabilities))
+        tool = result["tool"]
+        if tool["error"] is not None:
+            raise KernelError(tool["error"])
+        return tool["value"]
+
     async def request_approval(self, role: str, reason: str) -> dict[str, Any]:
         """Block until a human with `role` approves. State becomes Blocked."""
         result = await self._syscall("request_approval", role=role, reason=reason)

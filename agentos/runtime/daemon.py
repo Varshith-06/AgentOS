@@ -65,6 +65,11 @@ class Daemon:
                 json.dumps(DEFAULT_MODELS_CONFIG, indent=2) + "\n", encoding="utf-8"
             )
 
+        # Tool settings, MCP servers among them, from the state directory.
+        tools_path = self.store.dir / "tools.json"
+        if tools is None and tools_path.exists():
+            tools = json.loads(tools_path.read_text(encoding="utf-8"))
+
         self.kernel = Kernel(
             policy=policy,
             slots=slots,

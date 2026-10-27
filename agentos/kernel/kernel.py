@@ -10,6 +10,7 @@ from typing import Any
 
 from ..agents.base import Agent, agent_from_spec, spec_of
 from ..drivers import REGISTRY, ToolError
+from ..drivers.mcp import McpDriver, shadowing
 from ..runtime.subproc import ProcessExecutor
 from . import depgraph as dg
 from . import gpu
@@ -366,6 +367,11 @@ class Kernel:
         close = getattr(self.executor, "aclose", None)
         if close is not None:
             await close()
+        for driver in self._drivers.values():
+            # MCP servers are child processes; databases hold files open.
+            close = getattr(driver, "close", None)
+            if close is not None:
+                await close()
 
     async def run_until_done(self, agent: Agent) -> Any:
         pid = self.spawn(agent)
@@ -822,19 +828,66 @@ class Kernel:
         """One driver instance per capability, created on first use."""
         if capability not in self._drivers:
             cls = REGISTRY.get(capability)
+            extra: dict[str, Any] = {}
+            if cls is None and capability.startswith("mcp:") and capability in self.tools_config:
+                # An MCP server: its pins live with the runtime, so they outlast a crash.
+                cls = McpDriver
+                extra = {"server": capability[4:],
+                         "pins_path": self.store.dir / "mcp_pins.json"}
             if cls is None:
+                mounted = [c for c in self.tools_config if c.startswith("mcp:")]
                 raise ValueError(
                     f"no driver for capability {capability!r} "
-                    f"(have: {', '.join(sorted(REGISTRY))})"
+                    f"(have: {', '.join(sorted(REGISTRY) + sorted(mounted))})"
                 )
             self._drivers[capability] = cls(
                 log=lambda message: self._log(None, "driver", message),
                 publish=lambda event_type, **payload: self.publish(
                     event_type, **payload
                 ),
+                **extra,
                 **self.tools_config.get(capability, {}),
             )
         return self._drivers[capability]
+
+    def _sys_describe_tools(
+        self, proc: AgentProcess, call: Syscall, capabilities: list[str]
+    ) -> None:
+        """What each held capability's ops take, as JSON Schema. Asking costs a
+        server start for MCP, so it blocks like a tool call; it changes nothing."""
+        held = [c for c in dict.fromkeys(capabilities or [])
+                if isinstance(c, str) and self.perms.allowed(proc.name, c, proc.pid)]
+        self._yield_slot(proc, AgentState.WAITING, waiting_on="tool descriptions")
+        key = dg.key(dg.TOOL, f"{proc.pid}.{call.req_id}")
+        self.deps.add(proc.pid, call.req_id, {key})
+        self._io_calls += 1
+        task = asyncio.create_task(self._describe(key, held))
+        self._io_tasks.add(task)
+        task.add_done_callback(self._io_tasks.discard)
+
+    async def _describe(self, key: str, capabilities: list[str]) -> None:
+        catalog: dict[str, Any] = {}
+        try:
+            for cap in capabilities:
+                try:
+                    catalog[cap] = await self._driver(cap).describe()
+                except Exception as exc:
+                    catalog[cap] = {"error": f"{type(exc).__name__}: {exc}"}
+            servers = {c: {n: t for n, t in tools.items() if "refused" not in t}
+                       for c, tools in catalog.items()
+                       if isinstance(self._drivers.get(c), McpDriver)}
+            for (cap, tool), why in shadowing(servers).items():
+                if tool in self._drivers[cap].allow:
+                    continue  # the operator vouched for it
+                self._drivers[cap].refuse(tool, why)
+                catalog[cap][tool] = {"refused": why}
+            result = {"value": catalog, "error": None}
+        except Exception as exc:
+            result = {"value": None, "error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            self._io_calls -= 1
+        for w in self.deps.resolve(key, result):
+            self._wake_waiter(w)
 
     def _sys_memory(
         self,

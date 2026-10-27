@@ -18,11 +18,13 @@ class Http(ToolDriver):
     retries = 2
 
     async def op_get(self, url: str, headers: dict | None = None) -> dict[str, Any]:
+        """GET a URL; returns the status and body."""
         return await asyncio.to_thread(self._fetch, "GET", url, None, headers or {})
 
     async def op_post(
         self, url: str, json: Any = None, headers: dict | None = None
     ) -> dict[str, Any]:
+        """POST JSON to a URL; returns the status and body."""
         body = None if json is None else jsonlib.dumps(json).encode("utf-8")
         hdrs = {"Content-Type": "application/json", **(headers or {})}
         return await asyncio.to_thread(self._fetch, "POST", url, body, hdrs)

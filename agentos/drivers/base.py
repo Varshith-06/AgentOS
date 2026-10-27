@@ -3,9 +3,28 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
+import re
 import time
 from typing import Any, Callable
+
+_JSON_TYPES = {"str": "string", "int": "integer", "float": "number", "bool": "boolean",
+               "list": "array", "dict": "object"}
+
+
+def _schema_of(annotation: Any) -> dict[str, Any]:
+    """The JSON Schema type of a parameter annotation; {} when it is anything."""
+    if annotation is inspect.Parameter.empty:
+        return {}
+    text = annotation if isinstance(annotation, str) else getattr(
+        annotation, "__name__", str(annotation))
+    text = re.sub(r"\[[^\]]*\]", "", text)  # list[str] is a list; the element type is detail
+    kinds = [_JSON_TYPES[t] for t in re.findall(r"\b(str|int|float|bool|list|dict)\b", text)]
+    kinds = list(dict.fromkeys(kinds))
+    if not kinds:
+        return {}
+    return {"type": kinds[0] if len(kinds) == 1 else kinds}
 
 
 class ToolError(Exception):
@@ -55,6 +74,27 @@ class ToolDriver:
 
     def ops(self) -> list[str]:
         return sorted(m[3:] for m in dir(self) if m.startswith("op_"))
+
+    async def describe(self) -> dict[str, Any]:
+        """op -> its description and a JSON Schema of its params, read off the
+        op's signature, so a model need not guess what an op takes."""
+        out = {}
+        for op in self.ops():
+            handler = getattr(self, f"op_{op}")
+            doc = inspect.getdoc(handler) or ""
+            props: dict[str, Any] = {}
+            required = []
+            for p in inspect.signature(handler).parameters.values():
+                if p.kind in (p.VAR_KEYWORD, p.VAR_POSITIONAL) or p.name == "idempotency_key":
+                    continue  # the kernel supplies the key
+                props[p.name] = _schema_of(p.annotation)
+                if p.default is p.empty:
+                    required.append(p.name)
+            out[op] = {
+                "description": doc.split("\n\n")[0].replace("\n", " "),
+                "params": {"type": "object", "properties": props, "required": required},
+            }
+        return out
 
     async def _respect_rate_limit(self) -> None:
         if self.min_interval <= 0:

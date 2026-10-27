@@ -13,6 +13,7 @@ class Shell(ToolDriver):
     timeout = 30.0
 
     async def op_run(self, command: str, cwd: str | None = None) -> dict[str, Any]:
+        """Run a shell command; returns its exit code and output."""
         proc = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
