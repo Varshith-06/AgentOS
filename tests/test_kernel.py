@@ -226,7 +226,7 @@ class KernelTest(unittest.IsolatedAsyncioTestCase):
                 "pid", "name", "spawn", "sleep", "wait", "log",
                 "publish", "subscribe", "wait_event", "wait_all",
                 "request_approval",
-                "request_tool",
+                "request_tool", "describe_tools",
                 "memory", "request_model",
                 "checkpoint",
             },

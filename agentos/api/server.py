@@ -35,11 +35,14 @@ def _task_request(daemon, body: dict) -> tuple[dict, list[str]]:
     tools = body.get("tools", [])
     if not isinstance(tools, list) or any(not isinstance(t, str) for t in tools):
         raise BadRequest('"tools" must be a list of capability names')
-    unknown = [t for t in tools if t not in REGISTRY]
+    # Built-in drivers, plus the MCP servers this daemon mounts.
+    known = set(REGISTRY) | {
+        c for c in daemon.kernel.tools_config if c.startswith("mcp:")}
+    unknown = [t for t in tools if t not in known]
     if unknown:
         raise BadRequest(
             f"unknown capabilit{'y' if len(unknown) == 1 else 'ies'}: "
-            f"{', '.join(unknown)}. Known: {', '.join(sorted(REGISTRY))}"
+            f"{', '.join(unknown)}. Known: {', '.join(sorted(known))}"
         )
     allowed = daemon.task_tools
     refused = [t for t in tools if t not in allowed]

@@ -1,5 +1,5 @@
 """`agent ps / top / wait / logs / events / approvals / tools / kill / pause /
-resume / approve / grant / revoke`. A client, not part of the runtime.
+resume / approve / grant / revoke / mcp`. A client, not part of the runtime.
 """
 
 from __future__ import annotations
@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import importlib
+import json
 import sys
 import time
 from pathlib import Path
@@ -240,6 +241,19 @@ def cmd_tools(args, store: Store) -> int:
     for name, cls in sorted(REGISTRY.items()):
         ops = ", ".join(sorted(m[3:] for m in dir(cls) if m.startswith("op_")))
         print(f"{name:<12}  {ops}")
+    tools_path = Path(args.dir) / "tools.json"
+    servers = {}
+    if tools_path.exists():
+        servers = {c: v for c, v in json.loads(tools_path.read_text(encoding="utf-8")).items()
+                   if c.startswith("mcp:")}
+    if servers:
+        pins_path = Path(args.dir) / "mcp_pins.json"
+        pins = json.loads(pins_path.read_text(encoding="utf-8")) if pins_path.exists() else {}
+        print("\nMCP SERVER    COMMAND / PINNED TOOLS")
+        for cap, conf in sorted(servers.items()):
+            pinned = sorted(pins.get(cap[4:], {}))
+            print(f"{cap:<12}  {' '.join(conf.get('command', []))}")
+            print(f"{'':<12}  {', '.join(pinned) if pinned else 'not pinned yet (pins on first use)'}")
     if perms.grants:
         print("\nAGENT         CAPABILITIES")
         for agent, caps in sorted(perms.grants.items()):
@@ -325,6 +339,14 @@ def cmd_recover(args, store: Store) -> int:
     return 0
 
 
+def cmd_mcp(args, store: Store) -> int:
+    """Serve this runtime to an MCP client over stdio (Claude Code, say)."""
+    from .api.mcp import serve
+
+    store.close()  # the bridge talks to the daemon, never to the store
+    return serve(args.dir)
+
+
 def cmd_run(args, store: Store) -> int:
     """Run a module that exposes `main(kernel)` or an `App` agent."""
     path = Path(args.target)
@@ -394,7 +416,12 @@ def build_parser() -> argparse.ArgumentParser:
         c.add_argument("agent", help="agent name, or * for every agent")
         c.add_argument("capability", help="e.g. sql, filesystem, or *")
 
-    sub.add_parser("tools", help="list tool drivers and the permission matrix")
+    sub.add_parser("tools", help="list tool drivers, MCP servers, and the permission matrix")
+
+    sub.add_parser(
+        "mcp", help="serve this runtime as an MCP server on stdio, e.g. "
+                    "claude mcp add agentos -- agent mcp --dir /path/.agentos",
+    )
 
     run = sub.add_parser("run", help="run an example or app module")
     run.add_argument("target")
@@ -498,6 +525,7 @@ def main(argv: list[str] | None = None) -> int:
         "recover": cmd_recover,
         "daemon": cmd_daemon,
         "gateway": cmd_gateway,
+        "mcp": cmd_mcp,
     }
     try:
         return handlers[args.command](args, store)

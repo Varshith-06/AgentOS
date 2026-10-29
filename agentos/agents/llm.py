@@ -10,6 +10,7 @@ from .base import Agent
 MAX_STEPS = 12
 MAX_CHILDREN = 8
 TRANSCRIPT_CHARS = 6000
+CATALOG_CHARS = 6000  # the tool catalog's share of the system prompt
 
 SYSTEM = """You are {role}, one agent in a multi-agent runtime.
 
@@ -21,7 +22,7 @@ Reply with exactly one JSON object and nothing else. Options:
 
 Rules:
 - You may only use these tools: {tools}
-{events}- Do not explain yourself outside the JSON.
+{catalog}{events}- Do not explain yourself outside the JSON.
 - Prefer finishing over spawning when the goal is within your reach."""
 
 TOOL_OPTION = (
@@ -68,7 +69,8 @@ class ActionError(Exception):
 
 class LLMAgent(Agent):
     """params: role, goal, tools, model, may_spawn, max_steps, max_children,
-    publishes, subscribes, retries, context.
+    publishes, subscribes, retries, context, schemas (default True: show the
+    model each op's params; False: capability names only).
     """
 
     @property
@@ -98,6 +100,9 @@ class LLMAgent(Agent):
             options.append(SPAWN_OPTIONS)
         options.append(MEMORY_OPTIONS)
         options.append(HUMAN_OPTION)
+        catalog = ""
+        if tools and self.params.get("schemas", True):
+            catalog = await self._catalog(ctx, tools)
         notes = ""
         if may_spawn:
             notes += WIRING_NOTE
@@ -108,6 +113,7 @@ class LLMAgent(Agent):
             role=self.params.get("role", "an agent"),
             goal=self.params.get("goal", "(no goal given)"),
             tools=", ".join(tools) or "none",
+            catalog=catalog,
             events=notes,
             options="\n".join(options),
         )
@@ -138,7 +144,7 @@ class LLMAgent(Agent):
                     "transcript": transcript[-3:],
                 }
             try:
-                action = self._parse(reply["text"])
+                action = _as_tool_call(self._parse(reply["text"]), tools)
             except ActionError as exc:
                 transcript.append(f"Your last reply was rejected: {exc}. Reply with JSON.")
                 continue
@@ -197,6 +203,33 @@ class LLMAgent(Agent):
             return f"{capability}.{action.get('op')} failed: {exc}"
         return f"{capability}.{action.get('op')} returned: {_clip(value)}"
 
+    @staticmethod
+    async def _catalog(ctx, tools: list[str]) -> str:
+        """What each op takes, so the model need not guess op names or params.
+        Without it the prompt names capabilities only."""
+        try:
+            described = await ctx.describe_tools(tools)
+        except Exception:
+            return ""
+        lines = []
+        for cap, ops in described.items():
+            if not isinstance(ops, dict) or "error" in ops:
+                continue
+            for op, info in ops.items():
+                if "refused" in info:
+                    lines.append(f"  - {cap}.{op}: withheld by the runtime ({info['refused']})")
+                    continue
+                desc = " ".join(str(info.get("description") or "").split())[:200]
+                lines.append(f"  - {cap}.{op} params {_signature(info.get('params'))}"
+                             + (f": {desc}" if desc else ""))
+        if not lines:
+            return ""
+        text = "\n".join(lines)
+        if len(text) > CATALOG_CHARS:
+            text = text[:CATALOG_CHARS] + "\n  - … (more ops not shown)"
+        return ("- Each tool's ops, and the params they take (* = required):\n"
+                + text + "\n")
+
     async def _do_spawn(
         self, ctx, action: dict, tools: list[str], children: list[int], cap: int
     ) -> str:
@@ -221,6 +254,7 @@ class LLMAgent(Agent):
             max_steps=int(self.params.get("child_max_steps", MAX_STEPS)),
             publishes=publishes,
             subscribes=subscribes,
+            schemas=self.params.get("schemas", True),
         )
         priority = action.get("priority")
         if priority in ("High", "Normal", "Low"):
@@ -372,6 +406,40 @@ def _describe(action: dict) -> str:
         return f"{kind}: {detail()}" if detail else str(kind)
     except Exception:
         return str(kind)
+
+
+def _as_tool_call(action: dict, tools: list[str]) -> dict:
+    """Models also write a tool call as {"action": "<capability>.<op>", ...}.
+    Read that as the call it plainly is, for a capability the agent holds."""
+    kind = action.get("action")
+    if not isinstance(kind, str) or "." not in kind:
+        return action
+    for cap in sorted(tools, key=len, reverse=True):
+        if kind.startswith(cap + ".") and len(kind) > len(cap) + 1:
+            rest = {k: v for k, v in action.items() if k != "action"}
+            return {"action": "tool", "capability": cap, "op": kind[len(cap) + 1:],
+                    "params": rest.pop("params", rest)}
+    return action
+
+
+def _signature(schema: Any) -> str:
+    """A JSON Schema of params, compressed to one line a model can follow."""
+    if not isinstance(schema, dict):
+        return "{}"
+    props = schema.get("properties") or {}
+    required = set(schema.get("required") or [])
+    parts = []
+    for name, spec in props.items():
+        spec = spec if isinstance(spec, dict) else {}
+        kind = spec.get("type", "any")
+        if isinstance(kind, list):
+            kind = "|".join(str(k) for k in kind if k != "null") or "any"
+        if "enum" in spec:
+            kind = "|".join(json.dumps(v) for v in spec["enum"][:8])
+        elif kind == "array" and isinstance(spec.get("items"), dict):
+            kind = f"{spec['items'].get('type', 'any')}[]"
+        parts.append(f'"{name}"{"*" if name in required else ""}: {kind}')
+    return "{" + ", ".join(parts) + "}"
 
 
 def _clip(value: Any, limit: int = 800) -> str:
