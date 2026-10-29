@@ -184,8 +184,8 @@ other_agent.run()     # raises DirectInvocationError
         "<b>Crash recovery.</b> Everything an agent does crosses the boundary "
         "as JSON, so the kernel can write down every reply. After a crash, the "
         "agent is re-run and the recorded replies are handed back instantly "
-        "instead of re-executing. The tool does not fire twice; the model is "
-        "not billed twice. (§15)",
+        "instead of re-executing. A completed tool call does not fire twice; a "
+        "completed model call is not billed twice. (§15)",
         "<b>Real process isolation.</b> Anything that survives conversion to "
         "JSON survives a network socket. So agents can be moved into separate "
         "operating-system processes without a single line of agent code "
@@ -542,6 +542,7 @@ await ctx.spawn(Attacker(...), grant=["shell"])        # refused by the kernel
             ["<font face='Courier'>sql</font>", "query, execute", "SQLite. <font face='Courier'>query</font> is a read; <font face='Courier'>execute</font> writes."],
             ["<font face='Courier'>http</font>", "get, post", "Plain HTTP requests."],
             ["<font face='Courier'>browser</font>", "open, get", "Fetches a page and extracts readable text."],
+            ["<font face='Courier'>mcp:&lt;name&gt;</font>", "whatever the server lists", "Any MCP server, over stdio. Each tool's definition is pinned by hash when first listed; one that changes, or names another server's tool, is withheld."],
         ],
         [0.20, 0.28, 0.52])),
     ("h3", "The shared discipline"),
@@ -680,7 +681,8 @@ reply["text"], reply["model"], reply["cost"]
      "<b>Every completed syscall is a checkpoint.</b> There is no separate "
      "checkpointing step to schedule or tune, and no window between checkpoints "
      "where work is at risk. A hard kill costs the work since the last "
-     "<i>completed syscall</i> and nothing more."),
+     "<i>completed syscall</i>: at most the one call still in flight, which "
+     "the next section deals with."),
     ("code", """
 $ python -m agentos.cli run examples/crash.py   # 3 workers x 5 slow steps
 $ kill -9 <os_pid>                              # mid-run, no cleanup, no mercy
@@ -701,16 +703,50 @@ $ python -m agentos.cli recover
         "outside the boundary — the mismatch is detected, logged, and the agent "
         "simply goes live from that point.",
     ]),
-    ("h3", "The honest limit"),
+    ("h3", "The call in flight"),
     ("body",
-     "There is a window: a tool has run but its reply has not yet been "
-     "journaled. A crash in that instant means the tool runs again on replay. "
-     "The window is a local database write — microseconds — rather than a "
-     "network round trip, which is why repeated measurements show zero repeats "
-     "(§23). But the correct claim is <i>&ldquo;the window is very "
-     "narrow&rdquo;</i>, not <i>&ldquo;there is no window&rdquo;</i>. Systems "
-     "that promise exactly-once across a network are usually promising more "
-     "than they can deliver."),
+     "There is one window replay cannot cover: a call that has been sent but "
+     "whose reply has not been journaled. A model call takes seconds, so a "
+     "crash usually lands inside one, and recovery cannot tell whether it "
+     "happened. Re-issuing it risks paying twice; skipping it risks losing it."),
+    ("body",
+     "So the kernel writes an <b>intent</b> before dispatch, holding a fresh "
+     "idempotency key, and settles it in the same transaction as the reply. "
+     "After a crash, an unsettled intent marks the one call whose outcome is "
+     "unknown. If the target deduplicates by key — the "
+     "<font face='Courier'>sql</font> driver commits the statement and the key "
+     "together — the call is re-issued under its original key and applied at "
+     "most once."),
+    ("body",
+     "Model providers do not deduplicate (§24). But a model call changes "
+     "nothing at the provider except the bill: its only product is the reply. "
+     "If the reply outlives the crash, the call need not be made again at all. "
+     "AgentOS keeps it in one of two places, depending on what died:"),
+    ("bullets", [
+        "<b>The agent died, the kernel lived.</b> The kernel still holds the "
+        "agent's call, so it lets the call finish, journals the reply under the "
+        "dead agent's intent, and the restarted agent's replay receives it "
+        "(<font face='Courier'>Kernel(adopt=True)</font>, the default).",
+        "<b>The whole runtime died.</b> With "
+        "<font face='Courier'>Kernel(courier=True)</font> each call is carried "
+        "by a <i>courier</i>: a short-lived process started outside the "
+        "runtime's process tree, which makes the request and writes the reply "
+        "to <font face='Courier'>couriers.db</font>. Recovery uses a finished "
+        "courier's reply, waits for one still at work, and sends a call whose "
+        "courier never started — that one was never sent.",
+    ]),
+    ("body",
+     "Only a courier that died mid-call leaves a call nobody can account for, "
+     "which is what a machine or container crash does. That call is re-issued "
+     "with an <font face='Courier'>OutcomeAmbiguous</font> event on the "
+     "record, or refused under "
+     "<font face='Courier'>on_ambiguous=&quot;fail&quot;</font>, so a "
+     "duplicate is never silent."),
+    ("note",
+     "<b>The honest claim.</b> Without these mechanisms AgentOS re-billed a "
+     "call in 73% of random crashes, like every other framework measured. With "
+     "them, 0 of 279 agent and runtime crashes re-billed a call (§24). A host "
+     "crash is still at-least-once; what changes is that it is flagged."),
 
     ("h2", "16. The store"),
     ("body",
@@ -1055,10 +1091,13 @@ $ curl -H "Authorization: Bearer $TOKEN" host:7070/task/1
     ("h2", "23. What has been measured"),
     ("h3", "Crash recovery"),
     ("body",
-     "Three agents run an eighteen-step workload. The runtime is killed with no "
-     "cleanup roughly halfway through, then recovered. Each step increments a "
-     "counter in durable memory, so a step that ran twice is arithmetically "
-     "visible — the benchmark does not have to trust any log."),
+     "Three agents run an eighteen-step workload. Roughly halfway through, the "
+     "runtime's store is swapped out from under it, so nothing it does after "
+     "that point survives, and a fresh kernel recovers from the real store. "
+     "Each step increments a counter in durable memory, so a step that ran "
+     "twice is arithmetically visible — the benchmark does not have to trust "
+     "any log. This measures replay of <i>completed</i> steps; what a real "
+     "kill does to the call in flight is §24's subject."),
     ("table", (
         ["Metric", "Result"],
         [
@@ -1124,29 +1163,46 @@ control, with shell granted: shell.run -> detector works
 
     ("h2", "24. Compared with other frameworks"),
     ("body",
-     "Identical workloads were run against LangGraph, CrewAI, AutoGen, and "
-     "Temporal. Executions are counted in a shared tally table — no framework "
-     "grades its own homework — and the crash is a real operating-system kill "
-     "delivered once every framework has completed the same amount of work."),
+     "<font face='Courier'>benchmarks/crashstudy/</font> runs one six-call "
+     "workload under ten configurations of seven frameworks, each written and "
+     "resumed the way its own documentation shows. The whole process tree is "
+     "killed at a uniformly random moment, and the calls are counted by a "
+     "separate provider process that charges on receipt — no framework grades "
+     "its own homework. The same run was repeated against three hosted models."),
     ("h3", "Billable calls repeated after a hard kill"),
     ("table", (
-        ["Framework", "Repeated", "Why"],
+        ["Configuration (30 crashes, no keys)", "Crashes re-billed", "Calls per crash"],
         [
-            ["<b>AgentOS</b>", "<b>0</b>", "Journals each syscall reply as it completes"],
-            ["LangGraph (one node per call)", "1", "The node in flight has no checkpoint"],
-            ["Temporal", "1", "At-least-once activity semantics, as designed"],
-            ["LangGraph (calls in one node)", "3", "A crash re-runs the whole node"],
-            ["CrewAI Flows", "3", "State is restored, then the flow replays from the start"],
-            ["AutoGen", "3", "State is restored; the handler starts over"],
+            ["AgentOS, before adoption and couriers", "73%", "0.73"],
+            ["LangGraph, one node per call", "67%", "0.67"],
+            ["Temporal, activity per call", "80%", "0.80"],
+            ["DBOS, step per call", "70%", "0.70"],
+            ["CrewAI, guarded or checkpointed steps", "77–80%", "0.77–0.80"],
+            ["Prefect, cached tasks", "73%", "0.73"],
+            ["AutoGen, save_state per call", "70%", "0.70"],
+            ["LangGraph, loop in one node", "100%", "<b>3.03</b>"],
+            ["CrewAI Flow with @persist", "100%", "<b>2.77</b>"],
         ],
-        [0.34, 0.14, 0.52])),
+        [0.52, 0.24, 0.24])),
     ("body",
-     "The axis is <b>checkpoint granularity</b>. Others persist at node or "
-     "method boundaries, so a crash inside one re-runs all of it. AgentOS "
-     "journals at the syscall, so even the call in flight at the moment of the "
-     "kill returns its recorded reply. LangGraph can approach this — if you "
-     "restructure your program into one node per side effect. AgentOS gives it "
-     "to code written the obvious way."),
+     "Two things set the bill. <b>Granularity</b> decides how much a crash "
+     "repeats: a recovery unit that spans the run repeats everything it had "
+     "done. And with one unit per call, nobody escapes the <b>call in "
+     "flight</b>: it is re-billed from the moment the provider commits to it "
+     "until its reply is recorded, which is most of the time for a real agent. "
+     "Idempotency keys removed every duplicate against a provider built to "
+     "honour them — but Groq, OpenRouter and Google all ignored the key, and "
+     "on real models keyed configurations re-billed about as often as unkeyed "
+     "ones."),
+    ("body",
+     "Keeping the reply alive (§15) is what closed the gap. Against a provider "
+     "that ignores keys, agent and runtime crashes that re-billed a call went "
+     "from 217 of 282 to <b>0 of 279</b>, on Windows, on Linux and on a hosted "
+     "model. Couriers cost one process hand-off per call: about 80ms on "
+     "Windows, 18ms on Linux. Other frameworks get the same effect from "
+     "<font face='Courier'>agent gateway</font>, which finishes a call whose "
+     "client disconnected and answers the resumed framework's repeat of its "
+     "key: 263 of 350 crashes re-billed without it, none with it."),
     ("h3", "Overhead and latency: against Temporal only"),
     ("body",
      "The recovery table above is a fair fight, because checkpoint "
@@ -1161,13 +1217,13 @@ control, with shell granted: shell.run -> detector works
         [
             ["Per durable step", "<b>10.6ms</b> — a socket into another address space", "68.7ms — gRPC to a server"],
             ["Approve &rarr; finished", "<b>1.9ms</b> (worst 2.5ms)", "7.3ms (worst 8.9ms)"],
-            ["Repeated after a kill", "<b>0</b>", "1 (at-least-once, as documented)"],
+            ["Call in flight at a kill", "<b>billed once</b> with couriers (0 of 279 crashes)", "re-billed in 80% of crashes (at-least-once, as documented)"],
             ["What it needs", "one process, zero dependencies", "a server cluster"],
             ["Durability boundary", "this machine", "many machines"],
         ],
         [0.26, 0.40, 0.34])),
     ("note",
-     "<b>Read this fairly.</b> Temporal's single repeat is its documented "
+     "<b>Read this fairly.</b> Temporal's repeat is its documented "
      "at-least-once contract working exactly as intended, and its overhead buys "
      "durability that survives the whole machine, coordinated across many hosts "
      "— something AgentOS does not attempt. CrewAI and AutoGen never advertised "
@@ -1201,6 +1257,8 @@ control, with shell granted: shell.run -> detector works
             ["<font face='Courier'>agent run &lt;file&gt;</font>", "Run an example or application module"],
             ["<font face='Courier'>agent recover</font>", "Resume the previous run's agents from their journals"],
             ["<font face='Courier'>agent daemon</font>", "Start the shared runtime and its HTTP API"],
+            ["<font face='Courier'>agent gateway --upstream &lt;url&gt;</font>", "A deduplicating model gateway: any provider honours idempotency keys"],
+            ["<font face='Courier'>agent mcp</font>", "Serve this runtime as an MCP server on stdio"],
         ],
         [0.38, 0.62])),
     ("body",
@@ -1233,9 +1291,14 @@ control, with shell granted: shell.run -> detector works
             ["<font face='Courier'>runtime/executor.py</font>", "The Context object agents are handed", "§4, §17"],
             ["<font face='Courier'>runtime/subproc.py</font>, <font face='Courier'>child.py</font>", "Agents as OS processes; the syscall channel", "§17, §18"],
             ["<font face='Courier'>runtime/daemon.py</font>", "The long-running server", "§19"],
+            ["<font face='Courier'>runtime/courier.py</font>", "One process per call, outside the runtime's crash", "§15"],
+            ["<font face='Courier'>drivers/mcp.py</font>", "Any MCP server as a capability; pins and quarantine", "§12"],
+            ["<font face='Courier'>api/gateway.py</font>", "The deduplicating model gateway", "§24"],
+            ["<font face='Courier'>api/mcp.py</font>", "This runtime as an MCP server", "§25"],
             ["<font face='Courier'>api/server.py</font>", "HTTP routes, authentication, task validation", "§19, §20"],
             ["<font face='Courier'>agents/llm.py</font>", "The agent whose parameters are its identity", "§21"],
-            ["<font face='Courier'>benchmarks/</font>", "bench, schedulers, compare, attenuate", "§23, §24"],
+            ["<font face='Courier'>benchmarks/</font>", "bench, schedulers, attenuate, schemas", "§23"],
+            ["<font face='Courier'>benchmarks/crashstudy/</font>", "The crash study, its results, and reproduce.sh", "§24"],
         ],
         [0.32, 0.50, 0.18])),
 
@@ -1268,9 +1331,11 @@ control, with shell granted: shell.run -> detector works
      "Start the runtime again with <font face='Courier'>agent recover</font>. "
      "Each agent is re-created and re-run, but every syscall it already "
      "completed returns its recorded reply instantly instead of executing — so "
-     "files are not rewritten, models are not re-billed, emails are not resent. "
-     "The agent fast-forwards to where it died and continues. Measured: zero "
-     "steps re-executed. (§15, §23)"),
+     "completed work is not redone, re-billed or resent. The one call in "
+     "flight when the machine died is the exception: its courier died with "
+     "it, so it is re-issued and flagged as possibly a repeat. If only the "
+     "runtime or an agent died, that call's reply survived and is used "
+     "instead. (§15, §24)"),
 
     ("h3", "Can an agent escape its permissions?"),
     ("body",
