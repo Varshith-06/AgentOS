@@ -29,6 +29,10 @@ class ToolDriver:
     # Ops that take an `idempotency_key` and apply its effect at most once per
     # key. Only these can be re-issued after a crash without risking a repeat.
     idempotent: tuple[str, ...] = ()
+    # Ops a courier can make in a process of its own (op -> 'module:function',
+    # called with the op's params): a kernel with couriers on sends them that
+    # way, so a runtime crash mid-call loses neither the call nor its reply.
+    courier: dict[str, str] = {}
 
     def __init__(
         self,
@@ -88,8 +92,11 @@ class ToolDriver:
         return True, value
 
     async def execute(
-        self, op: str, params: dict[str, Any], idempotency_key: str | None = None
+        self, op: str, params: dict[str, Any], idempotency_key: str | None = None,
+        via: Callable[[dict[str, Any]], Any] | None = None,
     ) -> Any:
+        """Run one op. `via`, if given, makes the call instead of the op's own
+        coroutine (a courier); timeouts, retries and the cache apply as ever."""
         handler = getattr(self, f"op_{op}", None)
         if handler is None:
             raise ToolError(
@@ -107,7 +114,9 @@ class ToolDriver:
             attempt += 1
             await self._respect_rate_limit()
             try:
-                result = await asyncio.wait_for(handler(**params), self.timeout)
+                result = await asyncio.wait_for(
+                    via(params) if via is not None else handler(**params), self.timeout
+                )
                 if key is not None:
                     self._cache[key] = (time.monotonic() + self.cache_ttl, result)
                 return result

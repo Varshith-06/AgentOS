@@ -3,7 +3,7 @@
 [![CI](https://github.com/Varshith-06/AgentOS/actions/workflows/ci.yml/badge.svg)](https://github.com/Varshith-06/AgentOS/actions/workflows/ci.yml)
 ![Python 3.11 – 3.14](https://img.shields.io/badge/python-3.11%20%E2%80%93%203.14-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 213 passing](https://img.shields.io/badge/tests-213%20passing-brightgreen)
+![Tests: 238 passing](https://img.shields.io/badge/tests-238%20passing-brightgreen)
 ![Model: gpt--oss--120b](https://img.shields.io/badge/default%20model-gpt--oss--120b-orange)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -67,7 +67,7 @@ config at a real one and the same code runs live.
 | **Capability ceiling** | **0 escapes** in 10 adversarial attacks — a real model actively trying |
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
 | **Auth** | bearer token on every route; refuses to bind non-loopback without one |
-| **Test suite** | 213 tests, zero dependencies, fully offline |
+| **Test suite** | 238 tests, zero dependencies, fully offline |
 | **Verified** | the correctness claims above are re-checked on every push — Linux, macOS, Windows × Python 3.11–3.14. Timings are reported, never asserted |
 
 ---
@@ -408,7 +408,7 @@ model, at each framework's measured call cycle, is in
 **With a stable idempotency key the provider honours: zero, in all ten, in 300
 crashes.**
 
-Three things to take from it:
+Four things to take from it:
 
 - **Nobody escapes the call in flight, AgentOS included.** A kill between the
   provider applying a call and the framework recording the reply re-bills that
@@ -422,11 +422,11 @@ Three things to take from it:
 - **Exactly-once lives in the provider contract.** Keys took every framework to
   zero. For model calls, though, there is no contract to honour: the official
   `openai` and `anthropic` Python SDKs generate an idempotency key and never
-  send it, and neither API documents deduplication. Against a real inference
-  API (Groq), all 53 requests killed mid-response were still admitted, a
-  repeated `Idempotency-Key` was ignored in 20 of 20 pairs, and keyed LangGraph
-  and DBOS re-billed a call in 16 of 21 and 11 of 21 crashes, no better than
-  without a key.
+  send it, and neither API documents deduplication. Three real inference
+  providers (Groq, OpenRouter, Google) ignored a repeated `Idempotency-Key` in
+  every pair, and still admitted requests whose client was killed mid-response.
+  Rerun on three Groq models, keyed per-call configurations re-billed a call in
+  139 of 242 crashes, against 151 of 247 without a key.
 - **Most duplicates are silent.** Only Temporal (an activity's attempt number)
   and AgentOS (an `OutcomeAmbiguous` event) tell the application that a
   re-executed call may be a repeat. Both flagged every duplicate; Temporal also
@@ -440,6 +440,41 @@ intent is re-issued under its *original* key if the driver deduplicates (the
 for real). Otherwise it is re-issued with an `OutcomeAmbiguous` event on the
 record, or refused under `on_ambiguous="fail"`, so the agent can check first.
 A duplicate is never silent.
+
+### When the provider won't help
+
+A model call's only side effect is the bill. What a crash loses is not the
+call but its reply, because the process waiting for it dies. So a reply kept
+somewhere the crash cannot reach is as good as exactly-once, with no key and
+nothing asked of the provider. AgentOS keeps it in two places:
+
+- **The agent dies, the kernel lives.** An agent is a process of its own, and
+  the kernel makes its calls. When an agent process dies mid-call, the kernel
+  lets the call finish, journals the reply, and hands it to the restarted
+  agent's replay instead of making the call again (`Kernel(adopt=True)`, the
+  default; `adopt=False` re-issues and flags, as before).
+- **The runtime dies.** With `Kernel(courier=True)`, each call is carried by a
+  courier: one process per call, outside the runtime's process tree, which
+  writes the reply to `couriers.db` beside the journal. A recovering runtime
+  takes a finished courier's reply, waits for one still at work, and makes the
+  call fresh, unflagged, if its courier never started. Only a courier that died
+  mid-call leaves a call nobody can account for, and that one is flagged as
+  before. Tools opt in per op (`ToolDriver.courier`); model calls over HTTP
+  always can. A courier outlives the runtime, not the machine: a container or
+  host restart still ends in a flagged repeat.
+
+Under the same harness, with a provider that ignores keys, the agent and
+runtime crashes that re-billed a call went from 217 of 282 to 0 of 279, on
+Windows, on Linux, and on a Groq model. Couriers kept inside the runtime's
+process tree, as on a host crash, re-billed as before, and every unkeyed repeat
+was flagged. A courier costs a process hand-off per call: about 80ms on
+Windows, 18ms on Linux.
+
+Other frameworks get the same effect from `agent gateway --upstream <provider
+URL>`: a deduplicating gateway in its own process that finishes a call whose
+client disconnected and keeps the reply for the resume. It needs the stable
+call key each framework can supply; with it, the other nine configurations went
+from 263 of 350 crashes re-billed to none.
 
 ---
 

@@ -200,9 +200,9 @@ class InFlightTest(unittest.IsolatedAsyncioTestCase):
         await asyncio.wait_for(k2.run(), timeout=LIMIT)
         self.assertEqual(self.charges(), 1)
 
-    async def _agent_dies_mid_call(self, api):
+    async def _agent_dies_mid_call(self, api, **kw):
         pidfile = Path(self.tmp.name) / "agent.pid"
-        k = self.kernel(api, latency=1.0)
+        k = self.kernel(api, latency=1.0, **kw)
         pid = k.spawn(Doomed(api=api, pidfile=str(pidfile)))
         run = asyncio.create_task(k.run())
         await self._until(lambda: self.charges() == 1)
@@ -211,17 +211,30 @@ class InFlightTest(unittest.IsolatedAsyncioTestCase):
         return k, pid
 
     async def test_a_restarted_agent_re_issues_its_call_under_the_same_key(self):
-        k, pid = await self._agent_dies_mid_call("paid")
+        k, pid = await self._agent_dies_mid_call("paid", adopt=False)
         self.assertEqual(k.table.get(pid).result, 7)
         self.assertEqual(k.table.get(pid).retries, 1, "it really was restarted")
         self.assertEqual(self.charges(), 1)
 
-    async def test_a_restarted_agent_flags_an_unkeyed_repeat(self):
-        k, pid = await self._agent_dies_mid_call("unkeyed")
+    async def test_without_adoption_a_restarted_agent_flags_an_unkeyed_repeat(self):
+        k, pid = await self._agent_dies_mid_call("unkeyed", adopt=False)
         self.assertEqual(k.table.get(pid).result, 7)
         self.assertEqual(self.charges(), 2)
         self.assertEqual(
             len([e for e in k.bus.history if e.type == "OutcomeAmbiguous"]), 1)
+
+    async def test_a_restarted_agent_is_given_its_call_in_flight_not_a_second_one(self):
+        k, pid = await self._agent_dies_mid_call("unkeyed")
+        self.assertEqual(k.table.get(pid).result, 7)
+        self.assertEqual(k.table.get(pid).retries, 1, "it really was restarted")
+        self.assertEqual(self.charges(), 1, "no key, and still made once")
+        self.assertEqual(
+            [e for e in k.bus.history if e.type == "OutcomeAmbiguous"], [],
+            "nothing is ambiguous: the kernel saw the call through",
+        )
+        self.assertEqual(self.store.open_intents(), {})
+        said = [r["message"] for r in self.store.logs(pid=pid)]
+        self.assertTrue(any("is still in flight" in m for m in said), said)
 
     async def test_a_call_never_asked_for_again_is_settled_and_said(self):
         flag = str(Path(self.tmp.name) / "flag")

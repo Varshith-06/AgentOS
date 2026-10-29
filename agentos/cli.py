@@ -287,6 +287,16 @@ def cmd_daemon(args, store: Store) -> int:
     return 0
 
 
+def cmd_gateway(args, store: Store) -> int:
+    """Put a deduplicating gateway between agents and a model provider."""
+    from .api.gateway import serve
+
+    return serve(
+        args.upstream, args.db or store.dir / "gateway.db", host=args.host,
+        port=args.port, ttl_hours=args.ttl, on_drift=args.on_drift, log=args.log,
+    )
+
+
 def cmd_recover(args, store: Store) -> int:
     """Resume agents from their journals after a crash (Phase 6, p.7-8)."""
     info = store.runtime_info()
@@ -438,6 +448,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="resume the previous run's agents from their journals first",
     )
 
+    gateway = sub.add_parser(
+        "gateway",
+        help="make a model provider honour idempotency keys, so a crashed "
+             "agent's resume does not pay for its calls twice",
+    )
+    gateway.add_argument(
+        "--upstream", required=True,
+        help="the provider's base URL, e.g. https://api.groq.com/openai/v1",
+    )
+    gateway.add_argument("--host", default="127.0.0.1")
+    gateway.add_argument("--port", type=int, default=8787)
+    gateway.add_argument(
+        "--db", default=None,
+        help="where replies are kept (default: gateway.db in the runtime directory)",
+    )
+    gateway.add_argument(
+        "--ttl", type=float, default=24.0, metavar="HOURS",
+        help="how long a key's reply is kept (default 24)",
+    )
+    gateway.add_argument(
+        "--on-drift", choices=["replay", "reject"], default="replay",
+        help="a key reused with a different body: answer it from the record "
+             "and flag it (default), or refuse it with a 409",
+    )
+    gateway.add_argument("--log", default=None, help="append a JSON line per request")
+
     return p
 
 
@@ -461,6 +497,7 @@ def main(argv: list[str] | None = None) -> int:
         "tools": cmd_tools,
         "recover": cmd_recover,
         "daemon": cmd_daemon,
+        "gateway": cmd_gateway,
     }
     try:
         return handlers[args.command](args, store)

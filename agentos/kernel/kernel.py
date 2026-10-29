@@ -10,6 +10,7 @@ from typing import Any
 
 from ..agents.base import Agent, agent_from_spec, spec_of
 from ..drivers import REGISTRY, ToolError
+from ..runtime.courier import CourierLost, Couriers
 from ..runtime.subproc import ProcessExecutor
 from . import depgraph as dg
 from . import gpu
@@ -57,6 +58,8 @@ class Kernel:
         retries: int = 0,
         daemon: bool = False,
         on_ambiguous: str = "retry",
+        adopt: bool = True,
+        courier: bool = False,
     ) -> None:
         if on_ambiguous not in AMBIGUITY_POLICIES:
             raise ValueError(
@@ -101,6 +104,20 @@ class Kernel:
         self.table.on_transition = self._publish_row
         self._shutdown = False
         self._timers = 0  # outstanding timer dependencies
+
+        # A call whose agent died while the kernel lived is still the kernel's:
+        # it runs to the end, and the restarted agent is given its reply instead
+        # of making it again. False restores re-issue-and-flag.
+        self.adopt = adopt
+        self._inflight: dict[int, dict[str, Any]] = {}
+        # Couriers carry calls in processes of their own, so a reply outlives
+        # even the runtime (agentos.runtime.courier).
+        self.couriers = (
+            Couriers(self.store.dir, log=lambda message: self._log(None, "courier", message))
+            if courier else None
+        )
+        if self.couriers is not None and not recover:
+            self.couriers.reset()
 
         self._recovered = recover
         if recover:
@@ -366,6 +383,8 @@ class Kernel:
         close = getattr(self.executor, "aclose", None)
         if close is not None:
             await close()
+        if self.couriers is not None:
+            self.couriers.release()
 
     async def run_until_done(self, agent: Agent) -> Any:
         pid = self.spawn(agent)
@@ -509,6 +528,14 @@ class Kernel:
         prior = self._ambiguous.get(proc.pid)
         if prior is not None and (prior["req_id"], prior["op"]) != (call.req_id, call.op):
             self._abandon(proc, self._ambiguous.pop(proc.pid))
+        flight = self._inflight.get(proc.pid)
+        if (
+            flight is not None and flight.get("orphan") and not flight.get("abandoned")
+            and (flight["req_id"], flight["op"]) != (call.req_id, call.op)
+        ):
+            # The restarted agent went another way: its old call's reply has
+            # nobody to go to.
+            flight["abandoned"] = True
         if call.op in NONBLOCKING:
             value = getattr(self, f"_sys_{call.op}")(proc, **call.args)
             self._journal(proc, call.req_id, call.op, value, None)
@@ -756,16 +783,27 @@ class Kernel:
                 f"{capability!r} — {remedy}"
             )
         driver = self._driver(capability)
-        idem = self._intend(
-            proc, call, f"{capability}.{op}", op in getattr(driver, "idempotent", ())
-        )
+        target = f"{capability}.{op}"
+        key = dg.key(dg.TOOL, f"{proc.pid}.{call.req_id}")
+        if self._attach(proc, call, target, key, f"tool {capability}"):
+            return
+        adopted = self._recall(proc, call, target)
+        idem = None
+        if adopted is None:
+            idem = self._intend(proc, call, target, op in getattr(driver, "idempotent", ()))
+        via = None
+        if adopted is None and op in getattr(driver, "courier", {}):
+            send = self._courier(proc)
+            if send is not None:
+                via = lambda params, send=send, fn=driver.courier[op]: send(fn, params)  # noqa: E731
 
         self._yield_slot(proc, AgentState.WAITING, waiting_on=f"tool {capability}")
-        key = dg.key(dg.TOOL, f"{proc.pid}.{call.req_id}")
         self.deps.add(proc.pid, call.req_id, {key})
+        flight = self._fly(proc, call, target, key)
         self._io_calls += 1
         task = asyncio.create_task(
-            self._run_tool(proc, key, driver, capability, op, params, idem)
+            self._run_tool(proc, key, driver, capability, op, params, idem, adopted, via,
+                           flight)
         )
         self._io_tasks.add(task)
         task.add_done_callback(self._io_tasks.discard)
@@ -779,16 +817,27 @@ class Kernel:
         op: str,
         params: dict[str, Any],
         idempotency_key: str | None = None,
+        adopted: str | None = None,
+        via: Any = None,
+        flight: dict[str, Any] | None = None,
     ) -> None:
         started = asyncio.get_running_loop().time()
         try:
-            value = await driver.execute(op, params, idempotency_key=idempotency_key)
+            if adopted is not None:
+                value = await self.couriers.wait(adopted)
+            else:
+                value = await driver.execute(
+                    op, params, idempotency_key=idempotency_key, via=via
+                )
             try:
                 assert_serializable(f"{capability}.{op} result", value)
                 result = {"value": value, "error": None}
             except NotSerializable as exc:
                 result = {"value": None, "error": str(exc)}
         except ToolError as exc:
+            result = {"value": None, "error": str(exc)}
+        except CourierLost as exc:
+            self._lost(proc, f"{capability}.{op}")
             result = {"value": None, "error": str(exc)}
         except Exception as exc:
             result = {"value": None, "error": f"{type(exc).__name__}: {exc}"}
@@ -815,8 +864,7 @@ class Kernel:
             op=op,
             ok=ok,
         )
-        for w in self.deps.resolve(key, result):
-            self._wake_waiter(w)
+        self._deliver(proc, key, result, flight)
 
     def _driver(self, capability: str) -> Any:
         """One driver instance per capability, created on first use."""
@@ -906,13 +954,26 @@ class Kernel:
                 f"${budget:.6f} allowance. Finish with what you have."
             )
 
-        self._intend(proc, call, f"model:{need}", idempotent=False)
-        self._yield_slot(proc, AgentState.WAITING, waiting_on=f"model {need}")
+        # Behind a deduplicating gateway a model call is idempotent: the key in
+        # its intent reaches the gateway, and a re-issue after a crash is
+        # answered from the gateway's record instead of being billed again.
+        idempotent = self.models.idempotent(need)
+        target = f"model:{need}"
         key = dg.key(dg.MODEL, f"{proc.pid}.{call.req_id}")
+        if self._attach(proc, call, target, key, f"model {need}"):
+            return
+        adopted = self._recall(proc, call, target)
+        idem = courier = None
+        if adopted is None:
+            idem = self._intend(proc, call, target, idempotent=idempotent)
+            courier = self._courier(proc)
+        self._yield_slot(proc, AgentState.WAITING, waiting_on=f"model {need}")
         self.deps.add(proc.pid, call.req_id, {key})
+        flight = self._fly(proc, call, target, key)
         self._io_calls += 1
         task = asyncio.create_task(
-            self._run_model(proc, key, need, prompt, system, max_tokens)
+            self._run_model(proc, key, need, prompt, system, max_tokens,
+                            idem if idempotent else None, adopted, courier, flight)
         )
         self._io_tasks.add(task)
         task.add_done_callback(self._io_tasks.discard)
@@ -942,12 +1003,29 @@ class Kernel:
         prompt: str,
         system: str | None,
         max_tokens: int,
+        idempotency_key: str | None = None,
+        adopted: str | None = None,
+        courier: Any = None,
+        flight: dict[str, Any] | None = None,
     ) -> None:
         started = asyncio.get_running_loop().time()
         try:
-            value = await self.models.request(need, prompt, system, max_tokens)
+            if adopted is not None:
+                raw = await self.couriers.wait(adopted)
+                value = self.models.result(
+                    self.couriers.meta(adopted)["cand"], raw,
+                    asyncio.get_running_loop().time() - started,
+                )
+            else:
+                value = await self.models.request(
+                    need, prompt, system, max_tokens,
+                    idempotency_key=idempotency_key, courier=courier,
+                )
             result = {"value": value, "error": None}
         except ModelError as exc:
+            result = {"value": None, "error": str(exc)}
+        except CourierLost as exc:
+            self._lost(proc, f"model:{need}")
             result = {"value": None, "error": str(exc)}
         except Exception as exc:
             result = {"value": None, "error": f"{type(exc).__name__}: {exc}"}
@@ -980,6 +1058,24 @@ class Kernel:
             if ok
             else f"need {need!r} failed in {elapsed:.2f}s: {result['error']}",
         )
+        if ok and value.get("replayed"):
+            self._log(
+                proc.pid, "recover",
+                f"model:{need} answered from the gateway's record: "
+                "the provider was not billed for it again",
+            )
+        if ok and value.get("outcome_unknown"):
+            # The gateway lost track of an earlier attempt (it died with the
+            # call in flight, or the provider failed): that one may be billed too.
+            self.publish(
+                "OutcomeAmbiguous", source_pid=proc.pid, pid=proc.pid,
+                target=f"model:{need}", policy="gateway",
+            )
+            self._log(
+                proc.pid, "ambiguous",
+                f"model:{need} was sent again by a gateway that could not tell "
+                "whether an earlier attempt was billed; it may have been billed twice",
+            )
         self.publish(
             "ModelFinished",
             source_pid=proc.pid,
@@ -989,8 +1085,144 @@ class Kernel:
             cost=value.get("cost", 0.0),
             ok=ok,
         )
-        for w in self.deps.resolve(key, result):
+        self._deliver(proc, key, result, flight)
+
+    def _fly(
+        self, proc: AgentProcess, call: Syscall, target: str, dep: str
+    ) -> dict[str, Any] | None:
+        """Note the call the kernel is now making for `proc`, in case `proc` dies."""
+        if not self.adopt:
+            return None
+        flight = {
+            "req_id": call.req_id, "op": call.op, "target": target,
+            "dep": dep, "intent": proc.intent,
+        }
+        self._inflight[proc.pid] = flight
+        return flight
+
+    def _attach(
+        self, proc: AgentProcess, call: Syscall, target: str, dep: str, waiting_on: str
+    ) -> bool:
+        """A restarted agent asking again for the call its last life left in
+        flight: wait for that call instead of making it twice."""
+        flight = self._inflight.get(proc.pid)
+        if flight is None or not flight.get("orphan") or flight.get("abandoned"):
+            return False
+        if (flight["req_id"], flight["op"], flight["target"]) != (call.req_id, call.op, target):
+            flight["abandoned"] = True  # asked for something else: not this call
+            return False
+        proc.intent = flight["intent"]  # settled when the reply is journaled
+        self._yield_slot(proc, AgentState.WAITING, waiting_on=waiting_on)
+        self.deps.add(proc.pid, call.req_id, {dep})
+        self._log(
+            proc.pid, "recover",
+            f"{target} #{call.req_id} is still in flight from before the restart; "
+            "waiting for it instead of making it again",
+        )
+        return True
+
+    def _deliver(
+        self, proc: AgentProcess, dep: str, result: dict[str, Any],
+        flight: dict[str, Any] | None = None,
+    ) -> None:
+        """A tool or model call finished: wake whoever waits for it."""
+        if flight is not None and self._inflight.get(proc.pid) is flight:
+            del self._inflight[proc.pid]
+        if flight is not None and flight.get("abandoned"):
+            # Its dependency key may now name a different call: wake nobody.
+            self._orphaned(proc, flight, result)
+            return
+        woken = self.deps.resolve(dep, result)
+        for w in woken:
             self._wake_waiter(w)
+        if not woken and flight is not None and flight.get("orphan"):
+            self._orphaned(proc, flight, result)
+
+    def _orphaned(
+        self, proc: AgentProcess, flight: dict[str, Any], result: dict[str, Any]
+    ) -> None:
+        """The call outlived the agent that made it. Its reply goes in the
+        journal, where the restarted agent's replay will find it."""
+        target, req_id = flight["target"], flight["req_id"]
+        if flight.get("abandoned") or not proc.alive:
+            if flight["intent"] is not None:
+                self.store.settle_intent(flight["intent"])
+            self._log(
+                proc.pid, "recover",
+                f"{target} #{req_id} finished after its agent died, and was never "
+                "asked for again; its reply is dropped",
+            )
+            return
+        value = _shape({flight["dep"]: result})
+        self.store.append_journal(
+            proc.pid, req_id, flight["op"], value, None, intent=flight["intent"]
+        )
+        proc.checkpoint += 1
+        self.store.publish(proc.row())
+        self._journals.setdefault(proc.pid, []).append(
+            {"req_id": req_id, "op": flight["op"], "value": value, "error": None}
+        )
+        self._log(
+            proc.pid, "recover",
+            f"{target} #{req_id} finished after its agent died; its reply is "
+            "journaled for the restarted agent, so the call is not made again",
+        )
+
+    def _courier(self, proc: AgentProcess) -> Any:
+        """send(target, args, meta) for `proc`'s current call, if couriers are on."""
+        if self.couriers is None or proc.intent is None:
+            return None
+        intent, attempts = proc.intent, iter(range(1, 1 << 30))
+
+        async def send(target: str, args: dict[str, Any], meta: Any = None) -> Any:
+            return await self.couriers.call(intent, next(attempts), target, args, meta)
+
+        return send
+
+    def _recall(self, proc: AgentProcess, call: Syscall, target: str) -> str | None:
+        """After a runtime crash: did this call's courier make it?
+
+        Returns the courier's key if its reply is there, or will be, to take
+        instead of calling again. A call whose courier never started is sent
+        now without a flag. A courier that died mid-call is left to _intend,
+        which flags the repeat as any lost call.
+        """
+        if self.couriers is None:
+            return None
+        prior = self._ambiguous.get(proc.pid)
+        if prior is None or (prior["req_id"], prior["target"]) != (call.req_id, target):
+            return None
+        fate, row = self.couriers.fate(prior["id"])
+        if fate == "lost":
+            return None
+        self._ambiguous.pop(proc.pid)
+        if fate == "unsent":
+            self.store.settle_intent(prior["id"])
+            self._log(
+                proc.pid, "recover",
+                f"{target} #{call.req_id} was never made: its courier had not "
+                "started when the runtime died. Making it now",
+            )
+            return None
+        proc.intent = prior["id"]  # settled when the reply is journaled
+        self._log(
+            proc.pid, "recover",
+            f"{target} #{call.req_id} was in flight at the crash; its courier "
+            + ("had finished" if fate in ("done", "failed") else "is still at it")
+            + ": taking its reply instead of making the call again",
+        )
+        return row["key"]
+
+    def _lost(self, proc: AgentProcess, target: str) -> None:
+        """A courier died mid-call: say so, as any call nobody can account for."""
+        self.publish(
+            "OutcomeAmbiguous", source_pid=proc.pid, pid=proc.pid,
+            target=target, policy="courier",
+        )
+        self._log(
+            proc.pid, "ambiguous",
+            f"{target}: its courier died mid-call; it may or may not have taken effect",
+        )
 
     def _sys_request_approval(
         self, proc: AgentProcess, call: Syscall, role: str, reason: str
@@ -1100,7 +1332,16 @@ class Kernel:
         # An agent that died mid-call left that call's intent open, exactly as a
         # runtime crash would: the restart must not re-issue it blind.
         intent = self.store.open_intents().get(proc.pid)
-        if intent is not None:
+        flight = self._inflight.get(proc.pid)
+        if flight is not None and intent is not None and flight["intent"] == intent["id"]:
+            # Its agent is gone; the call is not. The restart waits for it.
+            flight["orphan"] = True
+            self._log(
+                proc.pid, "recover",
+                f"{flight['target']} #{flight['req_id']} is still in flight; the "
+                "restarted agent will be given its reply, not make it again",
+            )
+        elif intent is not None:
             self._ambiguous[proc.pid] = intent
         proc.intent = None
         proc.exit_reason = None
