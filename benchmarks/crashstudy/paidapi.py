@@ -5,7 +5,8 @@
 That is the shape of a model API seen from a client that dies: the provider has
 done (and charged for) the work whether or not anyone is left to read the reply.
 An `Idempotency-Key` header makes a repeat free: the stored reply comes back and
-nothing is charged.
+nothing is charged. With --ignore-keys it behaves like the model providers we
+measured instead: every request is charged, key or not.
 
 The ledger is the only source of truth the study reads. No framework writes it.
 """
@@ -50,6 +51,7 @@ def charges(ledger: str, run: str) -> list[int]:
 class Handler(BaseHTTPRequestHandler):
     ledger: str
     latency: float
+    ignore_keys = False
     lock = threading.Lock()
 
     def log_message(self, *args):  # quiet
@@ -61,7 +63,7 @@ class Handler(BaseHTTPRequestHandler):
         conn = sqlite3.connect(self.ledger, isolation_level=None, timeout=10)
         try:
             with self.lock:
-                if key:
+                if key and not self.ignore_keys:
                     row = conn.execute(
                         "SELECT reply FROM keys WHERE key = ?", (key,)).fetchone()
                     if row is not None:
@@ -70,7 +72,7 @@ class Handler(BaseHTTPRequestHandler):
                     "INSERT INTO charges (run, i, key, ts) VALUES (?, ?, ?, ?)",
                     (body["run"], body["i"], key, time.time()))
                 reply = {"i": body["i"], "charge": cur.lastrowid}
-                if key:
+                if key and not self.ignore_keys:
                     conn.execute("INSERT INTO keys VALUES (?, ?)",
                                  (key, json.dumps(reply)))
         finally:
@@ -95,9 +97,12 @@ def main() -> int:
     ap.add_argument("--ledger", required=True)
     ap.add_argument("--latency", type=float, default=0.3)
     ap.add_argument("--port", type=int, default=0)
+    ap.add_argument("--ignore-keys", action="store_true",
+                    help="charge every request, as the model providers we measured do")
     args = ap.parse_args()
     init(args.ledger)
     Handler.ledger, Handler.latency = args.ledger, args.latency
+    Handler.ignore_keys = args.ignore_keys
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     srv.daemon_threads = True
     print(srv.server_address[1], flush=True)

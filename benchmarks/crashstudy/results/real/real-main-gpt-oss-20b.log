@@ -1,0 +1,1721 @@
+20:02:17 gpt-oss-20b: prefect, 10 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.863s, cycle 1.214s, horizon 6.93s
+[1/20] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/20] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 0.08331465721130371]]
+[4/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[5/20] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[6/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.3675549030303955]]
+[7/20] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[8/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[5, 0.4828042984008789]]
+[9/20] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[10/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 0.18524789810180664]]
+[11/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 1.0042951107025146]]
+[12/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.42827916145324707]]
+[13/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.5729620456695557]]
+[14/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[15/20] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[16/20] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[17/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.09270668029785156]]
+[18/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[19/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 1.9415104389190674]]
+[20/20] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+20:18:25 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 965.604s, cycle 0.880s, horizon 970.00s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+20:23:52 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 325.940s, cycle 0.870s, horizon 330.29s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+20:29:25 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 656.700s, cycle 0.870s, horizon 661.05s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+20:34:55 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 663.203s, cycle 0.880s, horizon 667.60s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+20:40:06 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 969.889s, cycle 0.834s, horizon 974.06s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+20:45:11 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 946.087s, cycle 0.834s, horizon 950.25s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+20:50:10 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 1244.312s, cycle 0.870s, horizon 1248.66s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+20:55:16 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 1220.541s, cycle 0.872s, horizon 1224.90s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+21:00:16 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 1517.404s, cycle 0.870s, horizon 1521.75s
+[1/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[2/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[3/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[4/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[5/6] key=n finished-before-kill admitted=+6.000 dup=0 outstanding=None
+[6/6] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+21:05:18 gpt-oss-20b: 16 requests left, prefect needs 80; waiting 92 min
+22:33:17 gpt-oss-20b: 76 requests left, prefect needs 80; waiting 9 min
+22:41:56 gpt-oss-20b: prefect, 3 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.462s, cycle 0.598s, horizon 3.45s
+[1/6] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.1396019458770752]]
+[2/6] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.34981369972229004]]
+[3/6] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[4/6] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.18789911270141602]]
+[5/6] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.13214993476867676]]
+[6/6] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.3535430431365967]]
+22:47:27 gpt-oss-20b: 11 requests left, autogen needs 234; waiting 324 min
+04:11:28 gpt-oss-20b: autogen, 10 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.519s, cycle 0.620s, horizon 3.62s
+[1/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.15331578254699707]]
+[2/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.09075522422790527]]
+[3/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.49819517135620117]]
+[4/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.27715349197387695]]
+[5/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[2, 0.005083322525024414]]
+[6/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.4513587951660156]]
+[7/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.42478156089782715]]
+[8/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 0.2122659683227539]]
+[9/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.11361145973205566]]
+[10/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.3221769332885742]]
+[11/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.26505184173583984]]
+[12/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 1.485907793045044]]
+[13/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.5297160148620605]]
+[14/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.42692065238952637]]
+[15/20] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[16/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.14402389526367188]]
+[17/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 0.0678396224975586]]
+[18/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[5, 0.048860788345336914]]
+[19/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[5, 0.12043976783752441]]
+[20/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.1584148406982422]]
+04:19:35 gpt-oss-20b: 41 requests left, agentos needs 234; waiting 281 min
+09:00:26 gpt-oss-20b: agentos, 10 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.522s, cycle 0.616s, horizon 3.60s
+[1/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.43242383003234863]]
+[2/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.3795921802520752]]
+[3/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.3603177070617676]]
+[4/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.10474395751953125]]
+[5/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.14913129806518555]]
+[6/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.0160214900970459]]
+[7/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.2629086971282959]]
+[8/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[3, 1.2535009384155273]]
+[9/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.07056522369384766]]
+[10/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.3983166217803955]]
+[11/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.0898599624633789]]
+[12/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.09402704238891602]]
+[13/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.2810344696044922]]
+[14/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.2423555850982666]]
+[15/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.4412505626678467]]
+[16/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 0.4058656692504883]]
+[17/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.37571239471435547]]
+[18/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.20290303230285645]]
+[19/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.11744570732116699]]
+[20/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.31191158294677734]]
+09:08:50 gpt-oss-20b: 40 requests left, langgraph-node needs 234; waiting 282 min
+13:51:06 gpt-oss-20b: langgraph-node, 10 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.454s, cycle 0.556s, horizon 3.23s
+[1/20] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[2/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[1, 0.012326955795288086]]
+[3/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.07755637168884277]]
+[4/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 1.0459589958190918]]
+[5/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.36551666259765625]]
+[6/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 0.162672758102417]]
+[7/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.33829259872436523]]
+[8/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.3100166320800781]]
+[9/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.2044086456298828]]
+[10/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.2805335521697998]]
+[11/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.548851490020752]]
+[12/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.6274518966674805]]
+[13/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[4, 0.014673948287963867]]
+[14/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.16793465614318848]]
+[15/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.6124284267425537]]
+[16/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[17/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.579348087310791]]
+[18/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.28157544136047363]]
+[19/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.33284735679626465]]
+[20/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.017845869064331055]]
+13:59:14 gpt-oss-20b: 43 requests left, langgraph-loop needs 234; waiting 278 min
+18:37:11 gpt-oss-20b: langgraph-loop, 10 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.478s, cycle 0.659s, horizon 3.77s
+[1/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.40699148178100586]]
+[2/20] key=y ok       admitted=+10.000 dup=4 outstanding=[[3, 0.5120396614074707]]
+[3/20] key=n ok       admitted=+10.000 dup=4 outstanding=[[3, 0.3811047077178955]]
+[4/20] key=y ok       admitted=+9.000 dup=3 outstanding=[[2, 0.426469087600708]]
+[5/20] key=n ok       admitted=+10.000 dup=4 outstanding=[]
+[6/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 1.295701265335083]]
+[7/20] key=n ok       admitted=+8.000 dup=2 outstanding=[[1, 0.43816685676574707]]
+[8/20] key=y ok       admitted=+9.000 dup=3 outstanding=[[2, 0.11273527145385742]]
+[9/20] key=n ok       admitted=+8.000 dup=2 outstanding=[[1, 0.2788271903991699]]
+[10/20] key=y ok       admitted=+8.000 dup=2 outstanding=[[2, 0.030452489852905273]]
+[11/20] key=n ok       admitted=+8.000 dup=2 outstanding=[[1, 1.0256264209747314]]
+[12/20] key=y ok       admitted=+11.000 dup=5 outstanding=[[4, 0.5974526405334473]]
+[13/20] key=n ok       admitted=+9.000 dup=3 outstanding=[[2, 0.19190692901611328]]
+[14/20] key=y ok       admitted=+12.000 dup=6 outstanding=[[5, 0.6723783016204834]]
+[15/20] key=n ok       admitted=+9.000 dup=3 outstanding=[[3, 0.9496748447418213]]
+[16/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.11187314987182617]]
+[17/20] key=n ok       admitted=+7.000 dup=1 outstanding=[]
+[18/20] key=y ok       admitted=+9.000 dup=3 outstanding=[[2, 0.20787262916564941]]
+[19/20] key=n ok       admitted=+8.000 dup=2 outstanding=[[1, 0.07203292846679688]]
+[20/20] key=y finished-before-kill admitted=+6.000 dup=0 outstanding=None
+18:46:56 gpt-oss-20b: 7 requests left, langgraph-loop needs 36; waiting 45 min
+19:31:37 gpt-oss-20b: langgraph-loop, 1 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 1.788s, cycle 1.889s, horizon 11.23s
+[1/2] key=n ok       admitted=+10.000 dup=4 outstanding=[[4, 0.20308184623718262]]
+[2/2] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.41448450088500977]]
+19:36:44 gpt-oss-20b: 0 requests left, temporal needs 234; waiting 340 min
+01:20:06 gpt-oss-20b: temporal, 10 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.505s, cycle 0.629s, horizon 3.65s
+[1/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.16724681854248047]]
+[2/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.3484625816345215]]
+[3/20] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[4/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.4363746643066406]]
+[5/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.061956167221069336]]
+[6/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[7/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[5, 0.29052162170410156]]
+[8/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.44347691535949707]]
+[9/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.2469189167022705]]
+[10/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.11851954460144043]]
+[11/20] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[12/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 1.303804874420166]]
+[13/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.5362899303436279]]
+[14/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.17985105514526367]]
+[15/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 1.7412426471710205]]
+[16/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 1.253230333328247]]
+[17/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.14561915397644043]]
+[18/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 1.068732500076294]]
+[19/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.46333980560302734]]
+[20/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.6092569828033447]]
+01:37:42 gpt-oss-20b: 43 requests left, dbos needs 234; waiting 278 min
+06:15:38 gpt-oss-20b: dbos, 10 per key mode
+calibration 0: admitted=+6.000 (expect 6)
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.503s, cycle 0.635s, horizon 3.68s
+[1/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.3333096504211426]]
+[2/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.3928241729736328]]
+[3/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 2.2982394695281982]]
+[4/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 0.6622157096862793]]
+[5/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.11515951156616211]]
+[6/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.21083569526672363]]
+[7/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.5137183666229248]]
+[8/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.45042848587036133]]
+[9/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 0.034120798110961914]]
+[10/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[11/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[1, 0.17759227752685547]]
+[12/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.5321035385131836]]
+[13/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.3162252902984619]]
+[14/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.11528992652893066]]
+[15/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.27315402030944824]]
+[16/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.0667107105255127]]
+[17/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 0.07229232788085938]]
+[18/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[19/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.329439640045166]]
+[20/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.35242629051208496]]
+06:23:56 gpt-oss-20b: 45 requests left, crewai needs 234; waiting 275 min
+10:58:59 gpt-oss-20b: crewai, 10 per key mode
+No flow state found for UUID: calib-0-dd8d9b
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: calib-0-dd8d9b                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: calib-0-dd8d9b                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: calib-0-dd8d9b                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 0: admitted=+6.000 (expect 6)
+No flow state found for UUID: calib-1-2f47de
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: calib-1-2f47de                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: calib-1-2f47de                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: calib-1-2f47de                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.512s, cycle 0.637s, horizon 3.70s
+[1/20] key=n ok       admitted=+12.000 dup=6 outstanding=[[5, 0.15534496307373047]]
+[2/20] key=y ok       admitted=+9.000 dup=3 outstanding=[[2, 0.49790334701538086]]
+[3/20] key=n ok       admitted=+9.000 dup=3 outstanding=[]
+[4/20] key=y ok       admitted=+8.000 dup=2 outstanding=[[1, 0.08648395538330078]]
+[5/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[0, 0.05517911911010742]]
+[6/20] key=y ok       admitted=+11.000 dup=5 outstanding=[]
+[7/20] key=n ok       admitted=+8.000 dup=2 outstanding=[]
+[8/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.007740020751953125]]
+[9/20] key=n ok       admitted=+8.000 dup=2 outstanding=[]
+[10/20] key=y ok       admitted=+10.000 dup=4 outstanding=[[3, 0.4120464324951172]]
+[11/20] key=n ok       admitted=+12.000 dup=6 outstanding=[[5, 0.3794691562652588]]
+[12/20] key=y ok       admitted=+8.000 dup=2 outstanding=[[1, 0.07719540596008301]]
+[13/20] key=n ok       admitted=+11.000 dup=5 outstanding=[[4, 0.24982619285583496]]
+[14/20] key=y ok       admitted=+12.000 dup=6 outstanding=[]
+[15/20] key=n ok       admitted=+7.000 dup=1 outstanding=[]
+[16/20] key=y ok       admitted=+11.000 dup=5 outstanding=[]
+[17/20] key=n ok       admitted=+12.000 dup=6 outstanding=[]
+[18/20] key=y ok       admitted=+9.000 dup=3 outstanding=[]
+[19/20] key=n ok       admitted=+11.000 dup=5 outstanding=[[4, 0.26069164276123047]]
+[20/20] key=y resume-timeout admitted=-1.000 dup=-7 outstanding=[]
+11:20:28 gpt-oss-20b: 0 requests left, crewai needs 36; waiting 55 min
+12:15:11 gpt-oss-20b: crewai, 1 per key mode
+No flow state found for UUID: calib-0-efac68
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: calib-0-efac68                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: calib-0-efac68                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: calib-0-efac68                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 0: admitted=+6.000 (expect 6)
+No flow state found for UUID: calib-1-d78bc5
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: calib-1-d78bc5                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: calib-1-d78bc5                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: calib-1-d78bc5                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.524s, cycle 0.661s, horizon 3.83s
+[1/2] key=n ok       admitted=+11.000 dup=5 outstanding=[[4, 0.34192776679992676]]
+[2/2] key=y resume-timeout admitted=+6.000 dup=0 outstanding=[[5, 0.057660579681396484]]
+12:24:57 gpt-oss-20b: 0 requests left, crewai needs 36; waiting 55 min
+13:19:42 gpt-oss-20b: crewai, 1 per key mode
+No flow state found for UUID: calib-0-c47ebf
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: calib-0-c47ebf                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: calib-0-c47ebf                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: calib-0-c47ebf                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 0: admitted=+6.000 (expect 6)
+No flow state found for UUID: calib-1-76bdfb
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: calib-1-76bdfb                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: calib-1-76bdfb                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: calib-1-76bdfb                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.531s, cycle 0.624s, horizon 3.65s
+[1/2] key=n ok       admitted=+9.000 dup=3 outstanding=[]
+[2/2] key=y ok       admitted=+8.000 dup=2 outstanding=[[1, 0.3080484867095947]]
+13:23:07 gpt-oss-20b: 0 requests left, crewai-guarded needs 234; waiting 340 min
+19:02:58 gpt-oss-20b: crewai-guarded, 10 per key mode
+No flow state found for UUID: calib-0-259290
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: calib-0-259290                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: calib-0-259290                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: calib-0-259290                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 0: admitted=+6.000 (expect 6)
+No flow state found for UUID: calib-1-349854
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: calib-1-349854                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: calib-1-349854                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: calib-1-349854                                                         │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.555s, cycle 0.679s, horizon 3.95s
+[1/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.23085451126098633]]
+[2/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.30867505073547363]]
+[3/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[1, 0.5757431983947754]]
+[4/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.3773808479309082]]
+[5/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.3644990921020508]]
+[6/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.5509047508239746]]
+[7/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[3, 0.22023439407348633]]
+[8/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.4998359680175781]]
+[9/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.23822617530822754]]
+[10/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[11/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.36287808418273926]]
+[12/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[1, 0.02927088737487793]]
+[13/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.35759472846984863]]
+[14/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 0.40209150314331055]]
+[15/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.3457057476043701]]
+[16/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.2917823791503906]]
+[17/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[2, 0.8666837215423584]]
+[18/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[19/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.698742151260376]]
+[20/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[0, 0.4504127502441406]]
+19:14:25 gpt-oss-20b: 41 requests left, crewai-checkpoint needs 234; waiting 281 min
+23:55:15 gpt-oss-20b: crewai-checkpoint, 10 per key mode
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: ce16a342-17b7-4dbc-8848-b68f677af1d9                                   │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: ce16a342-17b7-4dbc-8848-b68f677af1d9                                   │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: ce16a342-17b7-4dbc-8848-b68f677af1d9                                   │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 0: admitted=+6.000 (expect 6)
+┌───────────────────────────── 🌊 Flow Execution ─────────────────────────────┐
+│                                                                             │
+│  Starting Flow Execution                                                    │
+│  Name: Calls                                                                │
+│  ID: e001c073-efc1-4601-81c8-fb7087c88104                                   │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── ✨ Update Available ✨ ───────────────────────────┐
+│                                                                             │
+│  A new version of CrewAI is available!                                      │
+│                                                                             │
+│  Current version: 1.15.27                                                   │
+│  Latest version:  1.15.32                                                   │
+│                                                                             │
+│  To update, run: uv sync --upgrade-package crewai                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────── 🌊 Flow Started ──────────────────────────────┐
+│                                                                             │
+│  Flow Started                                                               │
+│  Name: Calls                                                                │
+│  ID: e001c073-efc1-4601-81c8-fb7087c88104                                   │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c0                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c1                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c2                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c3                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c4                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────── 🔄 Flow Method Running ───────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Running                                                            │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────── ✅ Flow Method Completed ──────────────────────────┐
+│                                                                             │
+│  Method: c5                                                                 │
+│  Status: Completed                                                          │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────── ✅ Flow Completion ─────────────────────────────┐
+│                                                                             │
+│  Flow Execution Completed                                                   │
+│  Name: Calls                                                                │
+│  ID: e001c073-efc1-4601-81c8-fb7087c88104                                   │
+│                                                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+calibration 1: admitted=+6.000 (expect 6)
+median call 0.517s, cycle 0.596s, horizon 3.49s
+[1/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[4, 0.38022565841674805]]
+[2/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.24909615516662598]]
+[3/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[5, 0.34154319763183594]]
+[4/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.40145277976989746]]
+[5/20] key=n ok       admitted=+6.000 dup=0 outstanding=[[5, 0.01305699348449707]]
+[6/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[5, 0.14447331428527832]]
+[7/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.3019711971282959]]
+[8/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[2, 0.23609161376953125]]
+[9/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.15568852424621582]]
+[10/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[4, 0.5048291683197021]]
+[11/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.45250463485717773]]
+[12/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[13/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[4, 0.11104464530944824]]
+[14/20] key=y ok       admitted=+6.000 dup=0 outstanding=[[0, 0.14987659454345703]]
+[15/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 0.5325965881347656]]
+[16/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[3, 1.1565062999725342]]
+[17/20] key=n ok       admitted=+7.000 dup=1 outstanding=[[0, 1.3969202041625977]]
+[18/20] key=y ok       admitted=+6.000 dup=0 outstanding=[]
+[19/20] key=n ok       admitted=+6.000 dup=0 outstanding=[]
+[20/20] key=y ok       admitted=+7.000 dup=1 outstanding=[[1, 0.12755918502807617]]
+00:06:31 gpt-oss-20b: all configurations done

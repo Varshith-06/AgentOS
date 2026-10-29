@@ -30,6 +30,11 @@ DIR = Path(os.environ.get("CS_DIR", "."))
 
 # --------------------------------------------------------------------------- agentos
 
+def courier_charge(i: int, idempotency_key: str | None = None) -> dict:
+    """The same call, as an AgentOS courier makes it: in a process of its own."""
+    return charge(i, idempotency_key)
+
+
 def agentos(phase: str) -> None:
     from agentos import Kernel
     from agentos.drivers import REGISTRY, ToolDriver
@@ -41,6 +46,7 @@ def agentos(phase: str) -> None:
         name = "paidapi"
         timeout = 60.0
         idempotent = ("charge",) if keyed() else ()
+        courier = {"charge": "benchmarks.crashstudy.adapters:courier_charge"}
 
         async def op_charge(self, i: int, idempotency_key: str | None = None):
             return await asyncio.to_thread(charge, i, idempotency_key)
@@ -49,6 +55,12 @@ def agentos(phase: str) -> None:
     k = Kernel(
         store=Store(DIR / "agentos"), tick=0.005, recover=phase == "resume",
         tools={"paidapi": {}}, permissions={"*": ["paidapi"]},
+        # The fixes under test: a dead agent's call adopted (on unless 0),
+        # calls carried by couriers (off unless 1). Retries restart an agent
+        # whose own process was killed.
+        adopt=os.environ.get("CS_ADOPT", "1") == "1",
+        courier=os.environ.get("CS_COURIER") == "1",
+        retries=int(os.environ.get("CS_RETRIES", "0")),
     )
     if phase == "start":
         k.spawn(Caller(calls=calls()))

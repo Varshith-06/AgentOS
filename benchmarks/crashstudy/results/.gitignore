@@ -1,7 +1,14 @@
 # Framework-internal state from the real-provider runs; the analysis reads only
 # the call logs (calls.jsonl, notes.jsonl), the result rows, and the ledgers.
+# The courier stores (couriers.db) and gateway stores (gateway-*.db) stay: they
+# record what became of each call the fix carried.
 lg.db
 dbos.sqlite
+flow.db
+runtime.db
+*_p-*.json
+*.lock
+*.pid
 *.err
 *-shm
 *-wal

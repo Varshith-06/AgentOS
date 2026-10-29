@@ -7,6 +7,7 @@ temporalio==1.34.0
 dbos==3.2.0
 crewai==1.15.27
 prefect==3.8.8
+fastapi==0.143.0  # prefect 3.8.8 breaks on fastapi 0.162; requirements-lock.txt has the rest
 autogen-core==0.7.5
 pydantic==2.12.5
 httpx==0.28.1

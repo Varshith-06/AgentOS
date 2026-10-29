@@ -9,7 +9,7 @@ from temporalio import activity, workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from .client import charge, keyed, note, think
+    from .client import ACTIVITY_TIMEOUT as TIMEOUT, charge, keyed, note, think
 
 
 @activity.defn
@@ -28,8 +28,9 @@ class Calls:
         for i in range(n):
             # A dead worker is noticed when this timeout lapses; sized to the
             # call, as Temporal's guidance says, so recovery is not all waiting.
+            # Real completions have a long tail, so those runs set it higher.
             await workflow.execute_activity(
-                billable, i, start_to_close_timeout=timedelta(seconds=3),
+                billable, i, start_to_close_timeout=timedelta(seconds=TIMEOUT),
                 retry_policy=RetryPolicy(initial_interval=timedelta(milliseconds=100)),
             )
         return "done"

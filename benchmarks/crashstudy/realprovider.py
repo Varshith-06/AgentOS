@@ -84,12 +84,19 @@ class Quota:
     def admitted(before: tuple, after: tuple) -> float:
         """Requests admitted strictly between two probes (the second excluded).
 
-        The reset duration grows by exactly day/limit per admitted request and
-        does not shrink between requests (measured: 20 s, 40 s, 60 s apart), so
-        no refill term: within a run the deficit only counts.
+        The reset duration grows by exactly day/limit per admitted request. It
+        gives one request back only after an idle gap longer than day/limit
+        (86.4 s at 1000 a day, 12.3 s at 7000), so the count is exact while no
+        two consecutive requests are further apart than that (`max_gap`).
         """
         (_, d0, _), (_, d1, _) = before, after
         return d1 - d0 - 1
+
+
+def max_gap(before: tuple, after: tuple, log: list[dict]) -> float:
+    """The longest stretch between consecutive requests from probe to probe."""
+    t = sorted([before[0], after[0]] + [m["t"] for m in log if m["what"] == "send"])
+    return max(b - a for a, b in zip(t, t[1:]))
 
 
 # --- inflight ---------------------------------------------------------------
@@ -225,25 +232,52 @@ def e2e(args) -> None:
     The kill is uniform over the work after the first call is sent, with the
     horizon measured from uncrashed calibration runs.
     """
-    from benchmarks.crashstudy.run import LATE, kill_tree, popen
+    from benchmarks.crashstudy.run import NEEDS_TEMPORAL, kill_tree, start_temporal
 
     rng = random.Random(args.seed)
     scratch = Path(args.out).with_suffix("") / args.framework
     scratch.mkdir(parents=True, exist_ok=True)
     adapter = [args.python, "-m", "benchmarks.crashstudy.adapters", args.framework]
+    temporal_proc, temporal = None, ""
+    if args.framework in NEEDS_TEMPORAL:
+        temporal_proc, temporal = start_temporal(args.python)
+    gateway_proc, base = None, ""
+    if args.gateway:
+        from benchmarks.crashstudy.run import start_gateway
+        gateway_proc, base = start_gateway(
+            "https://api.groq.com/openai/v1",
+            scratch / f"gateway-{uuid.uuid4().hex[:6]}.db")
 
     def env_for(run: str, d: Path, keyed: bool) -> dict:
         return dict(os.environ, PYTHONPATH=str(ROOT), PYTHONUTF8="1", CS_PROVIDER="groq",
                     CS_MODEL=args.model, CS_RUN=run, CS_DIR=str(d), CS_CALLS=str(args.calls),
-                    CS_THINK=str(args.think), CS_KEYED="1" if keyed else "0", CS_PORT="0")
+                    CS_THINK=str(args.think), CS_KEYED="1" if keyed else "0", CS_PORT="0",
+                    CS_TEMPORAL=temporal, CS_API_BASE=base,
+                    # AgentOS only (see run.py): adoption, couriers, agent restarts.
+                    CS_ADOPT="1" if args.adopt == "yes" else "0",
+                    CS_COURIER="0" if args.courier == "off" else "1",
+                    CS_RETRIES="3" if args.crash == "agent" else "0")
+
+    try:
+        _e2e(args, rng, scratch, adapter, env_for)
+    finally:
+        if temporal_proc is not None:
+            kill_tree(temporal_proc)
+        if gateway_proc is not None:
+            gateway_proc.kill()
+
+
+def _e2e(args, rng, scratch: Path, adapter: list, env_for) -> None:
+    from benchmarks.crashstudy.run import LATE, agent_kill, kill_tree, popen, signals
 
     with httpx.Client() as client, open(args.out, "a", encoding="utf-8") as out:
         quota = Quota(client, args.model)
         # Calibration: run uncrashed, measure the call and the cycle.
         lat, cyc = [], []
         for c in range(args.calibrate):
-            d = scratch / f"calib-{c}"
-            d.mkdir(parents=True, exist_ok=True)
+            # A fresh directory: a reused one keeps an earlier invocation's calls.
+            d = scratch / f"calib-{c}-{uuid.uuid4().hex[:6]}"
+            d.mkdir(parents=True)
             before = quota.probe()
             res = subprocess.run(adapter + ["start"], timeout=300,
                                  env=env_for(f"calib-{c}-{uuid.uuid4().hex[:6]}", d, False))
@@ -252,10 +286,16 @@ def e2e(args) -> None:
             if res.returncode:
                 print(f"calibration {c} failed (rc {res.returncode}); timing kept, count not "
                       f"checked", flush=True)
-            sends = [m for m in log if m["what"] == "send"]
-            replies = {m["i"]: m["t"] for m in log if m["what"] == "reply"}
-            lat += [replies[s["i"]] - s["t"] for s in sends if s["i"] in replies]
-            cyc += [b["t"] - a["t"] for a, b in zip(sends, sends[1:])]
+            # A throttled call is sent again; time it from the send that was answered.
+            last, firsts = {}, {}
+            for m in log:
+                if m["what"] == "send":
+                    last[m["i"]] = m["t"]
+                    firsts.setdefault(m["i"], m["t"])
+                elif m["what"] == "reply" and m["i"] in last:
+                    lat.append(m["t"] - last[m["i"]])
+            starts = sorted(firsts.values())
+            cyc += [b - a for a, b in zip(starts, starts[1:])]
             print(f"calibration {c}: admitted={Quota.admitted(before, after):+.3f} "
                   f"(expect {args.calls})", flush=True)
             time.sleep(args.gap)
@@ -271,7 +311,8 @@ def e2e(args) -> None:
             env = env_for(run, d, keyed)
             before = quota.probe()
             errors_before = quota.retried
-            p = popen(adapter + ["start"], env, d / "start.err")
+            p = popen(adapter + ["start"], env, d / "start.err",
+                      breakaway=args.courier == "on")
             deadline = time.time() + 120
             t0 = None
             while time.time() < deadline and p.poll() is None and t0 is None:
@@ -282,9 +323,31 @@ def e2e(args) -> None:
             while t0 is not None and time.time() < t0 + offset and p.poll() is None:
                 time.sleep(0.002)
             finished = p.poll() is not None
-            killed = None if finished else kill_tree(p)
-            time.sleep(0.2)
-            res = subprocess.run(adapter + ["resume"], env=env, capture_output=True, timeout=300)
+            if args.crash == "agent":
+                # Only the agent's process dies; the runtime restarts it and
+                # runs on, so the run that was started is the one that ends.
+                killed = None if finished else agent_kill(d)
+                res = p
+                try:
+                    res.wait(timeout=300)
+                    hung = False
+                except subprocess.TimeoutExpired:
+                    hung = True
+                kill_tree(res)
+                res.stderr = (d / "start.err").read_bytes()
+            else:
+                killed = None if finished else kill_tree(p)
+                time.sleep(0.2)
+                # A resume that hangs is a trial too: record it, kill its whole
+                # tree so nothing it started keeps spending quota, and go on.
+                res = popen(adapter + ["resume"], env, d / "resume.err")
+                try:
+                    res.wait(timeout=300)
+                    hung = False
+                except subprocess.TimeoutExpired:
+                    kill_tree(res)
+                    hung = True
+                res.stderr = (d / "resume.err").read_bytes()
             time.sleep(args.settle)
             after = quota.probe()
             log = _calls_log(d)
@@ -293,21 +356,31 @@ def e2e(args) -> None:
             status = "ok" if res.returncode == 0 else "failed"
             if finished:
                 status = "finished-before-kill"
+            elif killed is None:
+                status = "no-agent"  # an agent crash found no agent to kill
             elif t0 is not None and killed - (t0 + offset) > LATE:
                 status = "late"
             if any(m["what"] == "server-error" for m in log) or quota.retried > errors_before:
                 # A 5xx may have been admitted: the count can't separate it from a duplicate.
                 status = "provider-error"
+            if hung:
+                status = "resume-timeout"
             rec = {"framework": args.framework, "keyed": keyed, "trial": n, "run": run,
+                   "gateway": args.gateway, "crash": args.crash,
+                   "adopt": args.adopt == "yes", "courier": args.courier,
                    "model": args.model, "calls": args.calls, "think": args.think,
                    "latency": latency, "cycle": cycle, "horizon": horizon, "offset": offset,
                    "status": status, "rc": res.returncode,
                    "err": res.stderr.decode("utf-8", "replace")[-400:] if res.returncode else "",
                    "probe_5xx_so_far": quota.retried, "admitted": admitted, "duplicates": round(admitted) - args.calls,
+                   # The count is exact only if no gap between requests outlasted
+                   # one refill interval (see Quota.admitted).
+                   "max_gap": max_gap(before, after, log), "refill": before[2],
                    "sends_logged": sum(m["what"] == "send" for m in log),
                    "throttled": sum(m["what"] == "throttled" for m in log),
                    "server_errors": sum(m["what"] == "server-error" for m in log),
-                   "killed_at": killed, "outstanding_at_kill": outstanding}
+                   "killed_at": killed, "outstanding_at_kill": outstanding,
+                   "signals": signals(d)}
             out.write(json.dumps(rec) + "\n")
             out.flush()
             print(f"[{plan.index((n, keyed)) + 1}/{len(plan)}] key={'y' if keyed else 'n'} "
@@ -438,8 +511,16 @@ def main() -> int:
     ap.add_argument("--gap", type=float, default=12.0,
                     help="pause between trials, to stay inside the per-minute quotas")
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--gateway", action="store_true",
+                    help="e2e: send every call through an AgentOS gateway")
+    ap.add_argument("--crash", choices=["runtime", "agent"], default="runtime",
+                    help="e2e: kill the whole tree, or (AgentOS) only the agent's process")
+    ap.add_argument("--adopt", choices=["yes", "no"], default="yes",
+                    help="e2e, AgentOS: give a restarted agent its call in flight")
+    ap.add_argument("--courier", choices=["off", "on", "contained"], default="off",
+                    help="e2e, AgentOS: carry calls by courier; contained ones die too")
     ap.add_argument("--python", default=sys.executable)
-    ap.add_argument("--out", default=str(HERE / "results" / "real.jsonl"))
+    ap.add_argument("--out", default=str(HERE / "results" / "real" / "real.jsonl"))
     args = ap.parse_args()
     args.keyed = [k == "yes" for k in args.keyed.split(",")]
     {"inflight": inflight, "idem": idem, "e2e": e2e, "summary": summary}[args.experiment](args)

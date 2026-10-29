@@ -1,6 +1,6 @@
 """Tables (and, with matplotlib, figures) from crash-study results.
 
-    python -m benchmarks.crashstudy.analyze results/main.jsonl [--latex out.tex]
+    python -m benchmarks.crashstudy.analyze results/standin/main.jsonl [--latex out.tex]
 
 Alongside each measurement it prints what the analytic model predicts for the
 same parameters, so the two can be read side by side.
@@ -33,7 +33,7 @@ GRANULARITY = {
 }
 
 LABEL = {
-    "agentos": "AgentOS (intent journal)",
+    "agentos": "AgentOS, intent journal",
     "langgraph-node": "LangGraph, node per call",
     "langgraph-loop": "LangGraph, loop in one node",
     "temporal": "Temporal, activity per call",
@@ -260,7 +260,8 @@ MARKERS = ["o", "s", "^"]
 
 def _style(plt) -> None:
     plt.rcParams.update({
-        "font.family": "serif", "font.size": 8, "axes.edgecolor": INK_2,
+        "font.family": "serif", "font.serif": ["Times New Roman", "DejaVu Serif"],
+        "mathtext.fontset": "stix", "font.size": 8, "axes.edgecolor": INK_2,
         "axes.labelcolor": INK, "xtick.color": INK_2, "ytick.color": INK_2,
         "axes.spines.top": False, "axes.spines.right": False,
         "axes.linewidth": 0.6, "pdf.fonttype": 42,
@@ -325,9 +326,11 @@ def overhead(rows: list[dict], ledger: str) -> float:
     return statistics.median(extra)
 
 
-def figure_sweep(rows: list[dict], path: str, extra: float | None = None) -> None:
+def figure_sweep(rows: list[dict], path: str, extra: float | None = None,
+                 real: list[dict] | None = None) -> None:
     """P(dup) against the in-call time fraction, per framework, with the model:
-    at the nominal cycle, and with the measured per-call overhead if given."""
+    at the nominal cycle, and with the measured per-call overhead if given.
+    Rows from a real provider, if given, are pooled per think time."""
     import matplotlib.pyplot as plt
     _style(plt)
     pts: dict[str, dict[float, list[int]]] = {}
@@ -359,12 +362,34 @@ def figure_sweep(rows: list[dict], path: str, extra: float | None = None) -> Non
                     fmt=MARKERS[k % 3], color=SERIES[k % 3], markersize=4,
                     elinewidth=0.7, capsize=1.5, label=LABEL.get(fw, fw).split(" ")[0].rstrip(","),
                     markeredgecolor="white", markeredgewidth=0.5)
+    if real:
+        by: dict[float, list[int]] = {}
+        lat: dict[float, list[float]] = {}
+        for r in real:
+            if r["keyed"] or r["status"] not in ("ok", "failed"):
+                continue
+            by.setdefault(r["think"], []).append(int(r["duplicates"] > 0))
+            lat.setdefault(r["think"], []).append(r["latency"])
+        th = sorted(by)
+        fr = [statistics.median(lat[t]) / (statistics.median(lat[t]) + t) for t in th]
+        ps = [statistics.mean(by[t]) for t in th]
+        ci = [wilson(sum(by[t]), len(by[t])) for t in th]
+        ax.errorbar(fr, ps, yerr=[[p - c[0] for p, c in zip(ps, ci)],
+                                  [c[1] - p for p, c in zip(ps, ci)]],
+                    fmt="D", color=INK, markerfacecolor="white", markersize=4,
+                    elinewidth=0.7, capsize=1.5, label="real model, pooled")
     ax.set_xlabel("fraction of time inside calls, $L/(T+L)$")
     ax.set_ylabel("$P$(duplicate | crash)")
     ax.set_ylim(0, 1.05)
     ax.yaxis.grid(True, color=GRID, linewidth=0.5)
     ax.set_axisbelow(True)
-    ax.legend(frameon=False, loc="upper left", fontsize=7, handlelength=1.6)
+    if real:
+        # Above the axes: inside, it would cover the real-model points.
+        fig.set_size_inches(3.4, 2.6)
+        ax.legend(frameon=False, loc="lower left", bbox_to_anchor=(0, 1.0, 1, 0.3),
+                  ncol=3, mode="expand", fontsize=6.5, handlelength=1.4, columnspacing=0.8)
+    else:
+        ax.legend(frameon=False, loc="upper left", fontsize=7, handlelength=1.6)
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
@@ -377,6 +402,7 @@ def main() -> int:
     ap.add_argument("--bars", help="write the E[dup] bar chart here (pdf/png)")
     ap.add_argument("--sweep", help="write the P(dup) sweep figure here (pdf/png)")
     ap.add_argument("--ledger", help="the run's ledger.db: check the in-flight window")
+    ap.add_argument("--real", nargs="+", help="sweep: real-provider rows to overlay")
     args = ap.parse_args()
     rows = load(args.paths)
     if args.sweep:
@@ -384,7 +410,8 @@ def main() -> int:
         for r in rows:
             thinks.setdefault(r["framework"], set()).add(r["think"])
         rows = [r for r in rows if len(thinks[r["framework"]]) > 1]
-        figure_sweep(rows, args.sweep, overhead(rows, args.ledger) if args.ledger else None)
+        figure_sweep(rows, args.sweep, overhead(rows, args.ledger) if args.ledger else None,
+                     load(args.real) if args.real else None)
         return 0
     per = periods(rows, args.ledger) if args.ledger else None
     t = table(rows, per)

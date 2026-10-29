@@ -47,9 +47,34 @@ if os.name == "nt":
     _k32.OpenProcess.restype = wintypes.HANDLE
     _JOBS: dict[int, int] = {}
 
-    def _jail(proc: subprocess.Popen) -> None:
-        """Put the child in a job object: everything it spawns joins it."""
+    class _Basic(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64),
+                    ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD),
+                    ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t),
+                    ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t),
+                    ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class _Extended(ctypes.Structure):
+        _fields_ = [("Basic", _Basic), ("Io", ctypes.c_uint64 * 6),
+                    ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    def _jail(proc: subprocess.Popen, breakaway: bool = False) -> None:
+        """Put the child in a job object: everything it spawns joins it, except
+        what asks to break away, if `breakaway` lets it (AgentOS's couriers)."""
         job = _k32.CreateJobObjectW(None, None)
+        if breakaway:
+            info = _Extended()
+            info.Basic.LimitFlags = 0x800  # JOB_OBJECT_LIMIT_BREAKAWAY_OK
+            if not _k32.SetInformationJobObject(job, 9, ctypes.byref(info),
+                                                ctypes.sizeof(info)):
+                raise OSError(ctypes.get_last_error(), "SetInformationJobObject")
         handle = _k32.OpenProcess(0x1F0FFF, False, proc.pid)  # PROCESS_ALL_ACCESS
         if not _k32.AssignProcessToJobObject(job, handle):
             raise OSError(ctypes.get_last_error(), "AssignProcessToJobObject")
@@ -77,7 +102,7 @@ def kill_tree(proc: subprocess.Popen) -> float:
     return at
 
 
-def popen(args, env, log: Path) -> subprocess.Popen:
+def popen(args, env, log: Path, breakaway: bool = False) -> subprocess.Popen:
     kw = {}
     if os.name != "nt":
         kw["start_new_session"] = True
@@ -87,13 +112,46 @@ def popen(args, env, log: Path) -> subprocess.Popen:
         proc = subprocess.Popen(args, env=env, stdout=subprocess.DEVNULL,
                                 stderr=fh, **kw)
     if os.name == "nt":
-        _jail(proc)
+        _jail(proc, breakaway)
     return proc
 
 
 def drain(stream) -> None:
     """Keep reading a server's stdout so a full pipe never stalls it."""
     threading.Thread(target=lambda: [None for _ in stream], daemon=True).start()
+
+
+def start_temporal(python: str) -> tuple[subprocess.Popen, str]:
+    """A Temporal dev server for the run, and the address to reach it at."""
+    proc = subprocess.Popen(
+        [python, "-m", "benchmarks.crashstudy.temporal_server"],
+        cwd=ROOT, stdout=subprocess.PIPE, env=dict(os.environ, PYTHONPATH=str(ROOT)))
+    if os.name == "nt":
+        _jail(proc)  # it spawns the server binary; take both down
+    # The dev server shares our stdout and prints a banner first.
+    while True:
+        raw = proc.stdout.readline()
+        if not raw:
+            raise RuntimeError("temporal dev server exited before its address")
+        line = raw.decode(errors="replace").strip()
+        if re.fullmatch(r"[\d.]+:\d+", line):
+            break
+    drain(proc.stdout)
+    return proc, line
+
+
+def start_gateway(upstream: str, db: Path) -> tuple[subprocess.Popen, str]:
+    """An AgentOS gateway in its own process, outside every trial's job: it
+    must outlive the run it serves, as it would in production."""
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "agentos.cli", "--dir", str(db.with_suffix("")),
+         "gateway", "--upstream", upstream, "--port", "0", "--db", str(db),
+         "--log", str(db.with_suffix(".jsonl"))],
+        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        env=dict(os.environ, PYTHONPATH=str(ROOT)))
+    port = int(proc.stdout.readline())
+    drain(proc.stdout)
+    return proc, f"http://127.0.0.1:{port}"
 
 
 def tail(path: Path, n: int = 800) -> str:
@@ -146,12 +204,27 @@ def signals(rundir: Path) -> dict:
     return out
 
 
-def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
-          rng: random.Random, keyed: bool, scratch: Path) -> dict:
-    run = f"{fw}-{'k' if keyed else 'u'}-{n}-{rng.randrange(16**8):08x}"
-    rundir = scratch / run
-    rundir.mkdir(parents=True)
-    env = dict(
+def agent_kill(rundir: Path) -> float | None:
+    """Kill the agent's own process and nothing else; return when it landed.
+
+    AgentOS only: its agents are processes of their own, and the kernel that
+    made the agent's call lives on. The agent writes its pid on every life.
+    """
+    try:
+        pid = int((rundir / "agent.pid").read_text())
+    except (OSError, ValueError):
+        return None
+    at = time.time()
+    try:
+        os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+    except OSError:
+        return None
+    return at
+
+
+def run_env(fw: str, run: str, rundir: Path, args, port: int, temporal: str | None,
+            scratch: Path, keyed: bool, retries: int) -> dict:
+    return dict(
         os.environ, PYTHONPATH=str(ROOT), PYTHONUTF8="1",
         CS_RUN=run, CS_PORT=str(port), CS_DIR=str(rundir),
         CS_CALLS=str(args.calls), CS_THINK=str(args.think),
@@ -159,18 +232,40 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
         PREFECT_HOME=str(scratch / "prefect"),
         PREFECT_LOGGING_LEVEL="WARNING",
         PREFECT_LOCAL_STORAGE_PATH=str(scratch / "prefect" / "storage"),
+        # AgentOS only: adopt a dead agent's call, carry calls by courier, and
+        # restart a dead agent (an agent crash needs someone to restart it).
+        CS_ADOPT="1" if args.adopt == "yes" else "0",
+        CS_COURIER="0" if args.courier == "off" else "1",
+        # Windows contains a courier through the trial's job; POSIX has no job,
+        # so a contained courier must be told not to leave the process group.
+        AGENTOS_COURIER_DETACH="0" if args.courier == "contained" else "1",
+        CS_RETRIES=str(retries),
     )
+
+
+def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
+          rng: random.Random, keyed: bool, scratch: Path) -> dict:
+    run = f"{fw}-{'k' if keyed else 'u'}-{n}-{rng.randrange(16**8):08x}"
+    rundir = scratch / run
+    rundir.mkdir(parents=True)
+    env = run_env(fw, run, rundir, args, port, temporal, scratch, keyed,
+                  3 if args.crash == "agent" else 0)
     cmd = [args.python, "-m", "benchmarks.crashstudy.adapters", fw]
     # Work after the first charge: that call's latency, then (think + call)
-    # for each of the rest. The kill lands uniformly somewhere in it.
-    horizon = args.latency + (args.calls - 1) * (args.think + args.latency)
+    # for each of the rest, unless calibration measured it. The kill lands
+    # uniformly somewhere in it.
+    horizon = args.horizons.get((fw, keyed)) or (
+        args.latency + (args.calls - 1) * (args.think + args.latency))
     offset = rng.uniform(0, horizon)
 
     rec = {"framework": fw, "keyed": keyed, "trial": n, "run": run,
            "calls": args.calls, "latency": args.latency, "think": args.think,
-           "offset": offset, "horizon": horizon}
+           "offset": offset, "horizon": horizon, "crash": args.crash,
+           "adopt": args.adopt == "yes", "courier": args.courier}
     log = rundir / "start.log"
-    p = popen(cmd + ["start"], env, log)
+    # A courier may leave the trial's job only if the experiment says it may:
+    # "contained" is the control, a courier that dies with the runtime.
+    p = popen(cmd + ["start"], env, log, breakaway=args.courier == "on")
     deadline = time.time() + args.timeout
     t0 = None
     while time.time() < deadline and p.poll() is None:
@@ -186,20 +281,39 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
     while time.time() < kill_at and p.poll() is None:
         time.sleep(0.002)
     if p.poll() is not None:
+        kill_tree(p)
         rec.update(status="finished-before-kill", rc=p.returncode, err=tail(log))
         return rec
-    killed = kill_tree(p)
-    before = len(charge_times(ledger, run))
 
-    time.sleep(args.pause)
-    r0 = time.perf_counter()
-    try:
-        res = subprocess.run(cmd + ["resume"], env=env, capture_output=True,
-                             timeout=args.timeout)
-        rc, err = res.returncode, res.stderr.decode("utf-8", "replace")[-600:]
-    except subprocess.TimeoutExpired:
-        rc, err = "timeout", ""
+    if args.crash == "agent":
+        # The agent dies; the runtime restarts it and runs on. No resume.
+        killed = agent_kill(rundir)
+        if killed is None:
+            kill_tree(p)
+            rec.update(status="no-agent", err=tail(log))
+            return rec
+        before = len(charge_times(ledger, run))
+        r0 = time.perf_counter()
+        try:
+            rc = p.wait(timeout=args.timeout)
+        except subprocess.TimeoutExpired:
+            rc = "timeout"
+        kill_tree(p)
+        err = tail(log, 600)
+    else:
+        killed = kill_tree(p)
+        before = len(charge_times(ledger, run))
+        time.sleep(args.pause)
+        r0 = time.perf_counter()
+        try:
+            res = subprocess.run(cmd + ["resume"], env=env, capture_output=True,
+                                 timeout=args.timeout)
+            rc, err = res.returncode, res.stderr.decode("utf-8", "replace")[-600:]
+        except subprocess.TimeoutExpired:
+            rc, err = "timeout", ""
     recovery = time.perf_counter() - r0
+    if args.courier != "off":
+        time.sleep(args.settle)  # a courier still at work when the run ended
 
     times = charge_times(ledger, run)
     idx = paidapi.charges(ledger, run)
@@ -221,6 +335,26 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
         recovery_s=recovery,
     )
     return rec
+
+
+def calibrate(fw: str, keyed: bool, args, port: int, ledger: str, temporal: str | None,
+              scratch: Path, runs: int) -> float | None:
+    """The work after the first charge, measured on uncrashed runs: the median
+    of (last charge - first charge + one call). Couriers make a call slower
+    than the stand-in's latency alone, and an analytic horizon would then
+    crowd every kill into the early calls."""
+    spans = []
+    for c in range(runs):
+        run = f"calib-{fw}-{'k' if keyed else 'u'}-{c}-{random.randrange(16**8):08x}"
+        rundir = scratch / run
+        rundir.mkdir(parents=True)
+        env = run_env(fw, run, rundir, args, port, temporal, scratch, keyed, 0)
+        subprocess.run([args.python, "-m", "benchmarks.crashstudy.adapters", fw, "start"],
+                       env=env, capture_output=True, timeout=args.timeout)
+        times = charge_times(ledger, run)
+        if len(times) == args.calls:
+            spans.append(times[-1] - times[0] + args.latency)
+    return statistics.median(spans) if spans else None
 
 
 def summarise(rows: list[dict]) -> None:
@@ -263,7 +397,22 @@ def main() -> int:
     ap.add_argument("--out", default="crashstudy.jsonl")
     ap.add_argument("--summary", action="store_true",
                     help="only summarise an existing --out file")
+    ap.add_argument("--ignore-keys", action="store_true",
+                    help="the provider charges every request, key or not, as real ones do")
+    ap.add_argument("--gateway", action="store_true",
+                    help="put an AgentOS gateway between the runs and the provider")
+    ap.add_argument("--crash", choices=["runtime", "agent"], default="runtime",
+                    help="kill the whole process tree, or (AgentOS) only the agent's process")
+    ap.add_argument("--adopt", choices=["yes", "no"], default="yes",
+                    help="AgentOS: give a restarted agent its call in flight (no: re-issue it)")
+    ap.add_argument("--courier", choices=["off", "on", "contained"], default="off",
+                    help="AgentOS: carry calls by courier; contained ones die with the runtime")
+    ap.add_argument("--calibrate", type=int, default=0,
+                    help="uncrashed runs per configuration to measure the kill horizon")
+    ap.add_argument("--settle", type=float, default=1.0,
+                    help="with couriers: wait after a run for any still at work")
     args = ap.parse_args()
+    args.horizons = {}
 
     if args.summary:
         summarise([json.loads(l) for l in open(args.out, encoding="utf-8")])
@@ -277,8 +426,8 @@ def main() -> int:
     if os.path.exists(args.out):
         for line in open(args.out, encoding="utf-8"):
             r = json.loads(line)
-            if r["status"] == "late":
-                continue  # drawn again
+            if r["status"] in ("late", "never-started"):
+                continue  # drawn again: the crash never happened
             done[(r["framework"], r["keyed"])] = done.get((r["framework"], r["keyed"]), 0) + 1
     rng = random.Random(args.seed + sum(done.values()))
     scratch = Path(tempfile.mkdtemp(prefix="crashstudy-"))
@@ -289,27 +438,28 @@ def main() -> int:
     paidapi.init(ledger)
     api = subprocess.Popen(
         [sys.executable, "-m", "benchmarks.crashstudy.paidapi", "--ledger", ledger,
-         "--latency", str(args.latency)],
+         "--latency", str(args.latency)] + (["--ignore-keys"] if args.ignore_keys else []),
         cwd=ROOT, stdout=subprocess.PIPE, env=dict(os.environ, PYTHONPATH=str(ROOT)))
     port = int(api.stdout.readline())
     drain(api.stdout)
+    gateway_proc = None
+    if args.gateway:
+        gateway_proc, url = start_gateway(f"http://127.0.0.1:{port}",
+                                          Path(ledger.replace("-ledger.db", "-gateway.db")))
+        port = int(url.rsplit(":", 1)[1])  # the runs talk to the gateway
     temporal_proc, temporal = None, None
     if NEEDS_TEMPORAL & set(fws):
-        temporal_proc = subprocess.Popen(
-            [args.python, "-m", "benchmarks.crashstudy.temporal_server"],
-            cwd=ROOT, stdout=subprocess.PIPE, env=dict(os.environ, PYTHONPATH=str(ROOT)))
-        if os.name == "nt":
-            _jail(temporal_proc)  # it spawns the server binary; take both down
-        # The dev server shares our stdout and prints a banner first.
-        while True:
-            raw = temporal_proc.stdout.readline()
-            if not raw:
-                raise RuntimeError("temporal dev server exited before its address")
-            line = raw.decode(errors="replace").strip()
-            if re.fullmatch(r"[\d.]+:\d+", line):
-                temporal = line
-                break
-        drain(temporal_proc.stdout)
+        temporal_proc, temporal = start_temporal(args.python)
+
+    if args.crash == "agent" and fws != ["agentos"]:
+        ap.error("--crash agent is AgentOS's alone: only it runs agents as processes")
+    if args.calibrate:
+        for fw in fws:
+            for k in keyed:
+                args.horizons[(fw, k)] = calibrate(fw, k, args, port, ledger, temporal,
+                                                   scratch, args.calibrate)
+                print(f"calibrated {fw} key={'y' if k else 'n'}: horizon "
+                      f"{args.horizons[(fw, k)]}", flush=True)
 
     rows = []
     try:
@@ -320,6 +470,8 @@ def main() -> int:
             for i, (fw, k, n) in enumerate(plan, 1):
                 rec = trial(fw, n, args, port, ledger, temporal, rng, k, scratch)
                 rec["ledger"] = os.path.basename(ledger)
+                rec["gateway"], rec["provider_keys"] = args.gateway, not args.ignore_keys
+                rec["calibrated"] = bool(args.calibrate)
                 rows.append(rec)
                 out.write(json.dumps(rec) + "\n")
                 out.flush()
@@ -328,6 +480,8 @@ def main() -> int:
                       f"t={rec.get('killed_after', 0):.2f}", flush=True)
     finally:
         api.kill()
+        if gateway_proc is not None:
+            gateway_proc.kill()
         if temporal_proc is not None:
             kill_tree(temporal_proc)
     summarise(rows)
