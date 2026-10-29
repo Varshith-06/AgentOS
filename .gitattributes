@@ -1,0 +1,6 @@
+# Never touch line endings in these: a PDF's byte offsets break, and a
+# database is a database.
+*.pdf binary
+*.png binary
+*.db binary
+*.sqlite binary
