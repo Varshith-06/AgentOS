@@ -29,9 +29,14 @@ $A $S/crewai-1.15.2.jsonl | tail -n 2
 echo "== E5 Groq probes"
 $PY -m benchmarks.crashstudy.realprovider summary
 
-echo "== E2, E3, E5-E8: real models, the fix, the gateway (Table III, Table IV)"
+echo "== E2, E3, E5-E8: real models, the first fix, the gateway (Table III)"
 $PY -m benchmarks.crashstudy.summary --latex "$OUT/results-table.tex"
 
+echo "== E6, E7, E9-E13: the evaluation as re-run in Nov 2026 (Tables IV-VI)"
+$PY -m benchmarks.crashstudy.summary_v2 --json "$OUT/v2-summary.json"
+
+# Everything behind summary_v2, resumable, keys read from a file outside the repo:
+#   $PY -m benchmarks.crashstudy.run_v2 --python $PY --keys ~/.agentos-keys.env --state v2state
 # The experiments (each resumes if interrupted; finished trials are skipped).
 # Stand-in runs take hours on one machine; real runs wait out Groq's free
 # quota (about 1000 requests a day per model, 7000 for allam-2-7b).

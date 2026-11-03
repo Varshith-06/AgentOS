@@ -71,6 +71,7 @@ def main() -> int:
     ap.add_argument("--crash", choices=["runtime", "agent"], default="runtime")
     ap.add_argument("--adopt", choices=["yes", "no"], default="yes")
     ap.add_argument("--courier", choices=["off", "on", "contained"], default="off")
+    ap.add_argument("--calibrate", type=int, default=2, help="uncrashed runs per configuration")
     ap.add_argument("--out", help="default: results/real/real-main-<model>.jsonl")
     args = ap.parse_args()
     slug = args.model.split("/")[-1]
@@ -89,7 +90,7 @@ def main() -> int:
         if not todo:
             break
         fw, n = todo[0]
-        need = CALIBRATION + len(modes) * n * (PER_TRIAL + 2 * (args.calls - 6))
+        need = CALIBRATION * max(1, args.calibrate // 2) + len(modes) * n * (PER_TRIAL + 2 * (args.calls - 6))
         left, per = remaining(args.model)
         if left < need:
             # The next quota probe spends a request too, so wait for two more.
@@ -101,7 +102,7 @@ def main() -> int:
         print(f"{time.strftime('%X')} {slug}: {fw}, {n} per key mode", flush=True)
         subprocess.run([args.python, "-m", "benchmarks.crashstudy.realprovider", "e2e",
                         "--framework", fw, "--model", args.model, "--trials", str(n),
-                        "--keyed", args.keyed, "--calibrate", "2",
+                        "--keyed", args.keyed, "--calibrate", str(args.calibrate),
                         "--calls", str(args.calls), "--think", str(args.think),
                         "--seed", str(time.time_ns() % 2**31),
                         "--python", args.python, "--out", str(out)]

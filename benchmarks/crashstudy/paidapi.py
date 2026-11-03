@@ -71,7 +71,7 @@ class Handler(BaseHTTPRequestHandler):
                 cur = conn.execute(
                     "INSERT INTO charges (run, i, key, ts) VALUES (?, ?, ?, ?)",
                     (body["run"], body["i"], key, time.time()))
-                reply = {"i": body["i"], "charge": cur.lastrowid}
+                reply = {"i": body["i"], "charge": cur.lastrowid, "q": body.get("q")}
                 if key and not self.ignore_keys:
                     conn.execute("INSERT INTO keys VALUES (?, ?)",
                                  (key, json.dumps(reply)))
@@ -97,13 +97,14 @@ def main() -> int:
     ap.add_argument("--ledger", required=True)
     ap.add_argument("--latency", type=float, default=0.3)
     ap.add_argument("--port", type=int, default=0)
+    ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--ignore-keys", action="store_true",
                     help="charge every request, as the model providers we measured do")
     args = ap.parse_args()
     init(args.ledger)
     Handler.ledger, Handler.latency = args.ledger, args.latency
     Handler.ignore_keys = args.ignore_keys
-    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    srv = ThreadingHTTPServer((args.host, args.port), Handler)
     srv.daemon_threads = True
     print(srv.server_address[1], flush=True)
     srv.serve_forever()

@@ -208,8 +208,9 @@ def inflight(args) -> None:
 # --- e2e --------------------------------------------------------------------
 
 def _calls_log(d: Path) -> list[dict]:
-    f = d / "calls.jsonl"
-    return [json.loads(l) for l in f.read_text(encoding="utf-8").splitlines()] if f.exists() else []
+    from benchmarks.crashstudy.client import read_lines
+
+    return read_lines([d / "calls.jsonl"])
 
 
 def _outstanding(log: list[dict], kill: float) -> list[list]:
@@ -256,7 +257,9 @@ def e2e(args) -> None:
                     # AgentOS only (see run.py): adoption, couriers, agent restarts.
                     CS_ADOPT="1" if args.adopt == "yes" else "0",
                     CS_COURIER="0" if args.courier == "off" else "1",
-                    CS_RETRIES="3" if args.crash == "agent" else "0")
+                    CS_RETRIES="3" if args.crash == "agent" else "0",
+                    CS_TOOL_TIMEOUT="300",
+                    AGENTOS_COURIER_DETACH="0" if args.courier == "contained" else "1")
 
     try:
         _e2e(args, rng, scratch, adapter, env_for)
@@ -268,7 +271,7 @@ def e2e(args) -> None:
 
 
 def _e2e(args, rng, scratch: Path, adapter: list, env_for) -> None:
-    from benchmarks.crashstudy.run import LATE, agent_kill, kill_tree, popen, signals
+    from benchmarks.crashstudy.run import LATE, agent_kill, kill_tree, popen, replies, signals
 
     with httpx.Client() as client, open(args.out, "a", encoding="utf-8") as out:
         quota = Quota(client, args.model)
@@ -380,7 +383,10 @@ def _e2e(args, rng, scratch: Path, adapter: list, env_for) -> None:
                    "throttled": sum(m["what"] == "throttled" for m in log),
                    "server_errors": sum(m["what"] == "server-error" for m in log),
                    "killed_at": killed, "outstanding_at_kill": outstanding,
-                   "signals": signals(d)}
+                   "signals": signals(d), "drift": os.environ.get("CS_DRIFT"),
+                   "tokens": [m["usage"] for m in log
+                              if m["what"] == "reply" and m.get("usage")],
+                   **replies(d)}
             out.write(json.dumps(rec) + "\n")
             out.flush()
             print(f"[{plan.index((n, keyed)) + 1}/{len(plan)}] key={'y' if keyed else 'n'} "

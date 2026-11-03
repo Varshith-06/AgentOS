@@ -2,28 +2,91 @@
 
 from __future__ import annotations
 
+import glob
 import hashlib
 import json
 import os
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 # Temporal's start-to-close timeout (s): sized to the stand-in provider's call,
 # raised for real completions, whose latency has a long tail.
 ACTIVITY_TIMEOUT = float(os.environ.get("CS_ACTIVITY_TIMEOUT", "3"))
 
 
-def charge(i: int, key: str | None = None) -> dict:
-    """One billable call. Think time (local work after the reply) is separate."""
-    if os.environ.get("CS_PROVIDER") == "groq":
-        return _groq(i, key)
-    body = json.dumps({"run": os.environ["CS_RUN"], "i": i}).encode()
+# A number unique to this process, so a prompt built from it differs in each life.
+_NONCE = str(uuid.uuid4().int % 10**6).zfill(6)
+
+
+def read_lines(paths) -> list[dict]:
+    """Records from append-only logs. A kill can cut a process's last line short."""
+    out = []
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        out.append(json.loads(line))
+                    except ValueError:
+                        pass
+        except OSError:
+            pass
+    return out
+
+
+def _replies() -> list[dict]:
+    return read_lines(glob.glob(os.path.join(os.environ["CS_DIR"], "replies.*.jsonl")))
+
+
+def question(i: int) -> str:
+    """What call `i` asks. Normally the same in every life. CS_DRIFT changes that,
+    as a prompt holding a timestamp or fresh outside state would: `all` differs
+    in every life, `tail` only from the first call without a reply on record."""
+    mode = os.environ.get("CS_DRIFT")
+    if not mode:
+        return str(i)
+    if mode == "tail":
+        for r in _replies():
+            if r["i"] == i:
+                return r["asked"]
+    return f"{i}000{_NONCE}"
+
+
+def check(i: int, asked: str, reply: dict) -> None:
+    """Did this reply answer this question? The stand-in echoes the question and
+    a real model is asked to say it; a duplicate count sees neither."""
+    if "q" in reply:
+        ok = reply["q"] == asked
+    elif reply.get("text") and os.environ.get("CS_CHAIN") != "1":
+        ok = asked in reply["text"].replace(",", "")
+    else:
+        ok = None
+    # A file per process: agents side by side would overwrite each other's appends.
+    path = os.path.join(os.environ["CS_DIR"], f"replies.{os.getpid()}.jsonl")
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"t": time.time(), "pid": os.getpid(), "i": i, "asked": asked,
+                             "ok": ok}) + "\n")
+
+
+def charge(i: int, key: str | None = None, q: str | None = None) -> dict:
+    """One billable call. Think time (local work after the reply) is separate.
+    A caller that passes `q` checks the reply itself, where the reply lands."""
+    asked = question(i) if q is None else q
+    reply = _groq(i, key, asked) if os.environ.get("CS_PROVIDER") == "groq" else _standin(i, key, asked)
+    if q is None:
+        check(i, asked, reply)
+    return reply
+
+
+def _standin(i: int, key: str | None, q: str) -> dict:
+    body = json.dumps({"run": os.environ["CS_RUN"], "i": i, "q": q}).encode()
     headers = {"Content-Type": "application/json"}
     if key:
         headers["Idempotency-Key"] = key
     req = urllib.request.Request(
-        f"http://127.0.0.1:{os.environ['CS_PORT']}/charge", data=body,
+        f"http://{os.environ.get('CS_HOST', '127.0.0.1')}:{os.environ['CS_PORT']}/charge", data=body,
         headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read())
@@ -42,26 +105,32 @@ def _mark(what: str, i: int, **extra) -> None:
 _last: str | None = None
 
 
-def _prompt(i: int) -> str:
+def _prompt(i: int, q: str) -> str:
     if os.environ.get("CS_CHAIN") == "1":
         return (f"Step {i} of a task. The previous step said: {_last or '(nothing yet)'} "
                 "In one short sentence, say what to do next.")
-    return f"Reply with the number {i} and nothing else."
+    words = os.environ.get("CS_WORDS")
+    if words:  # a call as long as an agent's: seconds, not a fraction of one
+        return (f"Begin your reply with the number {q}, then write about {words} words on "
+                "how a town library might plan its next year.")
+    return f"Reply with the number {q} and nothing else."
 
 
-def _groq(i: int, key: str | None) -> dict:
+def _groq(i: int, key: str | None, q: str) -> dict:
     """The same call against a real model. Groq accepts the header and ignores it."""
     global _last
     model = os.environ.get("CS_MODEL", "openai/gpt-oss-120b")
-    prompt = _prompt(i)
-    request = {"model": model, "max_tokens": 64,
+    prompt = _prompt(i, q)
+    request = {"model": model, "max_tokens": int(os.environ.get("CS_MAX_TOKENS", "64")),
                "messages": [{"role": "user", "content": prompt}]}
-    if model.startswith(("openai/gpt-oss", "qwen/")):  # reasoning models; others reject it
+    if os.environ.get("CS_REASONING"):
+        request["reasoning_effort"] = os.environ["CS_REASONING"]
+    elif model.startswith(("openai/gpt-oss", "qwen/")):  # reasoning models; others reject it
         request["reasoning_effort"] = "low"
     body = json.dumps(request).encode()
     # Groq's edge refuses urllib's default User-Agent with a 403.
     headers = {"Content-Type": "application/json", "User-Agent": "crashstudy/1.0",
-               "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}"}
+               "Authorization": f"Bearer {os.environ[os.environ.get('CS_KEY_VAR', 'GROQ_API_KEY')]}"}
     if key:
         headers["Idempotency-Key"] = key
     for _ in range(5):
@@ -83,9 +152,9 @@ def _groq(i: int, key: str | None) -> dict:
                 raise
             time.sleep(float(e.headers.get("retry-after") or 5) + 1)
             continue
-        _mark("reply", i)
+        _mark("reply", i, usage=reply.get("usage"))
         _last = (reply["choices"][0]["message"].get("content") or "").strip()
-        return {"i": i, "id": reply.get("id")}
+        return {"i": i, "id": reply.get("id"), "text": _last}
     raise RuntimeError("rate-limited five times running")
 
 

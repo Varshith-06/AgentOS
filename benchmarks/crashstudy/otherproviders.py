@@ -190,13 +190,61 @@ def gemini_idem(args) -> None:
             time.sleep(args.gap)
 
 
+COMPAT = {  # name: (OpenAI-compatible base URL, key variable, is it a router?)
+    "cohere": ("https://api.cohere.com/compatibility/v1", "COHERE_API_KEY", False),
+    "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY", False),
+    "requesty": ("https://router.requesty.ai/v1", "REQUESTY_API_KEY", True),
+    "bazaarlink": ("https://bazaarlink.ai/v1", "BAZAARLINK_API_KEY", True),
+    "google": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY", False),
+    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", False),
+    "anthropic": ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY", False),
+}
+
+
+def compat_idem(args) -> None:
+    """The same request twice with one Idempotency-Key, on any OpenAI-compatible
+    API. Through a router, this tests the router and the provider behind it."""
+    base, var, router = COMPAT[args.via]
+    h = {"Authorization": f"Bearer {os.environ[var]}", "HTTP-Referer": "https://github.com/Varshith-06/AgentOS"}
+    prompt = "Reply with one random six-digit number and nothing else."
+    with httpx.Client() as client, open(args.out, "a", encoding="utf-8") as out:
+        for n in range(args.trials):
+            key = str(uuid.uuid4())
+            replies = []
+            for _ in range(2):
+                r = client.post(f"{base}/chat/completions", timeout=120,
+                                headers={**h, "Idempotency-Key": key},
+                                json={"model": args.model, "max_tokens": 32, "temperature": 1,
+                                      "messages": [{"role": "user", "content": prompt}]})
+                body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+                choice = (body.get("choices") or [{}])[0]
+                replies.append({"status": r.status_code, "id": body.get("id"),
+                                "text": ((choice.get("message") or {}).get("content") or "").strip(),
+                                "usage": body.get("usage"),
+                                "error": (body.get("error") or None) if r.status_code != 200 else None,
+                                "idem_headers": {k: v for k, v in r.headers.items()
+                                                 if "idempot" in k.lower() or "replay" in k.lower()}})
+            rec = {"provider": args.via, "router": router, "trial": n, "model": args.model,
+                   "key": key, "replies": replies,
+                   "same_id": replies[0]["id"] == replies[1]["id"],
+                   "same_text": replies[0]["text"] == replies[1]["text"]}
+            out.write(json.dumps(rec) + "\n")
+            out.flush()
+            print(f"[{n + 1}/{args.trials}] {args.via} {args.model} "
+                  f"{[r['status'] for r in replies]} same_id={rec['same_id']} "
+                  f"texts={[r['text'][:12] for r in replies]} "
+                  f"{replies[0]['error'] or ''}", flush=True)
+            time.sleep(args.gap)
+
+
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "_caller":
         _caller(sys.argv[2], sys.argv[3])
         return 0
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("experiment", choices=["or-inflight", "or-idem", "gemini-idem"])
+    ap.add_argument("experiment", choices=["or-inflight", "or-idem", "gemini-idem", "compat-idem"])
+    ap.add_argument("--via", choices=sorted(COMPAT), help="compat-idem: which API")
     ap.add_argument("--model")
     ap.add_argument("--trials", type=int, default=10)
     ap.add_argument("--window", type=float, default=3.0,
@@ -209,6 +257,11 @@ def main() -> int:
     defaults = {"or-inflight": ("nvidia/nemotron-3.5-lightning:free", "real-or-inflight"),
                 "or-idem": ("nvidia/nemotron-3.5-lightning:free", "real-or-idem"),
                 "gemini-idem": ("gemini-3.5-flash-lite", "real-gemini-idem")}
+    if args.experiment == "compat-idem":
+        args.out = args.out or str(HERE / "results" / "v2" / "probes.jsonl")
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        compat_idem(args)
+        return 0
     model, name = defaults[args.experiment]
     args.model = args.model or model
     args.out = args.out or str(HERE / "results" / "real" / f"{name}.jsonl")

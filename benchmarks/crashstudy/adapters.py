@@ -30,9 +30,9 @@ DIR = Path(os.environ.get("CS_DIR", "."))
 
 # --------------------------------------------------------------------------- agentos
 
-def courier_charge(i: int, idempotency_key: str | None = None) -> dict:
+def courier_charge(i: int, q: str | None = None, idempotency_key: str | None = None) -> dict:
     """The same call, as an AgentOS courier makes it: in a process of its own."""
-    return charge(i, idempotency_key)
+    return charge(i, idempotency_key, q)
 
 
 def agentos(phase: str) -> None:
@@ -42,18 +42,25 @@ def agentos(phase: str) -> None:
 
     from .agents import Caller
 
+    if os.environ.get("CS_NOFP") == "1":  # the control: recovery as it was, blind to the prompt
+        import agentos.kernel.kernel as kernel_module
+        kernel_module.fingerprint = lambda call: None
+
     class PaidAPI(ToolDriver):
         name = "paidapi"
-        timeout = 60.0
+        timeout = float(os.environ.get("CS_TOOL_TIMEOUT", "60"))
         idempotent = ("charge",) if keyed() else ()
         courier = {"charge": "benchmarks.crashstudy.adapters:courier_charge"}
 
-        async def op_charge(self, i: int, idempotency_key: str | None = None):
-            return await asyncio.to_thread(charge, i, idempotency_key)
+        async def op_charge(self, i: int, q: str | None = None,
+                            idempotency_key: str | None = None):
+            return await asyncio.to_thread(charge, i, idempotency_key, q)
 
     REGISTRY["paidapi"] = PaidAPI
+    agents = int(os.environ.get("CS_AGENTS", "1"))
     k = Kernel(
-        store=Store(DIR / "agentos"), tick=0.005, recover=phase == "resume",
+        store=Store(DIR / "agentos", durable=os.environ.get("CS_DURABLE") == "1"),
+        tick=0.005, recover=phase == "resume", slots=max(4, agents),
         tools={"paidapi": {}}, permissions={"*": ["paidapi"]},
         # The fixes under test: a dead agent's call adopted (on unless 0),
         # calls carried by couriers (off unless 1). Retries restart an agent
@@ -63,7 +70,8 @@ def agentos(phase: str) -> None:
         retries=int(os.environ.get("CS_RETRIES", "0")),
     )
     if phase == "start":
-        k.spawn(Caller(calls=calls()))
+        for a in range(agents):
+            k.spawn(Caller(calls=calls(), base=a * calls()))
     asyncio.run(k.run())
 
 
@@ -137,6 +145,60 @@ def temporal(phase: str) -> None:
         async with Worker(client, task_queue=RUN, workflows=[td.Calls],
                           activities=[td.billable]):
             await client.get_workflow_handle(RUN).result()
+
+    asyncio.run(go())
+
+
+def temporal_split(phase: str) -> None:
+    """Temporal as it is often deployed: workflow and activities on separate
+    workers, each restarted if it dies. The call lives in the activity worker,
+    so a dead workflow worker should not disturb it, much like AgentOS's kernel
+    outliving an agent."""
+    import subprocess
+    import time
+
+    from temporalio.client import Client
+
+    from . import temporal_defs as td
+
+    def worker(role: str) -> subprocess.Popen:
+        return subprocess.Popen([sys.executable, "-m", "benchmarks.crashstudy.adapters",
+                                 "temporal-split-worker", role])
+
+    async def go() -> None:
+        client = await Client.connect(os.environ["CS_TEMPORAL"])
+        if phase == "start":
+            await client.start_workflow(td.Calls.run, calls(), id=RUN, task_queue=RUN)
+        kids = {role: worker(role) for role in ("workflow", "activity")}
+        result = asyncio.create_task(client.get_workflow_handle(RUN).result())
+        try:
+            while not result.done():
+                for role, kid in kids.items():
+                    if kid.poll() is not None:
+                        kids[role] = worker(role)
+                await asyncio.sleep(0.05)
+            await result
+        finally:
+            for kid in kids.values():
+                kid.kill()
+            time.sleep(0.05)
+
+    asyncio.run(go())
+
+
+def temporal_split_worker(role: str) -> None:
+    from temporalio.client import Client
+    from temporalio.worker import Worker
+
+    from . import temporal_defs as td
+
+    async def go() -> None:
+        client = await Client.connect(os.environ["CS_TEMPORAL"])
+        kw = {"workflows": [td.Calls]} if role == "workflow" else {"activities": [td.billable]}
+        name = "agent.pid" if role == "workflow" else "activity.pid"
+        async with Worker(client, task_queue=RUN, **kw):
+            (DIR / name).write_text(str(os.getpid()))
+            await asyncio.Event().wait()
 
     asyncio.run(go())
 
@@ -313,6 +375,8 @@ FRAMEWORKS = {
     "langgraph-node": langgraph_node,
     "langgraph-loop": langgraph_loop,
     "temporal": temporal,
+    "temporal-split": temporal_split,
+    "temporal-split-worker": temporal_split_worker,
     "dbos": dbos,
     "crewai": crewai,
     "crewai-guarded": crewai_guarded,

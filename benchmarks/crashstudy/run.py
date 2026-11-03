@@ -33,7 +33,9 @@ sys.path.insert(0, str(ROOT))
 
 from benchmarks.crashstudy import paidapi  # noqa: E402
 
-NEEDS_TEMPORAL = {"temporal"}
+NEEDS_TEMPORAL = {"temporal", "temporal-split"}
+# Drawn again: the crash under study never happened.
+REDRAW = {"late", "never-started", "finished-before-kill", "no-agent", "no-courier"}
 # A kill this far past its drawn time is a host stall, not a sample (seconds).
 LATE = 0.05
 
@@ -140,12 +142,13 @@ def start_temporal(python: str) -> tuple[subprocess.Popen, str]:
     return proc, line
 
 
-def start_gateway(upstream: str, db: Path) -> tuple[subprocess.Popen, str]:
+def start_gateway(upstream: str, db: Path, port: int = 0,
+                  on_drift: str = "replay") -> tuple[subprocess.Popen, str]:
     """An AgentOS gateway in its own process, outside every trial's job: it
     must outlive the run it serves, as it would in production."""
     proc = subprocess.Popen(
         [sys.executable, "-m", "agentos.cli", "--dir", str(db.with_suffix("")),
-         "gateway", "--upstream", upstream, "--port", "0", "--db", str(db),
+         "gateway", "--upstream", upstream, "--port", str(port), "--db", str(db), "--on-drift", on_drift,
          "--log", str(db.with_suffix(".jsonl"))],
         cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         env=dict(os.environ, PYTHONPATH=str(ROOT)))
@@ -193,26 +196,63 @@ def signals(rundir: Path) -> dict:
     out: dict = {}
     notes = rundir / "notes.jsonl"
     if notes.exists():
-        out["attempts"] = [[n["i"], n.get("attempt")] for n in
-                           map(json.loads, notes.read_text(encoding="utf-8").splitlines())]
+        from benchmarks.crashstudy.client import read_lines
+
+        out["attempts"] = [[n["i"], n.get("attempt")] for n in read_lines([notes])]
     db = rundir / "agentos" / "runtime.db"
     if db.exists():
         conn = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
         out["announced"] = conn.execute(
             "SELECT COUNT(*) FROM events WHERE type = 'OutcomeAmbiguous'").fetchone()[0]
+        out["diverged"] = conn.execute(
+            "SELECT COUNT(*) FROM events WHERE type = 'ReplayDiverged'").fetchone()[0]
         conn.close()
     return out
 
 
-def agent_kill(rundir: Path) -> float | None:
-    """Kill the agent's own process and nothing else; return when it landed.
+def replies(rundir: Path) -> dict:
+    """Whether the replies the workload got answered what it asked, by its own
+    record: a run can be billed once and still have been told the wrong thing."""
+    from benchmarks.crashstudy.client import read_lines
 
-    AgentOS only: its agents are processes of their own, and the kernel that
-    made the agent's call lives on. The agent writes its pid on every life.
-    """
+    rows = read_lines(rundir.glob("replies.*.jsonl"))
+    return {"wrong_replies": sum(r["ok"] is False for r in rows),
+            "checked_replies": sum(r["ok"] is not None for r in rows),
+            "answered": len({r["i"] for r in rows})}
+
+
+def courier_pid(rundir: Path) -> int | None:
+    """The courier carrying a call right now, if one is."""
+    db = rundir / "agentos" / "couriers.db"
+    if not db.exists():
+        return None
+    conn = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True, timeout=5)
     try:
-        pid = int((rundir / "agent.pid").read_text())
+        row = conn.execute("SELECT pid FROM calls WHERE state = 'running' "
+                           "ORDER BY rowid DESC LIMIT 1").fetchone()
+    except sqlite3.Error:
+        row = None
+    finally:
+        conn.close()
+    return row[0] if row else None
+
+
+def read_pid(path: Path) -> int | None:
+    try:
+        return int(path.read_text())
     except (OSError, ValueError):
+        return None
+
+
+def agent_kill(rundir: Path, name: str = "agent.pid", pid: int | None = None) -> float | None:
+    """Kill one process and nothing else; return when it landed.
+
+    For AgentOS, the agent's own process: the kernel that made its call lives on,
+    and the agent writes its pid on every life. For Temporal split across
+    workers, one of those workers.
+    """
+    pid = pid or read_pid(rundir / name)
+    if pid is None:
         return None
     at = time.time()
     try:
@@ -240,6 +280,10 @@ def run_env(fw: str, run: str, rundir: Path, args, port: int, temporal: str | No
         # so a contained courier must be told not to leave the process group.
         AGENTOS_COURIER_DETACH="0" if args.courier == "contained" else "1",
         CS_RETRIES=str(retries),
+        CS_AGENTS=str(args.agents),
+        **({"CS_DRIFT": args.drift} if args.drift else {}),
+        **({"CS_NOFP": "1"} if args.no_fingerprint else {}),
+        **({"CS_DURABLE": "1"} if args.durable else {}),
     )
 
 
@@ -249,11 +293,12 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
     rundir = scratch / run
     rundir.mkdir(parents=True)
     env = run_env(fw, run, rundir, args, port, temporal, scratch, keyed,
-                  3 if args.crash == "agent" else 0)
+                  3 if args.crash in ("agent", "courier") else 0)
     cmd = [args.python, "-m", "benchmarks.crashstudy.adapters", fw]
     # Work after the first charge: that call's latency, then (think + call)
     # for each of the rest, unless calibration measured it. The kill lands
     # uniformly somewhere in it.
+    total = args.calls * args.agents
     horizon = args.horizons.get((fw, keyed)) or (
         args.latency + (args.calls - 1) * (args.think + args.latency))
     offset = rng.uniform(0, horizon)
@@ -285,15 +330,32 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
         rec.update(status="finished-before-kill", rc=p.returncode, err=tail(log))
         return rec
 
-    if args.crash == "agent":
-        # The agent dies; the runtime restarts it and runs on. No resume.
-        killed = agent_kill(rundir)
+    if args.crash in ("agent", "activity", "courier"):
+        # One process dies; the runtime restarts it and runs on. No resume.
+        if args.crash == "courier":
+            pid = courier_pid(rundir)
+            if pid is None:  # between calls: nothing for this crash to hit
+                kill_tree(p)
+                rec.update(status="no-courier", err="")
+                return rec
+            killed = agent_kill(rundir, pid=pid)
+        else:
+            first = "activity.pid" if args.crash == "activity" else "agent.pid"
+            killed = agent_kill(rundir, first)
         if killed is None:
             kill_tree(p)
             rec.update(status="no-agent", err=tail(log))
             return rec
         before = len(charge_times(ledger, run))
         r0 = time.perf_counter()
+        if args.double and args.crash == "agent":
+            # The restarted agent dies too, as a crash loop would have it.
+            old, until = read_pid(rundir / "agent.pid"), time.time() + 10
+            while time.time() < until and p.poll() is None \
+                    and read_pid(rundir / "agent.pid") == old:
+                time.sleep(0.005)
+            time.sleep(rng.uniform(0, args.double))
+            rec["second_kill"] = None if p.poll() is not None else agent_kill(rundir)
         try:
             rc = p.wait(timeout=args.timeout)
         except subprocess.TimeoutExpired:
@@ -301,10 +363,25 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
         kill_tree(p)
         err = tail(log, 600)
     else:
+        if args.kill_gateway:
+            # The gateway's machine goes too: the control for its zeros.
+            args.gw["proc"].kill()
         killed = kill_tree(p)
         before = len(charge_times(ledger, run))
+        if args.kill_gateway:
+            args.gw["proc"], _ = start_gateway(args.gw["upstream"], args.gw["db"], args.gw["port"],
+                                             args.on_drift)
         time.sleep(args.pause)
         r0 = time.perf_counter()
+        if args.double:
+            # Recovery itself is killed, at a moment drawn over its first seconds.
+            p2 = popen(cmd + ["resume"], env, rundir / "resume1.log",
+                       breakaway=args.courier == "on")
+            until = time.time() + rng.uniform(0, args.double)
+            while time.time() < until and p2.poll() is None:
+                time.sleep(0.002)
+            rec["second_kill"] = None if p2.poll() is not None else kill_tree(p2)
+            time.sleep(args.pause)
         try:
             res = subprocess.run(cmd + ["resume"], env=env, capture_output=True,
                                  timeout=args.timeout)
@@ -319,7 +396,8 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
     idx = paidapi.charges(ledger, run)
     rec["signals"] = signals(rundir)
     in_call = any(t <= killed < t + args.latency for t in times[:before])
-    status = "ok" if rc == 0 and set(idx) == set(range(args.calls)) else "failed"
+    status = "ok" if rc == 0 and set(idx) == set(range(total)) else "failed"
+    rec.update(replies(rundir))
     if killed - kill_at > LATE:
         # The harness and the run froze together (a suspend, or the process tree
         # being paused) and the kill landed off its draw. Whatever happened next
@@ -331,7 +409,7 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
         rc=rc, err=err if rc != 0 else "",
         killed_after=killed - t0, charged_before_kill=before,
         charged=len(idx), duplicates=len(idx) - len(set(idx)),
-        missing=args.calls - len(set(idx)), kill_in_call=in_call,
+        missing=total - len(set(idx)), kill_in_call=in_call,
         recovery_s=recovery,
     )
     return rec
@@ -352,7 +430,7 @@ def calibrate(fw: str, keyed: bool, args, port: int, ledger: str, temporal: str 
         subprocess.run([args.python, "-m", "benchmarks.crashstudy.adapters", fw, "start"],
                        env=env, capture_output=True, timeout=args.timeout)
         times = charge_times(ledger, run)
-        if len(times) == args.calls:
+        if len(times) == args.calls * args.agents:
             spans.append(times[-1] - times[0] + args.latency)
     return statistics.median(spans) if spans else None
 
@@ -401,8 +479,24 @@ def main() -> int:
                     help="the provider charges every request, key or not, as real ones do")
     ap.add_argument("--gateway", action="store_true",
                     help="put an AgentOS gateway between the runs and the provider")
-    ap.add_argument("--crash", choices=["runtime", "agent"], default="runtime",
-                    help="kill the whole process tree, or (AgentOS) only the agent's process")
+    ap.add_argument("--crash", choices=["runtime", "agent", "activity", "courier"],
+                    default="runtime",
+                    help="kill the whole process tree, or only the agent's process (AgentOS, "
+                         "or Temporal's workflow worker), Temporal's activity worker, or "
+                         "AgentOS's courier")
+    ap.add_argument("--double", type=float, default=0,
+                    help="kill recovery as well, within this many seconds of its start")
+    ap.add_argument("--kill-gateway", action="store_true",
+                    help="the gateway dies with the run, and is restarted for the resume")
+    ap.add_argument("--drift", choices=["tail", "all"],
+                    help="the prompt changes across a crash (see client.question)")
+    ap.add_argument("--no-fingerprint", action="store_true",
+                    help="AgentOS: recovery matches a call by position alone (the control)")
+    ap.add_argument("--durable", action="store_true", help="AgentOS: fsync every commit")
+    ap.add_argument("--agents", type=int, default=1,
+                    help="AgentOS: this many agents side by side, each making --calls calls")
+    ap.add_argument("--on-drift", choices=["replay", "reject", "reissue"], default="replay",
+                    help="the gateway's answer to a changed body under a known key")
     ap.add_argument("--adopt", choices=["yes", "no"], default="yes",
                     help="AgentOS: give a restarted agent its call in flight (no: re-issue it)")
     ap.add_argument("--courier", choices=["off", "on", "contained"], default="off",
@@ -413,6 +507,7 @@ def main() -> int:
                     help="with couriers: wait after a run for any still at work")
     args = ap.parse_args()
     args.horizons = {}
+    args.gw = {}
 
     if args.summary:
         summarise([json.loads(l) for l in open(args.out, encoding="utf-8")])
@@ -426,7 +521,7 @@ def main() -> int:
     if os.path.exists(args.out):
         for line in open(args.out, encoding="utf-8"):
             r = json.loads(line)
-            if r["status"] in ("late", "never-started"):
+            if r["status"] in REDRAW:
                 continue  # drawn again: the crash never happened
             done[(r["framework"], r["keyed"])] = done.get((r["framework"], r["keyed"]), 0) + 1
     rng = random.Random(args.seed + sum(done.values()))
@@ -444,15 +539,17 @@ def main() -> int:
     drain(api.stdout)
     gateway_proc = None
     if args.gateway:
-        gateway_proc, url = start_gateway(f"http://127.0.0.1:{port}",
-                                          Path(ledger.replace("-ledger.db", "-gateway.db")))
+        upstream = f"http://127.0.0.1:{port}"
+        gw_db = Path(ledger.replace("-ledger.db", "-gateway.db"))
+        gateway_proc, url = start_gateway(upstream, gw_db, on_drift=args.on_drift)
         port = int(url.rsplit(":", 1)[1])  # the runs talk to the gateway
+        args.gw = {"proc": gateway_proc, "upstream": upstream, "db": gw_db, "port": port}
     temporal_proc, temporal = None, None
     if NEEDS_TEMPORAL & set(fws):
         temporal_proc, temporal = start_temporal(args.python)
 
-    if args.crash == "agent" and fws != ["agentos"]:
-        ap.error("--crash agent is AgentOS's alone: only it runs agents as processes")
+    if args.crash == "agent" and not set(fws) <= {"agentos", "temporal-split"}:
+        ap.error("--crash agent needs agents or workers in processes of their own")
     if args.calibrate:
         for fw in fws:
             for k in keyed:
@@ -465,23 +562,32 @@ def main() -> int:
     try:
         with open(args.out, "a", encoding="utf-8") as out:
             # Interleaved, so drift in the machine's load spreads over everyone.
-            plan = [(fw, k, n) for n in range(args.trials) for fw in fws for k in keyed
-                    if n >= done.get((fw, k), 0)]
-            for i, (fw, k, n) in enumerate(plan, 1):
-                rec = trial(fw, n, args, port, ledger, temporal, rng, k, scratch)
-                rec["ledger"] = os.path.basename(ledger)
-                rec["gateway"], rec["provider_keys"] = args.gateway, not args.ignore_keys
-                rec["calibrated"] = bool(args.calibrate)
-                rows.append(rec)
-                out.write(json.dumps(rec) + "\n")
-                out.flush()
-                print(f"[{i}/{len(plan)}] {fw:15} key={'y' if k else 'n'} "
-                      f"{rec['status']:20} dup={rec.get('duplicates', '-')} "
-                      f"t={rec.get('killed_after', 0):.2f}", flush=True)
+            # A trial whose crash never happened is drawn again, and stays on record.
+            for _ in range(5):
+                plan = [(fw, k, n) for n in range(args.trials) for fw in fws for k in keyed
+                        if n >= done.get((fw, k), 0)]
+                if not plan:
+                    break
+                for i, (fw, k, n) in enumerate(plan, 1):
+                    rec = trial(fw, n, args, port, ledger, temporal, rng, k, scratch)
+                    rec["ledger"] = os.path.basename(ledger)
+                    rec["gateway"], rec["provider_keys"] = args.gateway, not args.ignore_keys
+                    rec["calibrated"] = bool(args.calibrate)
+                    rec["drift"], rec["fingerprint"] = args.drift, not args.no_fingerprint
+                    rec["agents"], rec["durable"] = args.agents, args.durable
+                    rows.append(rec)
+                    out.write(json.dumps(rec) + "\n")
+                    out.flush()
+                    if rec["status"] not in REDRAW:
+                        done[(fw, k)] = done.get((fw, k), 0) + 1
+                    print(f"[{i}/{len(plan)}] {fw:15} key={'y' if k else 'n'} "
+                          f"{rec['status']:20} dup={rec.get('duplicates', '-')} "
+                          f"wrong={rec.get('wrong_replies', '-')} "
+                          f"t={rec.get('killed_after', 0):.2f}", flush=True)
     finally:
         api.kill()
         if gateway_proc is not None:
-            gateway_proc.kill()
+            args.gw["proc"].kill()
         if temporal_proc is not None:
             kill_tree(temporal_proc)
     summarise(rows)

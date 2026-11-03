@@ -342,7 +342,7 @@ def figure_sweep(rows: list[dict], path: str, extra: float | None = None,
             int(r["duplicates"] > 0))
     # Only frameworks swept over more than one ratio; at most three series.
     pts = dict(sorted((fw, by) for fw, by in pts.items() if len(by) > 1)[:3])
-    fig, ax = plt.subplots(figsize=(3.4, 2.2))
+    fig, ax = plt.subplots(figsize=(3.4, 1.9))
     n, latency = rows[0]["calls"], rows[0]["latency"]
     xs = [i / 100 for i in range(20, 101)]
     thinks = [latency / x - latency for x in xs]

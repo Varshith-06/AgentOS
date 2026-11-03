@@ -5,7 +5,7 @@ from pathlib import Path
 
 from agentos import Agent
 
-from .client import think
+from .client import check, question, think
 
 
 class Caller(Agent):
@@ -14,7 +14,10 @@ class Caller(Agent):
         # process and leave the kernel be.
         if os.environ.get("CS_DIR"):
             Path(os.environ["CS_DIR"], "agent.pid").write_text(str(os.getpid()))
-        for i in range(self.params["calls"]):
+        base = self.params.get("base", 0)
+        for i in range(base, base + self.params["calls"]):
             think()
-            await ctx.request_tool("paidapi", "charge", i=i)
+            q = question(i)
+            out = await ctx.request_tool("paidapi", "charge", i=i, q=q)
+            check(i, q, out)
         return "done"
