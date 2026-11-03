@@ -14,7 +14,9 @@ follows four rules, each one a failure the crash study observed:
 
 1. The key names the call, not the body. A resumed agent often rebuilds a
    slightly different prompt for the same call. It gets the recorded reply,
-   flagged `Idempotency-Drift: true` (or a 409 with --on-drift reject).
+   flagged `Idempotency-Drift: true`. With --on-drift reject it gets a 409, and
+   with --on-drift reissue a call of its own, billed and flagged the same way:
+   the agent then reads an answer to what it asked, as a kernel's agent does.
 2. The gateway owns the upstream call. A client that disconnects does not
    cancel it: the provider bills it anyway, so its reply is kept for the resume.
 3. A repeat that arrives while the call is in flight waits for that call.
@@ -63,8 +65,9 @@ DEFAULT_PORT = 8787
 class Flight:
     """One upstream call, and every request waiting on it."""
 
-    def __init__(self, body_hash: str | None) -> None:
+    def __init__(self, body_hash: str | None, key: str | None = None) -> None:
         self.body_hash = body_hash
+        self.key = key  # the row it settles
         self.cond = threading.Condition()
         self.status: int | None = None
         self.headers: list[tuple[str, str]] = []
@@ -114,8 +117,8 @@ class Gateway:
         timeout: float = 600.0,
         log: str | Path | None = None,
     ) -> None:
-        if on_drift not in ("replay", "reject"):
-            raise ValueError("on_drift must be 'replay' or 'reject'")
+        if on_drift not in ("replay", "reject", "reissue"):
+            raise ValueError("on_drift must be 'replay', 'reject' or 'reissue'")
         u = urllib.parse.urlsplit(upstream)
         if u.scheme not in ("http", "https") or not u.netloc:
             raise ValueError(f"upstream must be an http(s) URL, got {upstream!r}")
@@ -155,14 +158,32 @@ class Gateway:
             self._log.write(json.dumps({"t": time.time(), **record}) + "\n")
             self._log.flush()
 
+    def _recorded_body(self, scope: str, key: str) -> str | None:
+        """The body this key last stood for, if that still counts. Under the lock."""
+        flight = self.flights.get((scope, key))
+        if flight is not None:
+            return flight.body_hash
+        row = self.db.execute("SELECT state, body_hash, created FROM calls "
+                              "WHERE scope = ? AND key = ?", (scope, key)).fetchone()
+        if row is None or (row[0] == "done" and row[2] < time.time() - self.ttl):
+            return None
+        return row[1]
+
     def admit(self, scope: str, key: str, body_hash: str) -> tuple[str, Any, dict[str, str]]:
         """What a keyed request gets: ("join", flight), ("replay", row) or
         ("start", flight), with the flags its reply will carry."""
         with self.lock:
+            reissued = False
+            if self.on_drift == "reissue":
+                recorded = self._recorded_body(scope, key)
+                if recorded is not None and recorded != body_hash:
+                    # A call of its own, under a key of its own: a repeat of this
+                    # body finds this reply, and a repeat of the first finds that.
+                    key, reissued = f"{key}\n{body_hash}", True
             flight = self.flights.get((scope, key))
             if flight is not None:
                 flags = {"Idempotent-Replayed": "true"}
-                if flight.body_hash != body_hash:
+                if flight.body_hash != body_hash or reissued:
                     flags["Idempotency-Drift"] = "true"
                 return "join", flight, flags
             row = self.db.execute(
@@ -170,13 +191,13 @@ class Gateway:
                 "WHERE scope = ? AND key = ?", (scope, key)).fetchone()
             if row is not None and row[0] == "done" and row[5] >= time.time() - self.ttl:
                 flags = {"Idempotent-Replayed": "true"}
-                if row[1] != body_hash:
+                if row[1] != body_hash or reissued:
                     flags["Idempotency-Drift"] = "true"
                 return "replay", row, flags
-            flags = {}
+            flags = {"Idempotency-Drift": "true"} if reissued else {}
             if row is not None and row[0] in ("pending", "unknown"):
                 flags["Idempotency-Outcome"] = "unknown"
-            flight = Flight(body_hash)
+            flight = Flight(body_hash, key)
             self.flights[(scope, key)] = flight
             self.db.execute(
                 "INSERT INTO calls (scope, key, body_hash, state, created) "
@@ -286,7 +307,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 gw.count("upstream")
                 threading.Thread(target=gw.forward, daemon=True,
-                                 args=(flight, "POST", self.path, body, fwd, scope, key)).start()
+                                 args=(flight, "POST", self.path, body, fwd, scope, flight.key)).start()
         self._relay(flight, flags)
         if what == "passthrough":
             return

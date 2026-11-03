@@ -221,6 +221,22 @@ class GatewayTest(unittest.TestCase):
         self.assertEqual(s, 409)
         self.assertEqual(self.calls(), 1)
 
+    def test_a_changed_body_can_be_a_call_of_its_own(self):
+        url = self.start_gateway(on_drift="reissue")
+        _, h1, b1 = self.post({"q": 1}, key="k", url=url)
+        self.assertNotIn("idempotency-drift", h1)
+        s, h2, b2 = self.post({"q": 2}, key="k", url=url)
+        self.assertEqual(s, 200)
+        self.assertEqual(self.calls(), 2, "a different question gets its own answer")
+        self.assertEqual(h2["idempotency-drift"], "true", "and says so")
+        self.assertNotIn("idempotent-replayed", h2)
+        _, h3, b3 = self.post({"q": 2}, key="k", url=url)
+        self.assertEqual((self.calls(), b3), (2, b2), "that answer is kept in turn")
+        self.assertEqual(h3["idempotent-replayed"], "true")
+        _, h4, b4 = self.post({"q": 1}, key="k", url=url)
+        self.assertEqual((self.calls(), b4), (2, b1), "and so is the first")
+        self.assertNotIn("idempotency-drift", h4)
+
     def test_keys_belong_to_one_credential(self):
         self.post({"q": 1}, key="k", auth="Bearer a")
         _, h, _ = self.post({"q": 1}, key="k", auth="Bearer b")
