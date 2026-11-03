@@ -745,8 +745,11 @@ $ python -m agentos.cli recover
     ("note",
      "<b>The honest claim.</b> Without these mechanisms AgentOS re-billed a "
      "call in 73% of random crashes, like every other framework measured. With "
-     "them, 0 of 279 agent and runtime crashes re-billed a call (§24). A host "
-     "crash is still at-least-once; what changes is that it is flagged."),
+     "them, 0 of 380 agent and runtime crashes re-billed a call (§24). A host "
+     "crash is still at-least-once; what changes is that it is flagged. A "
+     "request that changes across the crash is billed again on purpose, and "
+     "published as ReplayDiverged, so an agent never reads the answer to "
+     "another question."),
 
     ("h2", "16. The store"),
     ("body",
@@ -1191,18 +1194,19 @@ control, with shell granted: shell.run -> detector works
      "flight</b>: it is re-billed from the moment the provider commits to it "
      "until its reply is recorded, which is most of the time for a real agent. "
      "Idempotency keys removed every duplicate against a provider built to "
-     "honour them — but Groq, OpenRouter and Google all ignored the key, and "
+     "honour them — but Groq, OpenRouter, Google and Cohere all ignored the key, and "
      "on real models keyed configurations re-billed about as often as unkeyed "
      "ones."),
     ("body",
      "Keeping the reply alive (§15) is what closed the gap. Against a provider "
      "that ignores keys, agent and runtime crashes that re-billed a call went "
-     "from 217 of 282 to <b>0 of 279</b>, on Windows, on Linux and on a hosted "
-     "model. Couriers cost one process hand-off per call: about 80ms on "
-     "Windows, 18ms on Linux. Other frameworks get the same effect from "
+     "from 287 of 380 to <b>0 of 380</b>, on Windows, on Linux and on five hosted "
+     "models. Couriers cost one process hand-off per call: 100-145ms on "
+     "Windows, about 30ms on Linux. Other frameworks get the same effect from "
      "<font face='Courier'>agent gateway</font>, which finishes a call whose "
      "client disconnected and answers the resumed framework's repeat of its "
-     "key: 263 of 350 crashes re-billed without it, none with it."),
+     "key: 263 of 350 crashes re-billed without it, none with it, if the "
+     "gateway survives. Killed with the run, it re-billed 61 of 90."),
     ("h3", "Overhead and latency: against Temporal only"),
     ("body",
      "The recovery table above is a fair fight, because checkpoint "
@@ -1217,7 +1221,7 @@ control, with shell granted: shell.run -> detector works
         [
             ["Per durable step", "<b>10.6ms</b> — a socket into another address space", "68.7ms — gRPC to a server"],
             ["Approve &rarr; finished", "<b>1.9ms</b> (worst 2.5ms)", "7.3ms (worst 8.9ms)"],
-            ["Call in flight at a kill", "<b>billed once</b> with couriers (0 of 279 crashes)", "re-billed in 80% of crashes (at-least-once, as documented)"],
+            ["Call in flight at a kill", "<b>billed once</b> with couriers (0 of 380 crashes, with adoption)", "re-billed in 80% of crashes with one worker (at-least-once, as documented). With split workers: 0 of 30 if the workflow worker dies, 22 of 30 if the activity worker does"],
             ["What it needs", "one process, zero dependencies", "a server cluster"],
             ["Durability boundary", "this machine", "many machines"],
         ],

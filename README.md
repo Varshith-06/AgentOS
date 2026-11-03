@@ -465,17 +465,24 @@ nothing asked of the provider. AgentOS keeps it in two places:
   host restart still ends in a flagged repeat.
 
 Under the same harness, with a provider that ignores keys, the agent and
-runtime crashes that re-billed a call went from 217 of 282 to 0 of 279, on
-Windows, on Linux, and on a Groq model. Couriers kept inside the runtime's
-process tree, as on a host crash, re-billed as before, and every unkeyed repeat
-was flagged. A courier costs a process hand-off per call: about 80ms on
-Windows, 18ms on Linux.
+runtime crashes that re-billed a call went from 287 of 380 to 0 of 380, on
+Windows, on Linux, and on five hosted models. Couriers kept inside the runtime's
+process tree re-billed as before, and every unkeyed repeat was flagged. A courier
+costs a process hand-off per call: 100-145ms on Windows, about 30ms on Linux, more with
+many agents at once. Adoption costs nothing measurable.
+
+A reply answers the request it was made for. If a restarted agent asks something
+else at the same point, say because its prompt holds a timestamp, the recorded
+reply is dropped, `ReplayDiverged` is published, and the new request is made and
+billed.
 
 Other frameworks get the same effect from `agent gateway --upstream <provider
 URL>`: a deduplicating gateway in its own process that finishes a call whose
 client disconnected and keeps the reply for the resume. It needs the stable
 call key each framework can supply; with it, the other nine configurations went
-from 263 of 350 crashes re-billed to none.
+from 263 of 350 crashes re-billed to none, as long as the gateway itself survives.
+By default a key reused with a different body gets the recorded reply, flagged only
+in a header. `--on-drift reissue` makes it a new call, and `reject` refuses it.
 
 ---
 
