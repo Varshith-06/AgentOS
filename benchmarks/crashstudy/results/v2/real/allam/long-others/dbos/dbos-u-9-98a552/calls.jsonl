@@ -1,0 +1,16 @@
+{"t": 1793658169.744116, "what": "send", "i": 0, "h": "f17018c3c37d"}
+{"t": 1793658170.318634, "what": "reply", "i": 0, "usage": {"queue_time": 0.049959942, "prompt_tokens": 35, "prompt_time": 0.001520047, "completion_tokens": 400, "completion_time": 0.286423081, "total_tokens": 435, "total_time": 0.287943128}}
+{"t": 1793658170.4307218, "what": "send", "i": 1, "h": "90bd38da1de4"}
+{"t": 1793658170.8377593, "what": "reply", "i": 1, "usage": {"queue_time": 0.051234346, "prompt_tokens": 35, "prompt_time": 0.001834543, "completion_tokens": 400, "completion_time": 0.286942943, "total_tokens": 435, "total_time": 0.288777486}}
+{"t": 1793658170.944288, "what": "send", "i": 2, "h": "f8da9ac61f78"}
+{"t": 1793658171.3686, "what": "reply", "i": 2, "usage": {"queue_time": 0.046378765, "prompt_tokens": 35, "prompt_time": 0.001672605, "completion_tokens": 400, "completion_time": 0.285641903, "total_tokens": 435, "total_time": 0.287314508}}
+{"t": 1793658171.4811418, "what": "send", "i": 3, "h": "2fbc1547e1e1"}
+{"t": 1793658171.9093957, "what": "reply", "i": 3, "usage": {"queue_time": 0.051274486, "prompt_tokens": 35, "prompt_time": 0.001674905, "completion_tokens": 400, "completion_time": 0.28580772, "total_tokens": 435, "total_time": 0.287482625}}
+{"t": 1793658172.0166616, "what": "send", "i": 4, "h": "e13cec12ce91"}
+{"t": 1793658172.0854561, "what": "throttled", "i": 4}
+{"t": 1793658174.4799736, "what": "send", "i": 4, "h": "e13cec12ce91"}
+{"t": 1793658174.955456, "what": "reply", "i": 4, "usage": {"queue_time": 0.048889842, "prompt_tokens": 35, "prompt_time": 0.001523648, "completion_tokens": 400, "completion_time": 0.292709048, "total_tokens": 435, "total_time": 0.294232696}}
+{"t": 1793658175.0640647, "what": "send", "i": 5, "h": "4b8f1c2103bd"}
+{"t": 1793658175.1306813, "what": "throttled", "i": 5}
+{"t": 1793658180.1317272, "what": "send", "i": 5, "h": "4b8f1c2103bd"}
+{"t": 1793658180.533455, "what": "reply", "i": 5, "usage": {"queue_time": 0.049009603, "prompt_tokens": 35, "prompt_time": 0.001518818, "completion_tokens": 400, "completion_time": 0.285433696, "total_tokens": 435, "total_time": 0.286952514}}

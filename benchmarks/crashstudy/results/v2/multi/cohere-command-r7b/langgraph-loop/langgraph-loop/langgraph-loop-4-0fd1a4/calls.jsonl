@@ -1,0 +1,23 @@
+{"t": 1793655258.104769, "what": "send", "i": 0, "h": "f17018c3c37d"}
+{"t": 1793655261.2554445, "what": "reply", "i": 0, "usage": {"prompt_tokens": 28, "completion_tokens": 215, "total_tokens": 243, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655261.3568878, "what": "send", "i": 1, "h": "90bd38da1de4"}
+{"t": 1793655264.383084, "what": "reply", "i": 1, "usage": {"prompt_tokens": 28, "completion_tokens": 202, "total_tokens": 230, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655264.4845881, "what": "send", "i": 2, "h": "f8da9ac61f78"}
+{"t": 1793655267.5830572, "what": "reply", "i": 2, "usage": {"prompt_tokens": 28, "completion_tokens": 197, "total_tokens": 225, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655267.6841266, "what": "send", "i": 3, "h": "2fbc1547e1e1"}
+{"t": 1793655270.9323545, "what": "reply", "i": 3, "usage": {"prompt_tokens": 28, "completion_tokens": 214, "total_tokens": 242, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655271.0336616, "what": "send", "i": 4, "h": "e13cec12ce91"}
+{"t": 1793655274.487426, "what": "reply", "i": 4, "usage": {"prompt_tokens": 28, "completion_tokens": 218, "total_tokens": 246, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655274.5886655, "what": "send", "i": 5, "h": "4b8f1c2103bd"}
+{"t": 1793655279.317492, "what": "send", "i": 0, "h": "f17018c3c37d"}
+{"t": 1793655282.9398022, "what": "reply", "i": 0, "usage": {"prompt_tokens": 28, "completion_tokens": 234, "total_tokens": 262, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655283.0412865, "what": "send", "i": 1, "h": "90bd38da1de4"}
+{"t": 1793655286.7183287, "what": "reply", "i": 1, "usage": {"prompt_tokens": 28, "completion_tokens": 232, "total_tokens": 260, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655286.8194532, "what": "send", "i": 2, "h": "f8da9ac61f78"}
+{"t": 1793655290.5345936, "what": "reply", "i": 2, "usage": {"prompt_tokens": 28, "completion_tokens": 245, "total_tokens": 273, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655290.6356807, "what": "send", "i": 3, "h": "2fbc1547e1e1"}
+{"t": 1793655294.0496075, "what": "reply", "i": 3, "usage": {"prompt_tokens": 28, "completion_tokens": 224, "total_tokens": 252, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655294.1506855, "what": "send", "i": 4, "h": "e13cec12ce91"}
+{"t": 1793655297.5056734, "what": "reply", "i": 4, "usage": {"prompt_tokens": 28, "completion_tokens": 220, "total_tokens": 248, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793655297.6066675, "what": "send", "i": 5, "h": "4b8f1c2103bd"}
+{"t": 1793655300.6283326, "what": "reply", "i": 5, "usage": {"prompt_tokens": 28, "completion_tokens": 214, "total_tokens": 242, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}

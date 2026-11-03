@@ -1,0 +1,14 @@
+{"t": 1793652755.7819636, "what": "send", "i": 0, "h": "bc846a0cb6ec"}
+{"t": 1793652757.4534254, "what": "reply", "i": 0, "usage": {"completion_tokens": 188, "prompt_tokens": 38, "total_tokens": 226}}
+{"t": 1793652757.564803, "what": "send", "i": 1, "h": "3ecd5af9a164"}
+{"t": 1793652759.009234, "what": "reply", "i": 1, "usage": {"completion_tokens": 198, "prompt_tokens": 38, "total_tokens": 236}}
+{"t": 1793652759.1210976, "what": "send", "i": 2, "h": "4a12e9151ca2"}
+{"t": 1793652760.1630735, "what": "send", "i": 2, "h": "509303a3e7ea"}
+{"t": 1793652760.5946398, "what": "reply", "i": 2, "usage": {"completion_tokens": 190, "prompt_tokens": 38, "total_tokens": 228}}
+{"t": 1793652761.5920897, "what": "reply", "i": 2, "usage": {"completion_tokens": 202, "prompt_tokens": 38, "total_tokens": 240}}
+{"t": 1793652761.7022898, "what": "send", "i": 3, "h": "09f720bcf2a1"}
+{"t": 1793652762.9781566, "what": "reply", "i": 3, "usage": {"completion_tokens": 193, "prompt_tokens": 38, "total_tokens": 231}}
+{"t": 1793652763.0889974, "what": "send", "i": 4, "h": "b24f75b93ff9"}
+{"t": 1793652764.4773073, "what": "reply", "i": 4, "usage": {"completion_tokens": 183, "prompt_tokens": 38, "total_tokens": 221}}
+{"t": 1793652764.5877473, "what": "send", "i": 5, "h": "f0a2bff77e5f"}
+{"t": 1793652766.0051556, "what": "reply", "i": 5, "usage": {"completion_tokens": 205, "prompt_tokens": 38, "total_tokens": 243}}

@@ -1,0 +1,14 @@
+{"t": 1793651473.074999, "what": "send", "i": 0, "h": "2c87dd83f92a"}
+{"t": 1793651473.729136, "what": "reply", "i": 0, "usage": {"queue_time": 0.435485224, "prompt_tokens": 81, "prompt_time": 0.02576988, "completion_tokens": 21, "completion_time": 0.043686742, "total_tokens": 102, "total_time": 0.069456622, "completion_tokens_details": {"reasoning_tokens": 11}}}
+{"t": 1793651473.833572, "what": "send", "i": 1, "h": "449e996df410"}
+{"t": 1793651474.1713548, "what": "reply", "i": 1, "usage": {"queue_time": 0.212259298, "prompt_tokens": 81, "prompt_time": 0.003438728, "completion_tokens": 27, "completion_time": 0.056125291, "total_tokens": 108, "total_time": 0.059564019, "completion_tokens_details": {"reasoning_tokens": 17}}}
+{"t": 1793651474.2788804, "what": "send", "i": 2, "h": "0f009b586097"}
+{"t": 1793651474.766463, "what": "reply", "i": 2, "usage": {"queue_time": 0.351827684, "prompt_tokens": 81, "prompt_time": 0.004141642, "completion_tokens": 24, "completion_time": 0.049458393, "total_tokens": 105, "total_time": 0.053600035, "completion_tokens_details": {"reasoning_tokens": 14}}}
+{"t": 1793651474.8694987, "what": "send", "i": 3, "h": "9057c709364e"}
+{"t": 1793651475.3741293, "what": "reply", "i": 3, "usage": {"queue_time": 0.391899872, "prompt_tokens": 81, "prompt_time": 0.003095452, "completion_tokens": 19, "completion_time": 0.039490295, "total_tokens": 100, "total_time": 0.042585747, "completion_tokens_details": {"reasoning_tokens": 9}}}
+{"t": 1793651475.4771261, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793651475.9630222, "what": "reply", "i": 4, "usage": {"queue_time": 0.352063146, "prompt_tokens": 81, "prompt_time": 0.003651569, "completion_tokens": 31, "completion_time": 0.063878407, "total_tokens": 112, "total_time": 0.067529976, "completion_tokens_details": {"reasoning_tokens": 21}}}
+{"t": 1793651476.0663757, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793651476.13574, "what": "throttled", "i": 5}
+{"t": 1793651479.1367834, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793651479.4607847, "what": "reply", "i": 5, "usage": {"queue_time": 0.212958745, "prompt_tokens": 81, "prompt_time": 0.003658527, "completion_tokens": 21, "completion_time": 0.044282898, "total_tokens": 102, "total_time": 0.047941425, "completion_tokens_details": {"reasoning_tokens": 11}}}

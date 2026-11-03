@@ -1,0 +1,24 @@
+{"t": 1793652768.310073, "what": "send", "i": 0, "h": "c63d7036dfc1"}
+{"t": 1793652770.1342466, "what": "reply", "i": 0, "usage": {"completion_tokens": 206, "prompt_tokens": 38, "total_tokens": 244}}
+{"t": 1793652770.2459118, "what": "send", "i": 1, "h": "c9901adb3b11"}
+{"t": 1793652771.701869, "what": "send", "i": 1, "h": "69988cf4a1f0"}
+{"t": 1793652771.9728103, "what": "reply", "i": 1, "usage": {"completion_tokens": 191, "prompt_tokens": 38, "total_tokens": 229}}
+{"t": 1793652773.15372, "what": "reply", "i": 1, "usage": {"completion_tokens": 203, "prompt_tokens": 38, "total_tokens": 241}}
+{"t": 1793652773.2638843, "what": "send", "i": 2, "h": "9186b714685f"}
+{"t": 1793652774.8142068, "what": "reply", "i": 2, "usage": {"completion_tokens": 187, "prompt_tokens": 38, "total_tokens": 225}}
+{"t": 1793652774.9248052, "what": "send", "i": 3, "h": "b8f1a9697005"}
+{"t": 1793652776.1344266, "what": "reply", "i": 3, "usage": {"completion_tokens": 190, "prompt_tokens": 38, "total_tokens": 228}}
+{"t": 1793652776.245594, "what": "send", "i": 4, "h": "ea7a4cb80b5d"}
+{"t": 1793652777.7355053, "what": "reply", "i": 4, "usage": {"completion_tokens": 184, "prompt_tokens": 38, "total_tokens": 222}}
+{"t": 1793652777.8458405, "what": "send", "i": 5, "h": "2ef2527a3181"}
+{"t": 1793652778.241921, "what": "throttled", "i": 5}
+{"t": 1793652784.2431393, "what": "send", "i": 5, "h": "2ef2527a3181"}
+{"t": 1793652784.5639083, "what": "throttled", "i": 5}
+{"t": 1793652790.5648863, "what": "send", "i": 5, "h": "2ef2527a3181"}
+{"t": 1793652790.9120579, "what": "throttled", "i": 5}
+{"t": 1793652796.913104, "what": "send", "i": 5, "h": "2ef2527a3181"}
+{"t": 1793652797.3278134, "what": "throttled", "i": 5}
+{"t": 1793652803.328648, "what": "send", "i": 5, "h": "2ef2527a3181"}
+{"t": 1793652803.844193, "what": "throttled", "i": 5}
+{"t": 1793652810.687044, "what": "send", "i": 5, "h": "c5b220b2af6a"}
+{"t": 1793652812.2842715, "what": "reply", "i": 5, "usage": {"completion_tokens": 193, "prompt_tokens": 38, "total_tokens": 231}}

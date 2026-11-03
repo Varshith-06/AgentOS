@@ -1,0 +1,12 @@
+{"t": 1793656058.9496045, "what": "send", "i": 0, "h": "b509ce9268b2"}
+{"t": 1793656059.1619198, "what": "reply", "i": 0, "usage": {"queue_time": 0.049787284, "prompt_tokens": 35, "prompt_time": 0.001520965, "completion_tokens": 44, "completion_time": 0.031368499, "total_tokens": 79, "total_time": 0.032889464}}
+{"t": 1793656059.265759, "what": "send", "i": 1, "h": "35a72ff86396"}
+{"t": 1793656059.4197, "what": "reply", "i": 1, "usage": {"queue_time": 0.045903311, "prompt_tokens": 72, "prompt_time": 0.002503449, "completion_tokens": 29, "completion_time": 0.020784151, "total_tokens": 101, "total_time": 0.0232876}}
+{"t": 1793656059.5238156, "what": "send", "i": 2, "h": "3c00ccecae52"}
+{"t": 1793656059.6738162, "what": "reply", "i": 2, "usage": {"queue_time": 0.049913106, "prompt_tokens": 57, "prompt_time": 0.002180544, "completion_tokens": 28, "completion_time": 0.021195795, "total_tokens": 85, "total_time": 0.023376339}}
+{"t": 1793656060.3259652, "what": "send", "i": 3, "h": "5cfdae2de026"}
+{"t": 1793656060.4875014, "what": "reply", "i": 3, "usage": {"queue_time": 0.050462245, "prompt_tokens": 56, "prompt_time": 0.002176605, "completion_tokens": 27, "completion_time": 0.02082011, "total_tokens": 83, "total_time": 0.022996715}}
+{"t": 1793656060.5913815, "what": "send", "i": 4, "h": "7e28ac215426"}
+{"t": 1793656060.7577949, "what": "reply", "i": 4, "usage": {"queue_time": 0.050804546, "prompt_tokens": 55, "prompt_time": 0.002167525, "completion_tokens": 35, "completion_time": 0.025062961, "total_tokens": 90, "total_time": 0.027230486}}
+{"t": 1793656060.8606117, "what": "send", "i": 5, "h": "0de63729612a"}
+{"t": 1793656061.0179727, "what": "reply", "i": 5, "usage": {"queue_time": 0.049873437, "prompt_tokens": 63, "prompt_time": 0.002332782, "completion_tokens": 33, "completion_time": 0.023517657, "total_tokens": 96, "total_time": 0.025850439}}

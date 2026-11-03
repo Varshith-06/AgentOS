@@ -1,0 +1,16 @@
+{"t": 1793651206.2997866, "what": "send", "i": 0, "h": "2c87dd83f92a"}
+{"t": 1793651206.4763024, "what": "reply", "i": 0, "usage": {"queue_time": 0.046878434, "prompt_tokens": 17, "prompt_time": 0.001041845, "completion_tokens": 4, "completion_time": 0.003153893, "total_tokens": 21, "total_time": 0.004195738}}
+{"t": 1793651206.5797503, "what": "send", "i": 1, "h": "449e996df410"}
+{"t": 1793651206.6975236, "what": "reply", "i": 1, "usage": {"queue_time": 0.051927076, "prompt_tokens": 17, "prompt_time": 0.001043944, "completion_tokens": 4, "completion_time": 0.003153754, "total_tokens": 21, "total_time": 0.004197698}}
+{"t": 1793651206.8048608, "what": "send", "i": 2, "h": "0f009b586097"}
+{"t": 1793651206.9258862, "what": "reply", "i": 2, "usage": {"queue_time": 0.051805256, "prompt_tokens": 17, "prompt_time": 0.001047474, "completion_tokens": 4, "completion_time": 0.003160194, "total_tokens": 21, "total_time": 0.004207668}}
+{"t": 1793651207.0289776, "what": "send", "i": 3, "h": "9057c709364e"}
+{"t": 1793651207.171586, "what": "reply", "i": 3, "usage": {"queue_time": 0.052368325, "prompt_tokens": 17, "prompt_time": 0.001035855, "completion_tokens": 4, "completion_time": 0.003154474, "total_tokens": 21, "total_time": 0.004190329}}
+{"t": 1793651207.2751327, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793651207.3927674, "what": "reply", "i": 4, "usage": {"queue_time": 0.052625575, "prompt_tokens": 17, "prompt_time": 0.001040995, "completion_tokens": 4, "completion_time": 0.003150745, "total_tokens": 21, "total_time": 0.00419174}}
+{"t": 1793651207.4960158, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793651207.6117592, "what": "reply", "i": 5, "usage": {"queue_time": 0.046876654, "prompt_tokens": 17, "prompt_time": 0.001054055, "completion_tokens": 4, "completion_time": 0.003170184, "total_tokens": 21, "total_time": 0.004224239}}
+{"t": 1793651208.3894682, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793651208.4509091, "what": "throttled", "i": 5}
+{"t": 1793651211.4519665, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793651211.8552923, "what": "reply", "i": 5, "usage": {"queue_time": 0.307211881, "prompt_tokens": 17, "prompt_time": 0.001037535, "completion_tokens": 4, "completion_time": 0.003154284, "total_tokens": 21, "total_time": 0.004191819}}

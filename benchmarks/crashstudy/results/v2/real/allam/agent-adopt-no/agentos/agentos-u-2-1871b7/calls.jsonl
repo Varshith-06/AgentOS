@@ -1,0 +1,14 @@
+{"t": 1793651143.401347, "what": "send", "i": 0, "h": "2c87dd83f92a"}
+{"t": 1793651143.5928197, "what": "reply", "i": 0, "usage": {"queue_time": 0.053004525, "prompt_tokens": 17, "prompt_time": 0.001032405, "completion_tokens": 4, "completion_time": 0.003145953, "total_tokens": 21, "total_time": 0.004178358}}
+{"t": 1793651143.7569635, "what": "send", "i": 0, "h": "2c87dd83f92a"}
+{"t": 1793651143.9385638, "what": "reply", "i": 0, "usage": {"queue_time": 0.045783182, "prompt_tokens": 17, "prompt_time": 0.001044645, "completion_tokens": 64, "completion_time": 0.046047047, "total_tokens": 81, "total_time": 0.047091692}}
+{"t": 1793651144.043419, "what": "send", "i": 1, "h": "449e996df410"}
+{"t": 1793651144.180182, "what": "reply", "i": 1, "usage": {"queue_time": 0.052040354, "prompt_tokens": 17, "prompt_time": 0.001047885, "completion_tokens": 4, "completion_time": 0.003155394, "total_tokens": 21, "total_time": 0.004203279}}
+{"t": 1793651144.2833076, "what": "send", "i": 2, "h": "0f009b586097"}
+{"t": 1793651144.3965187, "what": "reply", "i": 2, "usage": {"queue_time": 0.046207659, "prompt_tokens": 17, "prompt_time": 0.001319311, "completion_tokens": 4, "completion_time": 0.002942537, "total_tokens": 21, "total_time": 0.004261848}}
+{"t": 1793651144.499438, "what": "send", "i": 3, "h": "9057c709364e"}
+{"t": 1793651144.6366558, "what": "reply", "i": 3, "usage": {"queue_time": 0.052580614, "prompt_tokens": 17, "prompt_time": 0.001048635, "completion_tokens": 4, "completion_time": 0.003154254, "total_tokens": 21, "total_time": 0.004202889}}
+{"t": 1793651144.7396204, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793651144.8690865, "what": "reply", "i": 4, "usage": {"queue_time": 0.052395496, "prompt_tokens": 17, "prompt_time": 0.001045914, "completion_tokens": 4, "completion_time": 0.003157154, "total_tokens": 21, "total_time": 0.004203068}}
+{"t": 1793651144.9718883, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793651145.1041498, "what": "reply", "i": 5, "usage": {"queue_time": 0.052401044, "prompt_tokens": 17, "prompt_time": 0.001036435, "completion_tokens": 4, "completion_time": 0.003153625, "total_tokens": 21, "total_time": 0.00419006}}

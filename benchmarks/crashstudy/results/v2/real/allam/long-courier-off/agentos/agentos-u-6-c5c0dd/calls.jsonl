@@ -1,0 +1,17 @@
+{"t": 1793657053.5812426, "what": "send", "i": 0, "h": "f17018c3c37d"}
+{"t": 1793657054.76021, "what": "send", "i": 0, "h": "f17018c3c37d"}
+{"t": 1793657055.233084, "what": "reply", "i": 0, "usage": {"queue_time": 0.05089812, "prompt_tokens": 35, "prompt_time": 0.00199328, "completion_tokens": 400, "completion_time": 0.292066843, "total_tokens": 435, "total_time": 0.294060123}}
+{"t": 1793657055.3369513, "what": "send", "i": 1, "h": "90bd38da1de4"}
+{"t": 1793657055.7684643, "what": "reply", "i": 1, "usage": {"queue_time": 0.051156016, "prompt_tokens": 35, "prompt_time": 0.001751954, "completion_tokens": 400, "completion_time": 0.285668039, "total_tokens": 435, "total_time": 0.287419993}}
+{"t": 1793657055.8721106, "what": "send", "i": 2, "h": "f8da9ac61f78"}
+{"t": 1793657056.2775366, "what": "reply", "i": 2, "usage": {"queue_time": 0.051661952, "prompt_tokens": 35, "prompt_time": 0.001531617, "completion_tokens": 400, "completion_time": 0.28559595, "total_tokens": 435, "total_time": 0.287127567}}
+{"t": 1793657056.380839, "what": "send", "i": 3, "h": "2fbc1547e1e1"}
+{"t": 1793657056.8026698, "what": "reply", "i": 3, "usage": {"queue_time": 0.045910733, "prompt_tokens": 35, "prompt_time": 0.001522417, "completion_tokens": 400, "completion_time": 0.285690069, "total_tokens": 435, "total_time": 0.287212486}}
+{"t": 1793657056.9058573, "what": "send", "i": 4, "h": "e13cec12ce91"}
+{"t": 1793657056.9669993, "what": "throttled", "i": 4}
+{"t": 1793657060.9681594, "what": "send", "i": 4, "h": "e13cec12ce91"}
+{"t": 1793657061.3735933, "what": "reply", "i": 4, "usage": {"queue_time": 0.051551458, "prompt_tokens": 35, "prompt_time": 0.001864402, "completion_tokens": 400, "completion_time": 0.286064383, "total_tokens": 435, "total_time": 0.287928785}}
+{"t": 1793657061.4768138, "what": "send", "i": 5, "h": "4b8f1c2103bd"}
+{"t": 1793657061.5395756, "what": "throttled", "i": 5}
+{"t": 1793657065.540941, "what": "send", "i": 5, "h": "4b8f1c2103bd"}
+{"t": 1793657066.0532737, "what": "reply", "i": 5, "usage": {"queue_time": 0.052279575, "prompt_tokens": 35, "prompt_time": 0.001672824, "completion_tokens": 400, "completion_time": 0.284016636, "total_tokens": 435, "total_time": 0.28568946}}

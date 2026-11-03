@@ -1,0 +1,15 @@
+{"t": 1793652222.59988, "what": "send", "i": 0, "h": "2c87dd83f92a"}
+{"t": 1793652222.7798617, "what": "reply", "i": 0, "usage": {"queue_time": 0.051565574, "prompt_tokens": 17, "prompt_time": 0.001039885, "completion_tokens": 4, "completion_time": 0.003158935, "total_tokens": 21, "total_time": 0.00419882}}
+{"t": 1793652222.8880155, "what": "send", "i": 1, "h": "449e996df410"}
+{"t": 1793652223.0231934, "what": "reply", "i": 1, "usage": {"queue_time": 0.051642664, "prompt_tokens": 17, "prompt_time": 0.001043055, "completion_tokens": 4, "completion_time": 0.003162275, "total_tokens": 21, "total_time": 0.00420533}}
+{"t": 1793652223.1267536, "what": "send", "i": 2, "h": "0f009b586097"}
+{"t": 1793652223.2448773, "what": "reply", "i": 2, "usage": {"queue_time": 0.046687914, "prompt_tokens": 17, "prompt_time": 0.001064294, "completion_tokens": 4, "completion_time": 0.003171725, "total_tokens": 21, "total_time": 0.004236019}}
+{"t": 1793652223.3476698, "what": "send", "i": 3, "h": "9057c709364e"}
+{"t": 1793652224.6052709, "what": "send", "i": 3, "h": "9057c709364e"}
+{"t": 1793652224.7942746, "what": "reply", "i": 3, "usage": {"queue_time": 0.051553714, "prompt_tokens": 17, "prompt_time": 0.001035175, "completion_tokens": 4, "completion_time": 0.003145825, "total_tokens": 21, "total_time": 0.004181}}
+{"t": 1793652224.8975832, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793652225.023014, "what": "reply", "i": 4, "usage": {"queue_time": 0.046315264, "prompt_tokens": 17, "prompt_time": 0.001043395, "completion_tokens": 4, "completion_time": 0.003150194, "total_tokens": 21, "total_time": 0.004193589}}
+{"t": 1793652225.1261249, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793652225.2106347, "what": "throttled", "i": 5}
+{"t": 1793652228.2120204, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793652228.3443496, "what": "reply", "i": 5, "usage": {"queue_time": 0.046479565, "prompt_tokens": 17, "prompt_time": 0.001071484, "completion_tokens": 4, "completion_time": 0.003171875, "total_tokens": 21, "total_time": 0.004243359}}

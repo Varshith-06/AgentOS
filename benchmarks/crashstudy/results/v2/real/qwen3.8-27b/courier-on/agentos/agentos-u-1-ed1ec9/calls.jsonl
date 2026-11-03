@@ -1,0 +1,12 @@
+{"t": 1793652166.418021, "what": "send", "i": 0, "h": "2c87dd83f92a"}
+{"t": 1793652166.7587461, "what": "reply", "i": 0, "usage": {"queue_time": 0.05247282, "prompt_tokens": 50, "prompt_time": 0.003720109, "completion_tokens": 29, "completion_time": 0.061440693, "total_tokens": 79, "total_time": 0.065160802, "completion_tokens_details": {"reasoning_tokens": 25}}}
+{"t": 1793652166.9108846, "what": "send", "i": 1, "h": "449e996df410"}
+{"t": 1793652167.2337186, "what": "reply", "i": 1, "usage": {"queue_time": 0.054263434, "prompt_tokens": 50, "prompt_time": 0.003454765, "completion_tokens": 18, "completion_time": 0.034372234, "total_tokens": 68, "total_time": 0.037826999, "completion_tokens_details": {"reasoning_tokens": 14}}}
+{"t": 1793652167.3829696, "what": "send", "i": 2, "h": "0f009b586097"}
+{"t": 1793652167.7269793, "what": "reply", "i": 2, "usage": {"queue_time": 0.054132149, "prompt_tokens": 50, "prompt_time": 0.003563023, "completion_tokens": 21, "completion_time": 0.040630466, "total_tokens": 71, "total_time": 0.044193489, "completion_tokens_details": {"reasoning_tokens": 17}}}
+{"t": 1793652169.2338312, "what": "send", "i": 3, "h": "9057c709364e"}
+{"t": 1793652169.4805362, "what": "reply", "i": 3, "usage": {"queue_time": 0.049863712, "prompt_tokens": 50, "prompt_time": 0.003313437, "completion_tokens": 26, "completion_time": 0.049560509, "total_tokens": 76, "total_time": 0.052873946, "completion_tokens_details": {"reasoning_tokens": 22}}}
+{"t": 1793652169.6305394, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793652169.8899624, "what": "reply", "i": 4, "usage": {"queue_time": 0.053138315, "prompt_tokens": 50, "prompt_time": 0.003330926, "completion_tokens": 29, "completion_time": 0.056967549, "total_tokens": 79, "total_time": 0.060298475, "completion_tokens_details": {"reasoning_tokens": 25}}}
+{"t": 1793652170.041223, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793652170.3130596, "what": "reply", "i": 5, "usage": {"queue_time": 0.048052996, "prompt_tokens": 50, "prompt_time": 0.003582473, "completion_tokens": 27, "completion_time": 0.051451136, "total_tokens": 77, "total_time": 0.055033609, "completion_tokens_details": {"reasoning_tokens": 23}}}

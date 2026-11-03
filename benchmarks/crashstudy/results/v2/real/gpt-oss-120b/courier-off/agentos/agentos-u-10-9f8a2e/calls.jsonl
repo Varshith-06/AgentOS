@@ -1,0 +1,15 @@
+{"t": 1793652166.137674, "what": "send", "i": 0, "h": "2c87dd83f92a"}
+{"t": 1793652166.8406546, "what": "reply", "i": 0, "usage": {"queue_time": 0.352618991, "prompt_tokens": 81, "prompt_time": 0.003428243, "completion_tokens": 32, "completion_time": 0.066146188, "total_tokens": 113, "total_time": 0.069574431, "completion_tokens_details": {"reasoning_tokens": 22}}}
+{"t": 1793652166.9445508, "what": "send", "i": 1, "h": "449e996df410"}
+{"t": 1793652167.5320148, "what": "reply", "i": 1, "usage": {"queue_time": 0.352597362, "prompt_tokens": 81, "prompt_time": 0.003431473, "completion_tokens": 31, "completion_time": 0.064004379, "total_tokens": 112, "total_time": 0.067435852, "completion_tokens_details": {"reasoning_tokens": 21}}}
+{"t": 1793652167.6357532, "what": "send", "i": 2, "h": "0f009b586097"}
+{"t": 1793652167.9775221, "what": "reply", "i": 2, "usage": {"queue_time": 0.211082954, "prompt_tokens": 81, "prompt_time": 0.003011563, "completion_tokens": 27, "completion_time": 0.056044665, "total_tokens": 108, "total_time": 0.059056228, "completion_tokens_details": {"reasoning_tokens": 17}}}
+{"t": 1793652168.0802672, "what": "send", "i": 3, "h": "9057c709364e"}
+{"t": 1793652168.8899257, "what": "reply", "i": 3, "usage": {"queue_time": 0.683743366, "prompt_tokens": 81, "prompt_time": 0.010178354, "completion_tokens": 24, "completion_time": 0.050213047, "total_tokens": 105, "total_time": 0.060391401, "completion_tokens_details": {"reasoning_tokens": 14}}}
+{"t": 1793652168.9928973, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793652169.307311, "what": "reply", "i": 4, "usage": {"queue_time": 0.211722986, "prompt_tokens": 81, "prompt_time": 0.0034275, "completion_tokens": 17, "completion_time": 0.035136034, "total_tokens": 98, "total_time": 0.038563534, "completion_tokens_details": {"reasoning_tokens": 7}}}
+{"t": 1793652169.4105089, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793652171.1030707, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793652171.2422383, "what": "throttled", "i": 5}
+{"t": 1793652174.2432885, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793652174.419969, "what": "reply", "i": 5, "usage": {"queue_time": 0.052068979, "prompt_tokens": 81, "prompt_time": 0.00356783, "completion_tokens": 26, "completion_time": 0.054166131, "total_tokens": 107, "total_time": 0.057733961, "completion_tokens_details": {"reasoning_tokens": 16}}}

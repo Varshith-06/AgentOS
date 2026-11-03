@@ -1,0 +1,16 @@
+{"t": 1793651446.2959096, "what": "send", "i": 0, "h": "2c87dd83f92a"}
+{"t": 1793651446.8302026, "what": "reply", "i": 0, "usage": {"queue_time": 0.320718154, "prompt_tokens": 81, "prompt_time": 0.024996124, "completion_tokens": 27, "completion_time": 0.05627922, "total_tokens": 108, "total_time": 0.081275344, "completion_tokens_details": {"reasoning_tokens": 17}}}
+{"t": 1793651446.938276, "what": "send", "i": 1, "h": "449e996df410"}
+{"t": 1793651447.2857163, "what": "reply", "i": 1, "usage": {"queue_time": 0.217867915, "prompt_tokens": 81, "prompt_time": 0.015571662, "completion_tokens": 22, "completion_time": 0.0460866, "total_tokens": 103, "total_time": 0.061658262, "completion_tokens_details": {"reasoning_tokens": 12}}}
+{"t": 1793651447.3891501, "what": "send", "i": 2, "h": "0f009b586097"}
+{"t": 1793651447.7619636, "what": "reply", "i": 2, "usage": {"queue_time": 0.213053417, "prompt_tokens": 81, "prompt_time": 0.012860939, "completion_tokens": 31, "completion_time": 0.06502003, "total_tokens": 112, "total_time": 0.077880969, "completion_tokens_details": {"reasoning_tokens": 21}}}
+{"t": 1793651447.864837, "what": "send", "i": 3, "h": "9057c709364e"}
+{"t": 1793651448.3783152, "what": "reply", "i": 3, "usage": {"queue_time": 0.391320101, "prompt_tokens": 81, "prompt_time": 0.003074673, "completion_tokens": 17, "completion_time": 0.035164182, "total_tokens": 98, "total_time": 0.038238855, "completion_tokens_details": {"reasoning_tokens": 7}}}
+{"t": 1793651448.4811354, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793651448.8171852, "what": "reply", "i": 4, "usage": {"queue_time": 0.212039248, "prompt_tokens": 81, "prompt_time": 0.003685062, "completion_tokens": 28, "completion_time": 0.05836427, "total_tokens": 109, "total_time": 0.062049332, "completion_tokens_details": {"reasoning_tokens": 18}}}
+{"t": 1793651449.4304988, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793651449.5000737, "what": "throttled", "i": 4}
+{"t": 1793651452.5012288, "what": "send", "i": 4, "h": "df741b4f6bad"}
+{"t": 1793651452.9964914, "what": "reply", "i": 4, "usage": {"queue_time": 0.358928382, "prompt_tokens": 81, "prompt_time": 0.016673643, "completion_tokens": 29, "completion_time": 0.060715119, "total_tokens": 110, "total_time": 0.077388762, "completion_tokens_details": {"reasoning_tokens": 19}}}
+{"t": 1793651453.099144, "what": "send", "i": 5, "h": "0700987c4bc9"}
+{"t": 1793651453.5567389, "what": "reply", "i": 5, "usage": {"queue_time": 0.325728296, "prompt_tokens": 81, "prompt_time": 0.015885759, "completion_tokens": 20, "completion_time": 0.041980242, "total_tokens": 101, "total_time": 0.057866001, "completion_tokens_details": {"reasoning_tokens": 10}}}
