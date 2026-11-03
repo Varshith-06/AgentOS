@@ -1,0 +1,13 @@
+{
+  "title": "AgentOS: A Fault-Tolerant Runtime for Preventing Duplicate LLM Calls in Agentic Systems (code, harness, and data)",
+  "description": "Code, crash-study harness, and recorded results. benchmarks/crashstudy/reproduce.sh regenerates the paper's Table III and Fig. 3 from the recorded results and prints the counts behind Tables IV and V.",
+  "creators": [
+    {
+      "name": "Paluru, Sai Varshith",
+      "affiliation": "ABV-Indian Institute of Information Technology and Management, Gwalior"
+    }
+  ],
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "MIT"
+}

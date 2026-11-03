@@ -54,6 +54,7 @@ $PY -m benchmarks.crashstudy.summary_v2 --json "$OUT/v2-summary.json"
 #   OPENROUTER_API_KEY=... $PY -m benchmarks.crashstudy.otherproviders or-inflight --trials 18
 #   OPENROUTER_API_KEY=... $PY -m benchmarks.crashstudy.otherproviders or-idem --trials 10
 #   GEMINI_API_KEY=... $PY -m benchmarks.crashstudy.otherproviders gemini-idem --trials 10
+# Superseded October runs of the fix, kept for the record; run_v2 above is what the paper reports.
 # The fix (E6 on Windows, E7 on Linux): the stand-in ignores keys, as real providers do.
 #   F=$R/agentos-fix   # on Linux: F=$R/agentos-fix/linux
 #   for A in no yes; do $PY -m benchmarks.crashstudy.run --frameworks agentos --keyed both --ignore-keys \

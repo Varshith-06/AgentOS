@@ -16,8 +16,8 @@ mid-task and it resumes from its last completed call. The one call that was
 *in flight* is the exception, for AgentOS and for every framework we measured:
 it gets re-issued under its original idempotency key when the tool honours
 one, and otherwise it is re-issued **and flagged**, never silently repeated.
-See [what a crash costs](#what-a-crash-costs) for nine configurations of seven
-frameworks, killed at random moments.
+See [what a crash costs](#what-a-crash-costs) for ten configurations of six
+frameworks and AgentOS, killed at random moments.
 
 And because an agent's identity is JSON, agents don't have to be written in
 advance. POST a sentence and a tool list; a planner **invents the team at
@@ -415,23 +415,25 @@ Four things to take from it:
   provider applying a call and the framework recording the reply re-bills that
   call on every framework here: all 163 kills that landed inside a 300ms call
   re-billed it. The window closes only once the framework has recorded the
-  reply, a few tens of milliseconds later. Real agents spend almost all their
-  time inside model calls, so for them most crashes cost one.
+  reply, a few tens of milliseconds later. How often a crash lands there depends on
+  the share of a run spent inside calls: with 0.1s of local work per call it is most
+  crashes, and an agent with long tool steps sees fewer.
 - **Granularity decides how much more you pay.** A recovery unit that spans
   the whole loop repeats everything it had done. CrewAI's documented resume
   restores the flow's state and then runs it again from `@start`.
 - **Exactly-once lives in the provider contract.** Keys took every framework to
   zero. For model calls, though, there is no contract to honour: the official
   `openai` and `anthropic` Python SDKs generate an idempotency key and never
-  send it, and neither API documents deduplication. Three real inference
-  providers (Groq, OpenRouter, Google) ignored a repeated `Idempotency-Key` in
-  every pair, and still admitted requests whose client was killed mid-response.
+  send it, and we found no deduplication in their documentation. Four services
+  (Groq, OpenRouter, Google, Cohere) ignored a repeated `Idempotency-Key` in every
+  pair, and Groq admitted every streaming request whose client was killed mid-response.
   Rerun on three Groq models, keyed per-call configurations re-billed a call in
   139 of 242 crashes, against 151 of 247 without a key.
-- **Most duplicates are silent.** Only Temporal (an activity's attempt number)
-  and AgentOS (an `OutcomeAmbiguous` event) tell the application that a
-  re-executed call may be a repeat. Both flagged every duplicate; Temporal also
-  flagged 8 retries that never reached the provider, AgentOS 2.
+- **Most duplicates are silent.** In our runs, only Temporal (an activity's attempt
+  number) and AgentOS (an `OutcomeAmbiguous` event) told the application that a
+  re-executed call may be a repeat. On real models both flagged every duplicate, with
+  19 of 32 flags correct for Temporal and 23 of 29 for AgentOS. LangGraph and Prefect
+  document attempt counters that our adapters did not read.
 
 So AgentOS does what a runtime still can. Every side-effecting call gets an
 intent journaled with a fresh key before dispatch, and the intent is settled in
@@ -455,14 +457,15 @@ nothing asked of the provider. AgentOS keeps it in two places:
   agent's replay instead of making the call again (`Kernel(adopt=True)`, the
   default; `adopt=False` re-issues and flags, as before).
 - **The runtime dies.** With `Kernel(courier=True)`, each call is carried by a
-  courier: one process per call, outside the runtime's process tree, which
-  writes the reply to `couriers.db` beside the journal. A recovering runtime
+  courier: one process per call, in a session of its own (on Windows, outside the
+  runtime's job object, where the job permits it), which writes the reply to `couriers.db` beside the journal. A recovering runtime
   takes a finished courier's reply, waits for one still at work, and makes the
   call fresh, unflagged, if its courier never started. Only a courier that died
   mid-call leaves a call nobody can account for, and that one is flagged as
   before. Tools opt in per op (`ToolDriver.courier`); model calls over HTTP
   always can. A courier outlives the runtime, not the machine: a container or
-  host restart still ends in a flagged repeat.
+  host restart still ends in a flagged repeat, and a service manager that kills a
+  whole control group would probably kill it too, which we did not test.
 
 Under the same harness, with a provider that ignores keys, the agent and
 runtime crashes that re-billed a call went from 287 of 380 to 0 of 380, on

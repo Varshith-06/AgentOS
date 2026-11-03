@@ -379,7 +379,7 @@ def figure_sweep(rows: list[dict], path: str, extra: float | None = None,
                     fmt="D", color=INK, markerfacecolor="white", markersize=4,
                     elinewidth=0.7, capsize=1.5, label="real model, pooled")
     ax.set_xlabel("fraction of time inside calls, $L/(T+L)$")
-    ax.set_ylabel("$P$(duplicate | crash)")
+    ax.set_ylabel("share of crashes repeating a call")
     ax.set_ylim(0, 1.05)
     ax.yaxis.grid(True, color=GRID, linewidth=0.5)
     ax.set_axisbelow(True)
