@@ -12,11 +12,11 @@ not do it. This is a receiver you run yourself, outside the agent's process.
 A request without an Idempotency-Key passes through untouched. A keyed one
 follows four rules, each one a failure the crash study observed:
 
-1. The key names the call, not the body. A resumed agent often rebuilds a
-   slightly different prompt for the same call. It gets the recorded reply,
-   flagged `Idempotency-Drift: true`. With --on-drift reject it gets a 409, and
-   with --on-drift reissue a call of its own, billed and flagged the same way:
-   the agent then reads an answer to what it asked, as a kernel's agent does.
+1. The key names the call, and a recorded reply answers only the body it was
+   made for. A resumed agent that sends a different prompt under the same key
+   gets a call of its own, billed and flagged `Idempotency-Drift: true`: it reads
+   an answer to what it asked, as a kernel's agent does. With --on-drift replay it
+   gets the recorded reply, flagged the same way, and with --on-drift reject a 409.
 2. The gateway owns the upstream call. A client that disconnects does not
    cancel it: the provider bills it anyway, so its reply is kept for the resume.
 3. A repeat that arrives while the call is in flight waits for that call.
@@ -113,7 +113,7 @@ class Gateway:
         db: str | Path,
         *,
         ttl_hours: float = 24.0,
-        on_drift: str = "replay",
+        on_drift: str = "reissue",
         timeout: float = 600.0,
         log: str | Path | None = None,
     ) -> None:

@@ -207,9 +207,17 @@ class GatewayTest(unittest.TestCase):
         self.assertEqual(h2["idempotency-outcome"], "unknown",
                          "a 5xx may have been billed: the repeat must say so")
 
-    def test_a_changed_body_is_replayed_and_flagged(self):
-        _, _, b1 = self.post({"q": "prompt as first built"}, key="k")
-        s, h, b2 = self.post({"q": "prompt as rebuilt after a crash"}, key="k")
+    def test_a_changed_body_is_a_call_of_its_own_by_default(self):
+        self.post({"q": 1}, key="k")
+        s, h, _ = self.post({"q": 2}, key="k")
+        self.assertEqual(s, 200)
+        self.assertEqual(self.calls(), 2, "the agent reads an answer to what it asked")
+        self.assertEqual(h["idempotency-drift"], "true")
+
+    def test_a_changed_body_can_be_replayed_and_flagged(self):
+        url = self.start_gateway(on_drift="replay")
+        _, _, b1 = self.post({"q": "prompt as first built"}, key="k", url=url)
+        s, h, b2 = self.post({"q": "prompt as rebuilt after a crash"}, key="k", url=url)
         self.assertEqual((s, b2), (200, b1))
         self.assertEqual(h["idempotency-drift"], "true")
         self.assertEqual(self.calls(), 1)
@@ -262,7 +270,10 @@ class GatewayTest(unittest.TestCase):
         def gateway():
             p = subprocess.Popen(
                 [sys.executable, "-m", "agentos.cli", "--dir", str(self.dir / "rt"),
-                 "gateway", "--upstream", self.base, "--port", "0", "--db", str(db)],
+                 "gateway", "--upstream", self.base, "--port", "0", "--db", str(db),
+                 # The two lives below send different latencies, so the body differs:
+                 # replay keeps this about the key, not about a changed prompt.
+                 "--on-drift", "replay"],
                 cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             self.addCleanup(p.kill)
             return p, f"http://127.0.0.1:{int(p.stdout.readline())}"
@@ -308,7 +319,10 @@ class KernelThroughGatewayTest(unittest.IsolatedAsyncioTestCase):
         up.daemon_threads = True
         _serve(up)
         self.addCleanup(up.shutdown)
-        gw = Gateway(f"http://127.0.0.1:{up.server_address[1]}/v1", self.dir / "gw.db")
+        # Each life asks for a different latency, so the body differs across the
+        # crash. Replay keeps these tests about the crash, not about a changed prompt.
+        gw = Gateway(f"http://127.0.0.1:{up.server_address[1]}/v1", self.dir / "gw.db",
+                     on_drift="replay")
         srv = Server(gw, port=0)
         _serve(srv)
         self.addCleanup(gw.close)

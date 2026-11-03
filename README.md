@@ -481,8 +481,9 @@ URL>`: a deduplicating gateway in its own process that finishes a call whose
 client disconnected and keeps the reply for the resume. It needs the stable
 call key each framework can supply; with it, the other nine configurations went
 from 263 of 350 crashes re-billed to none, as long as the gateway itself survives.
-By default a key reused with a different body gets the recorded reply, flagged only
-in a header. `--on-drift reissue` makes it a new call, and `reject` refuses it.
+By default a key reused with a different body is a new call of its own, billed and
+flagged. `--on-drift replay` returns the recorded reply instead, flagged only in a
+header, and `reject` refuses it.
 
 ---
 

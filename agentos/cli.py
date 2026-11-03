@@ -495,10 +495,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="how long a key's reply is kept (default 24)",
     )
     gateway.add_argument(
-        "--on-drift", choices=["replay", "reject", "reissue"], default="replay",
-        help="a key reused with a different body: answer it from the record "
-             "and flag it (default), refuse it with a 409, or make it a new "
-             "call of its own, billed and flagged",
+        "--on-drift", choices=["replay", "reject", "reissue"], default="reissue",
+        help="a key reused with a different body: make it a new call of its "
+             "own, billed and flagged (default), answer it from the record and "
+             "flag it, or refuse it with a 409",
     )
     gateway.add_argument("--log", default=None, help="append a JSON line per request")
 
