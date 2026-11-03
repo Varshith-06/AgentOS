@@ -62,10 +62,10 @@ def main_table(latex: str | None) -> None:
     def num(x: float) -> str:  # .73, to fit one IEEE column
         return f"{x:.2f}".replace("0.", ".", 1) if x < 1 else f"{x:.2f}"
 
-    lines = [r"\begin{tabular}{@{}lrcrrr@{}}", r"\toprule",
-             r"& \multicolumn{3}{c}{stand-in, no key} & \multicolumn{2}{c}{real models} \\",
-             r"\cmidrule(lr){2-4}\cmidrule(l){5-6}",
-             r"Configuration & $P$ & 95\% CI & $E$ & no key & key \\", r"\midrule"]
+    lines = [r"\begin{tabular}{@{}lrcrr@{}}", r"\toprule",
+             r"& \multicolumn{2}{c}{stand-in, no key} & \multicolumn{2}{c}{real models} \\",
+             r"\cmidrule(lr){2-3}\cmidrule(l){4-5}",
+             r"Configuration & $P$ & 95\% CI & no key & key \\", r"\midrule"]
     print("== Table III: stand-in (keyless) beside real models (pooled)")
     for x in t:
         fw = x["framework"]
@@ -75,7 +75,7 @@ def main_table(latex: str | None) -> None:
             cells.append(f"{sum(r['duplicates'] > 0 for r in s)}/{len(s)}")
         label = LABEL.get(fw, fw).replace("_", "\\_")
         lines.append(f"{label} & {num(x['p_dup'])} & [{num(x['ci'][0])}, {num(x['ci'][1])}] & "
-                     f"{num(x['e_dup'])} & {cells[0]} & {cells[1]} \\\\")
+                     f"{cells[0]} & {cells[1]} \\\\")
         print(f"  {fw:18} P {x['p_dup']:.2f} E {x['e_dup']:.2f} model {x['meas_e']:.2f} | "
               f"real {cells[0]:>6} keyed {cells[1]:>6}")
     lines += [r"\bottomrule", r"\end{tabular}"]
@@ -153,7 +153,9 @@ def arm(path: Path, frameworks: set[str] | None = None) -> list[dict]:
 
 
 def fix() -> None:
-    print("\n== E6-E8: the fix (stand-in set to ignore keys; real = allam-2-7b)")
+    # Superseded: the paper's mechanism results are summary_v2's, re-run after three
+    # recovery fixes. The gateway counts here are current.
+    print("\n== Superseded October runs of the fix; see summary_v2. Gateway counts are current")
     F = R / "agentos-fix"
     sets = {"Windows": (F, "fix"), "Linux": (F / "linux", "fix"), "real": (F, "real-fix")}
     before, after = [0, 0], [0, 0]

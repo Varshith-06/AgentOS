@@ -36,7 +36,8 @@ dependencies have no wheels for Python 3.14; the published results use 3.13.
 |---|---|
 | `results/standin/` | the main run (`main.jsonl`), the think-time sweep (`sweep-T*.jsonl`), 12-call runs (`n12.jsonl`), the Temporal/DBOS signal run (`detect.jsonl`), CrewAI 1.15.2 (`crewai-1.15.2.jsonl`), and their ledgers |
 | `results/real/` | the main run on three Groq models (`real-main-<model>.jsonl`), the sweep on `allam-2-7b` (`real-sweep-T*.jsonl`), and the provider probes: Groq (`real-inflight`, `real-admission`, `real-idem`, `real-e2e`), OpenRouter (`real-or-*`), Gemini (`real-gemini-idem`) |
-| `results/agentos-fix/` | AgentOS's adoption and couriers: `fix-*.jsonl` on the stand-in under Windows, `linux/fix-*.jsonl` under Linux, `real-fix-*.jsonl` on `allam-2-7b` |
+| `results/v2/` | what the paper reports for AgentOS, re-run after three recovery fixes: the mechanisms (`windows/fix`, `linux`, `real`, `multi`), changed prompts, harder crashes, costs, the eight-file review (`task`), the kernel model route (`model`), a stopped VM (`host`), and a killed PID namespace (`namespace`). `summary_v2` reads these |
+| `results/agentos-fix/` | superseded October runs of the same mechanisms, kept for the record |
 | `results/gateway/` | the other frameworks with keys, without (`gateway-none.jsonl`, `real-gw-allam-off.jsonl`) and with the gateway (`gateway.jsonl`, `real-gw-allam-on.jsonl`) |
 
 Each `.jsonl` row is one crash. A row names its ledger, and a real run keeps a
@@ -85,8 +86,10 @@ Rows written before signals were recorded were backfilled from the run
 directories where those still existed (AgentOS rows); Temporal's and DBOS's
 signals come from the dedicated `detect.jsonl` run.
 
-`reproduce.sh` regenerates every number, table, and figure in the paper from
-the committed results, and lists the commands that re-run the experiments.
+`reproduce.sh` regenerates Table III and Fig. 3 of the paper from the committed
+results, prints the counts behind its other results, and lists the commands that
+re-run the experiments. Pooled figures in the paper are sums of those counts. Run
+it from the repository root.
 
 ## Against a real provider
 
@@ -145,6 +148,10 @@ source files. Reading a file is the agent's tool step, and the agent builds each
 prompt from that file and its own notes, so each prompt depends on every earlier
 reply and passes through the request fingerprint. `run_v2 --only task` runs it, and
 `summary_v2` reports it from `results/v2/task/`.
+
+The 150-word arms in `results/v2/real/allam/long-*` are not relied on either: the
+model did not always begin with the number, so the reply check failed in about half
+their runs, with or without the mechanisms.
 
 It replaces the chained-prompt arms in `results/v2/real/allam/chain-*`, which are
 kept but not relied on. They built the prompt in the process making the call, so

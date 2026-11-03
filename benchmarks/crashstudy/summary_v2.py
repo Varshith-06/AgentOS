@@ -173,9 +173,14 @@ def costs(path: Path, title: str) -> None:
 
 
 def host() -> None:
-    print("\n== E-host: the VM stops (stopped VM, not pulled power)")
+    crashes("the VM stops (stopped VM, not pulled power)", "host")
+    crashes("a PID namespace is killed, as a container stop does", "namespace")
+
+
+def crashes(title: str, folder: str) -> None:
+    print(f"\n== {title}")
     res = {}
-    for f in sorted((V2 / "host").glob("*.jsonl")):
+    for f in sorted((V2 / folder).glob("*.jsonl")):
         rs = rows(f)
         v = [r for r in rs if r["status"] in KEPT]
         d = [r for r in v if r.get("duplicates", 0) > 0]
@@ -185,7 +190,7 @@ def host() -> None:
         res[f.stem] = {"n": len(v), "dup": len(d), "silent": len(silent), "lost_calls": len(lost),
                        "no_store": len(nostore), "rows": len(rs), "extra": sum(r.get("duplicates", 0) for r in v)}
         print(f"  {f.stem:18} {res[f.stem]}")
-    OUT["host"] = res
+    OUT[folder] = res
 
 
 def probes() -> None:

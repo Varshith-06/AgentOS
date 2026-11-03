@@ -11,6 +11,12 @@ holds up: `--durable` fsyncs every commit, the default leaves that to SQLite.
 
 It is a stopped VM rather than pulled power: writes the VM had already passed
 to its virtual disk are not lost, so this understates what power loss can do.
+
+--kill namespace is the same run in a PID namespace of its own, whose first
+process is killed. The kernel then kills everything else in the namespace, which
+is what stopping a container does to its processes, so a courier in its own
+session dies too. The VM, and the store's files, carry on: a container with a
+volume, without Docker's own machinery.
 """
 
 from __future__ import annotations
@@ -56,6 +62,10 @@ def command(phase: str, run: str, port: int, args, ip: str) -> str:
     if args.durable:
         env["CS_DURABLE"] = "1"
     pairs = " ".join(f'{k}="{v}"' for k, v in env.items())
+    if args.kill == "namespace":
+        return (f"mkdir -p ~/hc/{run} && cd ~/aos && echo $$ > ~/hc/{run}/ns.pid && exec unshare "
+                f"--user --map-root-user --pid --fork --kill-child --mount-proc env {pairs} "
+                f"python3 -m benchmarks.crashstudy.adapters agentos {phase}")
     return (f"mkdir -p ~/hc/{run} && cd ~/aos && {pairs} python3 -m "
             f"benchmarks.crashstudy.adapters agentos {phase}")
 
@@ -101,7 +111,10 @@ def trial(n: int, args, port: int, ledger: str, rng: random.Random, horizon: flo
         rec["status"] = "finished-before-kill"
         return rec
     killed = time.time()
-    subprocess.run(["wsl", "--shutdown"], timeout=120, capture_output=True)
+    if args.kill == "namespace":
+        wsl(f"kill -9 $(cat ~/hc/{run}/ns.pid)", timeout=60)
+    else:
+        subprocess.run(["wsl", "--shutdown"], timeout=120, capture_output=True)
     rec["shutdown_s"] = time.time() - killed
     try:
         p.wait(timeout=30)
@@ -131,6 +144,7 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--courier", choices=["on", "off"], default="on")
     ap.add_argument("--durable", action="store_true")
+    ap.add_argument("--kill", choices=["vm", "namespace"], default="vm")
     ap.add_argument("--trials", type=int, default=20)
     ap.add_argument("--calls", type=int, default=6)
     ap.add_argument("--latency", type=float, default=0.3)

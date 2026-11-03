@@ -171,6 +171,14 @@ def real_task() -> list[tuple]:
     return cmds
 
 
+def namespace() -> list[tuple]:
+    """A container-style stop: the stopped-VM arms, with the VM left running."""
+    o = f"{V2}/namespace"
+    c = "-m benchmarks.crashstudy.hostcrash --kill namespace --latency 3 --think 0.2 --trials 20"
+    return [(f"{c} --courier on --seed 511 --out {o}/courier.jsonl", {}),
+            (f"{c} --courier off --seed 512 --out {o}/no-courier.jsonl", {})]
+
+
 def model_route() -> list[tuple]:
     """The kernel's own model routing, which every other AgentOS arm goes around: stand-in."""
     o = f"{V2}/model/windows"
@@ -263,6 +271,7 @@ def plan() -> list[tuple[str, dict[str, list[tuple]]]]:
         ("linux", {"linux": [("LINUX", {})]}),
         ("host", {"host": host()}),
         ("task", {"task": real_task()}),
+        ("namespace", {"namespace": namespace()}),
         ("model", {"model": model_route()}),
         ("model-linux", {"model-linux": [("LINUX_MODEL", {})]}),
         ("model-real", {"model-real": model_route_real()}),

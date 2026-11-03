@@ -347,11 +347,11 @@ def figure_sweep(rows: list[dict], path: str, extra: float | None = None,
     xs = [i / 100 for i in range(20, 101)]
     thinks = [latency / x - latency for x in xs]
     ax.plot(xs, [predict("call", n, latency, t)[0] for t in thinks], color=INK_2,
-            linewidth=1.0, linestyle="--", label="model (nominal)")
+            linewidth=1.0, linestyle="--", label="Eq. 1 (nominal)")
     if extra is not None:
         ax.plot(xs, [predict("call", n, latency, t, t + latency + extra)[0] for t in thinks],
                 color=INK, linewidth=1.0,
-                label=f"model (+{1000 * extra:.0f} ms/call)")
+                label=f"Eq. 1 (+{1000 * extra:.0f} ms/call)")
     for k, (fw, by) in enumerate(sorted(pts.items())):
         fr = sorted(by)
         ps = [statistics.mean(by[f]) for f in fr]
