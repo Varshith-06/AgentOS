@@ -368,6 +368,11 @@ def _e2e(args, rng, scratch: Path, adapter: list, env_for) -> None:
                 status = "provider-error"
             if hung:
                 status = "resume-timeout"
+            if status == "ok" and os.environ.get("CS_MODEL_PATH") == "1" \
+                    and replies(d)["answered"] < args.calls:
+                # The kernel exits cleanly even if its agent failed, and a run that
+                # stopped early repeats nothing: not a trial, so it is drawn again.
+                status = "incomplete"
             rec = {"framework": args.framework, "keyed": keyed, "trial": n, "run": run,
                    "gateway": args.gateway, "crash": args.crash,
                    "adopt": args.adopt == "yes", "courier": args.courier,

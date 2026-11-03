@@ -171,6 +171,30 @@ def real_task() -> list[tuple]:
     return cmds
 
 
+def model_route() -> list[tuple]:
+    """The kernel's own model routing, which every other AgentOS arm goes around: stand-in."""
+    o = f"{V2}/model/windows"
+    r = f"{RUN} --frameworks agentos --ignore-keys --keyed no --model-path --trials 30 --timeout 300 --calibrate 3"
+    return [(f"{r} --crash agent --adopt no --seed 901 --out {o}/agent-adopt-no.jsonl", {}),
+            (f"{r} --crash agent --adopt yes --seed 902 --out {o}/agent-adopt-yes.jsonl", {}),
+            (f"{r} --courier off --seed 903 --out {o}/courier-off.jsonl", {}),
+            (f"{r} --courier on --seed 904 --out {o}/courier-on.jsonl", {}),
+            (f"{r} --courier contained --seed 905 --out {o}/courier-contained.jsonl", {}),
+            (f"{r} --crash agent --drift tail --seed 906 --out {o}/drift-agent-tail.jsonl", {}),
+            (f"{r} --courier on --drift tail --seed 907 --out {o}/drift-courier-tail.jsonl", {})]
+
+
+def model_route_real() -> list[tuple]:
+    """The same route to a real model, with exact counts from Groq's quota header."""
+    o, m = f"{V2}/model/allam", "--model allam-2-7b --frameworks agentos --keyed no --trials 20 --calibrate 3"
+    env = {"CS_MODEL_PATH": "1"}
+    return [(f"{REAL} {m} --crash agent --adopt no --out {o}/agent-adopt-no.jsonl", env),
+            (f"{REAL} {m} --crash agent --adopt yes --out {o}/agent-adopt-yes.jsonl", env),
+            (f"{REAL} {m} --courier off --out {o}/courier-off.jsonl", env),
+            (f"{REAL} {m} --courier on --out {o}/courier-on.jsonl", env),
+            (f"{REAL} {m} --courier contained --out {o}/courier-contained.jsonl", env)]
+
+
 def wsl_path(p: Path) -> str:
     """This checkout as WSL sees it, for the Linux stage."""
     return f"/mnt/{p.drive[0].lower()}{p.as_posix()[2:]}"
@@ -201,6 +225,26 @@ cp $O/*.jsonl $D/
 """
 
 
+LINUX_MODEL = r"""set -e
+cd ~/aos
+rm -rf agentos
+cp -r @ROOT@/agentos .
+cp @ROOT@/benchmarks/crashstudy/*.py benchmarks/crashstudy/
+find . -name __pycache__ -type d -prune -exec rm -rf {} +
+O=v2-model
+mkdir -p $O
+for spec in "agent-adopt-no|--crash agent --adopt no|911" "agent-adopt-yes|--crash agent --adopt yes|912" \
+            "courier-off|--courier off|913" "courier-on|--courier on|914" "courier-contained|--courier contained|915"; do
+  IFS='|' read -r name flags seed <<< "$spec"
+  python3 -m benchmarks.crashstudy.run --frameworks agentos --ignore-keys --keyed no --model-path --trials 30 \
+      --timeout 300 --calibrate 3 $flags --seed $seed --out $O/$name.jsonl
+done
+D=@ROOT@/benchmarks/crashstudy/results/v2/model/linux
+mkdir -p $D
+cp $O/*.jsonl $D/
+"""
+
+
 def plan() -> list[tuple[str, dict[str, list[tuple]]]]:
     return [
         ("stand-in", {"stand-in": stand_in()}),
@@ -219,6 +263,9 @@ def plan() -> list[tuple[str, dict[str, list[tuple]]]]:
         ("linux", {"linux": [("LINUX", {})]}),
         ("host", {"host": host()}),
         ("task", {"task": real_task()}),
+        ("model", {"model": model_route()}),
+        ("model-linux", {"model-linux": [("LINUX_MODEL", {})]}),
+        ("model-real", {"model-real": model_route_real()}),
     ]
 
 
@@ -261,9 +308,10 @@ def main() -> int:
                 say(f"{name} {n + 1}/{len(cmds)} start: {cmd[:150]}")
                 t0 = time.time()
                 with open(log, "a", encoding="utf-8") as fh:
-                    if cmd == "LINUX":
+                    if cmd in ("LINUX", "LINUX_MODEL"):
+                        script = LINUX if cmd == "LINUX" else LINUX_MODEL
                         rc = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "bash", "-lc",
-                                             LINUX.replace("@ROOT@", wsl_path(ROOT))],
+                                             script.replace("@ROOT@", wsl_path(ROOT))],
                                             stdout=fh, stderr=fh).returncode
                     else:
                         out = re.search(r"--out (\S+)", cmd)

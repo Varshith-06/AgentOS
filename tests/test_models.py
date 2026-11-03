@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import http.server
+import json
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agentos import Agent, Kernel, KernelError  # noqa: E402
+from agentos.kernel.models import ModelManager  # noqa: E402
 from agentos.kernel.store import Store  # noqa: E402
 
 from tests._timing import LIMIT  # noqa: E402
@@ -131,6 +135,51 @@ class ModelTest(unittest.IsolatedAsyncioTestCase):
         pid = k.spawn(ModelUser())
         await asyncio.wait_for(k.run(), timeout=LIMIT)
         self.assertIsNone(k.table.get(pid).result["error"])
+
+
+
+class RateLimitTest(unittest.TestCase):
+    """A 429 is refused, not admitted, so it can be waited out if a candidate says so."""
+
+    def serve(self, refusals: int) -> tuple[dict, list]:
+        seen: list[int] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                seen.append(1)
+                refused = len(seen) <= refusals
+                data = b"{}" if refused else json.dumps({
+                    "choices": [{"message": {"content": "hi"}}],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1}}).encode()
+                self.send_response(429 if refused else 200)
+                if refused:
+                    self.send_header("Retry-After", "0")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        return {"provider": "openai", "model": "m", "base_url":
+                f"http://127.0.0.1:{srv.server_address[1]}/v1"}, seen
+
+    def test_a_429_is_sent_again_if_the_candidate_says_so(self):
+        cand, seen = self.serve(refusals=1)
+        reply = ModelManager()._openai_http({**cand, "rate_limit_retries": 2}, "p", None, 8)
+        self.assertEqual(reply["text"], "hi")
+        self.assertEqual(len(seen), 2)
+
+    def test_by_default_a_429_goes_to_the_next_candidate(self):
+        cand, seen = self.serve(refusals=1)
+        with self.assertRaises(ConnectionError):
+            ModelManager()._openai_http(cand, "p", None, 8)
+        self.assertEqual(len(seen), 1)
 
 
 if __name__ == "__main__":

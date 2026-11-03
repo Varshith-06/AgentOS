@@ -190,6 +190,43 @@ def _groq(i: int, key: str | None, q: str) -> dict:
     raise RuntimeError("rate-limited five times running")
 
 
+def model_path() -> bool:
+    """CS_MODEL_PATH=1: the agent asks the kernel's model routing, not a tool driver."""
+    return os.environ.get("CS_MODEL_PATH") == "1"
+
+
+def model_candidate() -> dict:
+    """The one candidate the kernel routes to, the stand-in unless told otherwise."""
+    if os.environ.get("CS_PROVIDER") == "groq":
+        model = os.environ.get("CS_MODEL", "openai/gpt-oss-120b")
+        # As `_groq` does for the tool path: a 429 is waited out, not a failed call.
+        cand = {"provider": "openai", "model": model, "timeout": 300, "rate_limit_retries": 5,
+                "base_url": "https://api.groq.com/openai/v1",
+                "api_key_env": os.environ.get("CS_KEY_VAR", "GROQ_API_KEY")}
+        if model.startswith(("openai/gpt-oss", "qwen/")):
+            cand["params"] = {"reasoning_effort": "low"}
+        return cand
+    return {"provider": "openai", "model": "stand-in", "timeout": 60,
+            "base_url": f"http://{os.environ.get('CS_HOST', '127.0.0.1')}:{os.environ['CS_PORT']}/v1",
+            "params": {"run": os.environ["CS_RUN"]}}
+
+
+def mark_model(what: str, i: int) -> None:
+    if os.environ.get("CS_PROVIDER") == "groq":
+        _mark(what, i)
+
+
+def model_prompt(i: int, q: str) -> str:
+    return _prompt(i, q) if os.environ.get("CS_PROVIDER") == "groq" else f"call {i}: {q}"
+
+
+def model_reply(i: int, text: str) -> dict:
+    """The reply in the shape `check` reads: the stand-in echoes, a model says it."""
+    if os.environ.get("CS_PROVIDER") == "groq":
+        return {"i": i, "text": text}
+    return {"i": i, "q": text.split(": ", 1)[1], "text": text}
+
+
 def note(i: int, **signal) -> None:
     """Record what the framework tells the call about itself (e.g. its attempt
     number), so the analysis can ask whether a re-execution was visible."""

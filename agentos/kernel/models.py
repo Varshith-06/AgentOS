@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -358,6 +359,7 @@ class ModelManager:
             },
             headers,
             seen,
+            cand.get("rate_limit_retries", 0),
         )
         usage = data.get("usage") or {}
         text = (data["choices"][0]["message"].get("content") or "").strip()
@@ -430,9 +432,18 @@ def _gateway_flags(seen: dict[str, str]) -> dict[str, bool]:
     }
 
 
+def _retry_after(exc: urllib.error.HTTPError) -> float:
+    """How long a 429 asks to wait, bounded, in seconds."""
+    try:
+        return min(max(float(exc.headers.get("retry-after", 5)), 0.0), 60.0)
+    except (TypeError, ValueError):  # the header may also be an HTTP date
+        return 5.0
+
+
 def _post_json(
     url: str, body: dict[str, Any], headers: dict[str, str],
     seen: dict[str, str] | None = None,
+    rate_limit_retries: int = 0,
 ) -> dict:
     req = urllib.request.Request(
         url,
@@ -446,13 +457,20 @@ def _post_json(
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
-            if seen is not None:
-                seen.update((k.lower(), v) for k, v in resp.headers.items())
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:300]
-        raise ConnectionError(f"{exc.code} from {url}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise ConnectionError(f"cannot reach {url}: {exc.reason}") from exc
+    # A 429 was refused, not admitted, so sending it again cannot bill it twice. By
+    # default it goes straight to the next candidate; `rate_limit_retries` waits instead.
+    for attempt in range(rate_limit_retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT) as resp:
+                if seen is not None:
+                    seen.update((k.lower(), v) for k, v in resp.headers.items())
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < rate_limit_retries:
+                time.sleep(_retry_after(exc) + 1)
+                continue
+            detail = exc.read().decode("utf-8", errors="replace")[:300]
+            raise ConnectionError(f"{exc.code} from {url}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise ConnectionError(f"cannot reach {url}: {exc.reason}") from exc
+    raise AssertionError("unreachable")

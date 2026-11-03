@@ -281,6 +281,7 @@ def run_env(fw: str, run: str, rundir: Path, args, port: int, temporal: str | No
         AGENTOS_COURIER_DETACH="0" if args.courier == "contained" else "1",
         CS_RETRIES=str(retries),
         CS_AGENTS=str(args.agents),
+        **({"CS_MODEL_PATH": "1"} if args.model_path else {}),
         **({"CS_DRIFT": args.drift} if args.drift else {}),
         **({"CS_NOFP": "1"} if args.no_fingerprint else {}),
         **({"CS_DURABLE": "1"} if args.durable else {}),
@@ -493,6 +494,8 @@ def main() -> int:
     ap.add_argument("--no-fingerprint", action="store_true",
                     help="AgentOS: recovery matches a call by position alone (the control)")
     ap.add_argument("--durable", action="store_true", help="AgentOS: fsync every commit")
+    ap.add_argument("--model-path", action="store_true",
+                    help="AgentOS: call through the kernel's model routing, not a tool driver")
     ap.add_argument("--agents", type=int, default=1,
                     help="AgentOS: this many agents side by side, each making --calls calls")
     ap.add_argument("--on-drift", choices=["replay", "reject", "reissue"], default="replay",

@@ -8,6 +8,10 @@ An `Idempotency-Key` header makes a repeat free: the stored reply comes back and
 nothing is charged. With --ignore-keys it behaves like the model providers we
 measured instead: every request is charged, key or not.
 
+POST .../chat/completions is the same call in a provider's shape, for AgentOS's
+own model routing: the prompt says which call it is, `run` comes in the body as
+an extra parameter, and the reply echoes the prompt.
+
 The ledger is the only source of truth the study reads. No framework writes it.
 """
 
@@ -15,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 import threading
@@ -60,6 +65,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         key = self.headers.get("Idempotency-Key")
+        chat = self.path.endswith("/chat/completions")
+        if chat:
+            prompt = body["messages"][-1]["content"]
+            body["i"] = int(re.match(r"call (\d+):", prompt).group(1))
+            body["q"] = prompt
         conn = sqlite3.connect(self.ledger, isolation_level=None, timeout=10)
         try:
             with self.lock:
@@ -78,6 +88,9 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
         time.sleep(float(body.get("latency", self.latency)))
+        if chat:
+            reply = {"choices": [{"message": {"content": reply["q"]}}],
+                     "usage": {"prompt_tokens": 4, "completion_tokens": 4}}
         self._send(reply)
 
     def _send(self, obj):

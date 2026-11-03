@@ -126,6 +126,13 @@ def real_task() -> None:
     section("Real task, Gemini, sends", V2 / "task" / "gemini-3.5-flash-lite")
 
 
+def model_route() -> None:
+    """The kernel's own model routing, in place of a tool driver."""
+    section("Model route, stand-in, Windows", V2 / "model" / "windows")
+    section("Model route, stand-in, Linux", V2 / "model" / "linux")
+    section("Model route, allam, exact counts", V2 / "model" / "allam")
+
+
 def model_fit() -> None:
     print("\n== E-latency: rate against the model NL/H, stand-in, by framework")
     res = {}
@@ -231,6 +238,7 @@ def main() -> int:
     section("Longer calls, fixes", w / "latency",
             [p.stem for p in sorted((w / "latency").glob("L*-*.jsonl"))])
     real_task()
+    model_route()
     model_fit()
     section("Recovery killed too", w / "double", ["courier-off", "courier-on", "adopt"])
     by_framework("Recovery killed too, others", w / "double" / "others.jsonl")

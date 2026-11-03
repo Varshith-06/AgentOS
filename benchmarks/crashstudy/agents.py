@@ -5,7 +5,8 @@ from pathlib import Path
 
 from agentos import Agent
 
-from .client import check, question, task, task_prompt, think
+from .client import (check, mark_model, model_path, model_prompt, model_reply, question, task,
+                     task_prompt, think)
 
 
 class Caller(Agent):
@@ -19,7 +20,13 @@ class Caller(Agent):
         for i in range(base, base + self.params["calls"]):
             think()
             q = task_prompt(i, notes) if task() else question(i)
-            out = await ctx.request_tool("paidapi", "charge", i=i, q=q)
+            if model_path():
+                mark_model("send", i)
+                reply = await ctx.request_model("fast", model_prompt(i, q), max_tokens=64)
+                mark_model("reply", i)
+                out = model_reply(i, reply["text"])
+            else:
+                out = await ctx.request_tool("paidapi", "charge", i=i, q=q)
             check(i, q, out)
             notes.append(out.get("text") or f"S{i}: noted.")
         return "done"

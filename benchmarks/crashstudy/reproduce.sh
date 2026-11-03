@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Every number, table, and figure in the paper, from the committed results.
+# Table III and Fig. 3 of the paper, and the numbers behind its other results, from the committed results.
 #   sh benchmarks/crashstudy/reproduce.sh [out-dir]
 # Run from the repository root. Nothing here calls a provider; the commands
 # that re-run the experiments themselves are at the bottom.
@@ -11,28 +11,28 @@ PY=${PYTHON:-python}
 A="$PY -m benchmarks.crashstudy.analyze"
 mkdir -p "$OUT"
 
-echo "== E1 main run, stand-in: in-flight window, visibility (Table IV's left half)"
+echo "== Framework survey, stand-in: in-flight window, visibility (Table III's left half)"
 $A $S/main.jsonl --ledger $S/main-ledger.db
 
-echo "== E3 think-time sweep: Fig. 3, with the real-model points overlaid"
+echo "== Window sweep: Fig. 3, with the real-model points overlaid"
 $A $S/main.jsonl $S/sweep-T0.jsonl $S/sweep-T0.3.jsonl $S/sweep-T0.9.jsonl \
    --ledger $S/main-ledger.db --sweep "$OUT/fig-sweep.pdf" \
    --real $R/real/real-sweep-T0.jsonl $R/real/real-sweep-T0.1.jsonl \
           $R/real/real-sweep-T0.3.jsonl $R/real/real-sweep-T0.9.jsonl | tail -n 3
 
-echo "== E4 what the application can see (Temporal, DBOS)"
+echo "== Framework survey: what the application can see (Temporal, DBOS)"
 $A $S/detect.jsonl | tail -n 4
 
 echo "== CrewAI 1.15.2 from_checkpoint (the release Khan tested)"
 $A $S/crewai-1.15.2.jsonl | tail -n 2
 
-echo "== E5 Groq probes"
+echo "== Provider probes: Groq"
 $PY -m benchmarks.crashstudy.realprovider summary
 
-echo "== E2, E3, E5-E8: real models, the first fix, the gateway (Table IV)"
+echo "== Framework survey on real models, provider probes, the gateway (Table III)"
 $PY -m benchmarks.crashstudy.summary --latex "$OUT/results-table.tex"
 
-echo "== E6, E7, E9-E14: the evaluation as re-run in Nov 2026 (Tables V-VII)"
+echo "== Mechanism evaluation and limits (Tables IV and V, gateway, costs)"
 $PY -m benchmarks.crashstudy.summary_v2 --json "$OUT/v2-summary.json"
 
 # Everything behind summary_v2, resumable, keys read from a file outside the repo:

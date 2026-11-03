@@ -151,3 +151,27 @@ kept but not relied on. They built the prompt in the process making the call, so
 under couriers, with a new process per call, no prompt carried the previous reply.
 The prompt hashes in those arms' `calls.jsonl` show this.
 
+## Studies and experiment labels
+
+The paper names five studies. File names and script output here still use the older labels:
+
+| Study in the paper | Labels here |
+|---|---|
+| Framework survey | E1, E2, E4 |
+| Window sweep | E3, the baseline arms of E11 |
+| Provider probes | E5 |
+| Mechanism evaluation | E6, E7 |
+| Limits | the rest of E11, E9, E10, E13, E14, the kernel model route, with E8 (gateway) and E12 (costs) |
+
+## The kernel model route
+
+Every other AgentOS arm makes its API call through a kernel tool driver. `--model-path`
+(`CS_MODEL_PATH=1` on a real model) sends it through the kernel's own model routing
+instead. `run_v2 --only model,model-linux,model-real` runs it, and `summary_v2` reports it
+from `results/v2/model/`. On this route the kernel or a courier makes the HTTP call, so on
+a real model the agent logs the send and the reply, and in-flight counts are approximate.
+
+The candidate sets `rate_limit_retries`, as `_groq` waits out a 429 on the tool path.
+Without it agents stopped on a 429 and the run finished early, which the harness then
+counted as a trial, so a first run on `allam-2-7b` was discarded. It now marks such a run
+`incomplete` and draws it again.

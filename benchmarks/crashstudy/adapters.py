@@ -22,7 +22,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from .client import calls, charge, keyed, note, think
+from .client import calls, charge, keyed, model_candidate, model_path, note, think
 
 RUN = os.environ.get("CS_RUN", "run")
 DIR = Path(os.environ.get("CS_DIR", "."))
@@ -62,6 +62,7 @@ def agentos(phase: str) -> None:
         store=Store(DIR / "agentos", durable=os.environ.get("CS_DURABLE") == "1"),
         tick=0.005, recover=phase == "resume", slots=max(4, agents),
         tools={"paidapi": {}}, permissions={"*": ["paidapi"]},
+        models={"classes": {"fast": [model_candidate()]}} if model_path() else None,
         # The fixes under test: a dead agent's call adopted (on unless 0),
         # calls carried by couriers (off unless 1). Retries restart an agent
         # whose own process was killed.
