@@ -1,0 +1,17 @@
+{"t": 1793697234.9936771, "what": "send", "i": 0, "h": "0ec75447a237"}
+{"t": 1793697235.9931378, "what": "reply", "i": 0, "usage": {"completion_tokens": 39, "prompt_tokens": 519, "total_tokens": 558}}
+{"t": 1793697236.5124607, "what": "send", "i": 1, "h": "f71ba54dbab5"}
+{"t": 1793697237.713786, "what": "reply", "i": 1, "usage": {"completion_tokens": 59, "prompt_tokens": 428, "total_tokens": 487}}
+{"t": 1793697238.2207503, "what": "send", "i": 2, "h": "34e1aa18ac44"}
+{"t": 1793697239.4687903, "what": "reply", "i": 2, "usage": {"completion_tokens": 46, "prompt_tokens": 588, "total_tokens": 634}}
+{"t": 1793697239.975249, "what": "send", "i": 3, "h": "5e01fd9c5403"}
+{"t": 1793697243.43992, "what": "send", "i": 3, "h": "5e01fd9c5403"}
+{"t": 1793697244.673134, "what": "reply", "i": 3, "usage": {"completion_tokens": 41, "prompt_tokens": 648, "total_tokens": 689}}
+{"t": 1793697245.1799574, "what": "send", "i": 4, "h": "05802c7324ab"}
+{"t": 1793697246.0409727, "what": "reply", "i": 4, "usage": {"completion_tokens": 56, "prompt_tokens": 705, "total_tokens": 761}}
+{"t": 1793697246.5463915, "what": "send", "i": 5, "h": "348f2dbb347a"}
+{"t": 1793697247.8629591, "what": "reply", "i": 5, "usage": {"completion_tokens": 73, "prompt_tokens": 706, "total_tokens": 779}}
+{"t": 1793697248.3678653, "what": "send", "i": 6, "h": "042662a1c92f"}
+{"t": 1793697249.285, "what": "reply", "i": 6, "usage": {"completion_tokens": 57, "prompt_tokens": 777, "total_tokens": 834}}
+{"t": 1793697249.7911081, "what": "send", "i": 7, "h": "8e9f11d8f521"}
+{"t": 1793697250.8423023, "what": "reply", "i": 7, "usage": {"completion_tokens": 72, "prompt_tokens": 849, "total_tokens": 921}}
