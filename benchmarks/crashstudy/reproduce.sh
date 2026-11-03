@@ -11,7 +11,7 @@ PY=${PYTHON:-python}
 A="$PY -m benchmarks.crashstudy.analyze"
 mkdir -p "$OUT"
 
-echo "== E1 main run, stand-in: in-flight window, visibility (Table III's left half)"
+echo "== E1 main run, stand-in: in-flight window, visibility (Table IV's left half)"
 $A $S/main.jsonl --ledger $S/main-ledger.db
 
 echo "== E3 think-time sweep: Fig. 3, with the real-model points overlaid"
@@ -29,10 +29,10 @@ $A $S/crewai-1.15.2.jsonl | tail -n 2
 echo "== E5 Groq probes"
 $PY -m benchmarks.crashstudy.realprovider summary
 
-echo "== E2, E3, E5-E8: real models, the first fix, the gateway (Table III)"
+echo "== E2, E3, E5-E8: real models, the first fix, the gateway (Table IV)"
 $PY -m benchmarks.crashstudy.summary --latex "$OUT/results-table.tex"
 
-echo "== E6, E7, E9-E13: the evaluation as re-run in Nov 2026 (Tables IV-VI)"
+echo "== E6, E7, E9-E14: the evaluation as re-run in Nov 2026 (Tables V-VII)"
 $PY -m benchmarks.crashstudy.summary_v2 --json "$OUT/v2-summary.json"
 
 # Everything behind summary_v2, resumable, keys read from a file outside the repo:

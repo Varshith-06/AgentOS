@@ -150,6 +150,27 @@ def host() -> list[tuple]:
             (f"-m benchmarks.crashstudy.hostcrash --courier off --latency 3 --think 0.2 --trials 20 --seed 503 --out {h}/no-courier.jsonl", {})]
 
 
+def real_task() -> list[tuple]:
+    """A code review, eight files, the agent building each prompt from its notes."""
+    env = {"CS_TASK": "1"}
+    o = f"{V2}/task/gemini-3.5-flash-lite"
+    m = ("--via google --model gemini-3.5-flash-lite --framework agentos --task --calls 8 "
+         "--think 0.5 --max-tokens 200 --trials 10")
+    cmds = [(f"{MULTI} {m} --crash agent --adopt no --seed 801 --out {o}/agent-adopt-no.jsonl", {}),
+            (f"{MULTI} {m} --crash agent --adopt yes --seed 802 --out {o}/agent-adopt-yes.jsonl", {}),
+            (f"{MULTI} {m} --courier off --seed 803 --out {o}/courier-off.jsonl", {}),
+            (f"{MULTI} {m} --courier on --seed 804 --out {o}/courier-on.jsonl", {})]
+    s = f"{V2}/task/standin"
+    r = ("-m benchmarks.crashstudy.run --frameworks agentos --ignore-keys --timeout 300 --keyed no "
+         "--calls 8 --latency 2 --think 0.5 --calibrate 3 --trials 30")
+    cmds += [(f"{r} --crash agent --adopt no --seed 811 --out {s}/agent-adopt-no.jsonl", env),
+             (f"{r} --crash agent --adopt yes --seed 812 --out {s}/agent-adopt-yes.jsonl", env),
+             (f"{r} --courier off --seed 813 --out {s}/courier-off.jsonl", env),
+             (f"{r} --courier on --seed 814 --out {s}/courier-on.jsonl", env),
+             (f"{r} --courier contained --seed 815 --out {s}/courier-contained.jsonl", env)]
+    return cmds
+
+
 def wsl_path(p: Path) -> str:
     """This checkout as WSL sees it, for the Linux stage."""
     return f"/mnt/{p.drive[0].lower()}{p.as_posix()[2:]}"
@@ -197,6 +218,7 @@ def plan() -> list[tuple[str, dict[str, list[tuple]]]]:
         }),
         ("linux", {"linux": [("LINUX", {})]}),
         ("host", {"host": host()}),
+        ("task", {"task": real_task()}),
     ]
 
 

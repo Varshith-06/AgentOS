@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import Path
 
 # Temporal's start-to-close timeout (s): sized to the stand-in provider's call,
 # raised for real completions, whose latency has a long tail.
@@ -59,6 +60,8 @@ def check(i: int, asked: str, reply: dict) -> None:
     a real model is asked to say it; a duplicate count sees neither."""
     if "q" in reply:
         ok = reply["q"] == asked
+    elif reply.get("text") and task():
+        ok = f"S{i}" in reply["text"]
     elif reply.get("text") and os.environ.get("CS_CHAIN") != "1":
         ok = asked in reply["text"].replace(",", "")
     else:
@@ -102,10 +105,39 @@ def _mark(what: str, i: int, **extra) -> None:
 # With CS_CHAIN=1 each prompt carries the previous reply, as an agent's next
 # step depends on its last one. Held in the process, like a loop's local
 # variable: a unit that re-runs the loop regenerates it.
+# Beware: this is the process making the call. A courier is a new process per
+# call, so under couriers every prompt said "(nothing yet)", as the hashes in
+# results/v2/real/allam/chain-courier show, and the prompt is built after the
+# fingerprint is taken. CS_TASK replaces this: there the agent builds the prompt.
 _last: str | None = None
 
 
+def task() -> bool:
+    return os.environ.get("CS_TASK") == "1"
+
+
+_TASK_FILES = ["agentos/kernel/states.py", "agentos/kernel/messages.py",
+               "agentos/kernel/scheduler.py", "agentos/kernel/permissions.py",
+               "agentos/kernel/process.py", "agentos/kernel/store.py",
+               "agentos/runtime/courier.py", "agentos/api/gateway.py"]
+
+
+def task_prompt(i: int, notes: list[str]) -> str:
+    """One step of a real task, built by the agent: a code review, one file a step.
+    Reading the file is the tool. The context grows with the agent's own notes, so
+    the prompt depends on every reply before it and is the same in each life only
+    if those replies are."""
+    path = _TASK_FILES[i % len(_TASK_FILES)]
+    source = (Path(__file__).resolve().parents[2] / path).read_text(encoding="utf-8")[:1600]
+    earlier = "\n".join(notes) or "(none yet)"
+    return (f"You are reviewing a Python codebase one file at a time.\nYour notes so far:\n"
+            f"{earlier}\n\nNext file, {path}:\n{source}\n\nBegin your reply with the tag S{i}: "
+            "and then add one or two sentences of review notes on this file.")
+
+
 def _prompt(i: int, q: str) -> str:
+    if task():
+        return q
     if os.environ.get("CS_CHAIN") == "1":
         return (f"Step {i} of a task. The previous step said: {_last or '(nothing yet)'} "
                 "In one short sentence, say what to do next.")

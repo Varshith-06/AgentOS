@@ -120,6 +120,12 @@ def by_framework(title: str, path: Path) -> None:
     OUT[title] = res
 
 
+def real_task() -> None:
+    """The code review, with the agent building each prompt from its own notes."""
+    section("Real task, stand-in, exact counts", V2 / "task" / "standin")
+    section("Real task, Gemini, sends", V2 / "task" / "gemini-3.5-flash-lite")
+
+
 def model_fit() -> None:
     print("\n== E-latency: rate against the model NL/H, stand-in, by framework")
     res = {}
@@ -224,6 +230,7 @@ def main() -> int:
     section("Linux, others", V2 / "linux", ["drift-agent-tail", "drift-courier-tail", "double-courier-on"])
     section("Longer calls, fixes", w / "latency",
             [p.stem for p in sorted((w / "latency").glob("L*-*.jsonl"))])
+    real_task()
     model_fit()
     section("Recovery killed too", w / "double", ["courier-off", "courier-on", "adopt"])
     by_framework("Recovery killed too, others", w / "double" / "others.jsonl")

@@ -65,6 +65,8 @@ def main() -> int:
     ap.add_argument("--courier", choices=["off", "on", "contained"], default="off")
     ap.add_argument("--drift", choices=["tail", "all"])
     ap.add_argument("--no-fingerprint", action="store_true")
+    ap.add_argument("--task", action="store_true",
+                    help="a real task: the agent builds each prompt from its own notes")
     ap.add_argument("--trials", type=int, default=10)
     ap.add_argument("--calls", type=int, default=6)
     ap.add_argument("--think", type=float, default=0.1)
@@ -106,6 +108,8 @@ def main() -> int:
             env["CS_REASONING"] = args.reasoning
         if args.drift:
             env["CS_DRIFT"] = args.drift
+        if args.task:
+            env["CS_TASK"] = "1"
         if args.no_fingerprint:
             env["CS_NOFP"] = "1"
         return env

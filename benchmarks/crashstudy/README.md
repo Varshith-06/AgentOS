@@ -137,3 +137,17 @@ with the runtime as they would on a host crash, which is the control.
 `--ignore-keys` makes the stand-in behave like the real providers, and
 `--gateway` puts `agent gateway` between the frameworks and the provider. The
 commands are at the bottom of `reproduce.sh`.
+
+## A real task
+
+`CS_TASK=1` replaces "reply with the number" with a code review of eight AgentOS
+source files. Reading a file is the agent's tool step, and the agent builds each
+prompt from that file and its own notes, so each prompt depends on every earlier
+reply and passes through the request fingerprint. `run_v2 --only task` runs it, and
+`summary_v2` reports it from `results/v2/task/`.
+
+It replaces the chained-prompt arms in `results/v2/real/allam/chain-*`, which are
+kept but not relied on. They built the prompt in the process making the call, so
+under couriers, with a new process per call, no prompt carried the previous reply.
+The prompt hashes in those arms' `calls.jsonl` show this.
+
