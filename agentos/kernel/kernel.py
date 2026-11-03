@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import time
 import uuid
 from collections import deque
@@ -28,6 +30,23 @@ from .store import Store
 
 NONBLOCKING = {"spawn", "log", "publish", "subscribe", "memory", "checkpoint"}
 AMBIGUITY_POLICIES = ("retry", "fail")
+# The calls whose reply depends on what was asked. Everywhere else, matching a
+# call by its position and op is enough.
+REQUESTS = {"request_model", "request_tool"}
+
+
+def fingerprint(call: Syscall) -> str | None:
+    """What this call asks, for telling a repeat from a different call that
+    lands in the same place: a reply answers the request it was made for."""
+    if call.op not in REQUESTS:
+        return None
+    asked = json.dumps(call.args, sort_keys=True, default=str)
+    return hashlib.sha256(asked.encode("utf-8")).hexdigest()[:32]
+
+
+def differs(recorded: str | None, asked: str | None) -> bool:
+    """False when either side has no fingerprint (a store from before them)."""
+    return recorded is not None and asked is not None and recorded != asked
 
 
 class AmbiguousOutcome(Exception):
@@ -114,12 +133,14 @@ class Kernel:
         # Couriers carry calls in processes of their own, so a reply outlives
         # even the runtime (agentos.runtime.courier).
         self.couriers = (
-            Couriers(self.store.dir, log=lambda message: self._log(None, "courier", message))
+            Couriers(self.store.dir, log=lambda message: self._log(None, "courier", message),
+                     durable=self.store.durable)
             if courier else None
         )
         if self.couriers is not None and not recover:
             self.couriers.reset()
 
+        self._asked: dict[tuple[int, int], str] = {}  # (pid, req_id) -> fingerprint
         self._recovered = recover
         if recover:
             self.store.resume_runtime(self.policy.name, slots)
@@ -173,7 +194,10 @@ class Kernel:
                  error: str | None) -> None:
         """A delivered reply is a checkpoint: everything up to here is safe."""
         intent, proc.intent = proc.intent, None
-        self.store.append_journal(proc.pid, req_id, op, value, error, intent=intent)
+        request = self._asked.pop((proc.pid, req_id), None)
+        self.store.append_journal(
+            proc.pid, req_id, op, value, error, intent=intent, request=request
+        )
         proc.checkpoint += 1
         self.store.publish(proc.row())
 
@@ -189,7 +213,11 @@ class Kernel:
         """
         prior = self._ambiguous.pop(proc.pid, None)
         key = uuid.uuid4().hex
-        if prior is not None and prior["target"] != target:
+        asked = fingerprint(call)
+        if prior is not None and differs(prior.get("request"), asked):
+            self._diverged(proc, call, target)
+            self._abandon(proc, prior)
+        elif prior is not None and prior["target"] != target:
             self._abandon(proc, prior)
         elif prior is not None:
             self.store.settle_intent(prior["id"])
@@ -222,17 +250,32 @@ class Kernel:
                     "re-issued anyway, so it may now have run twice",
                 )
         proc.intent = self.store.append_intent(
-            proc.pid, call.req_id, call.op, target, key
+            proc.pid, call.req_id, call.op, target, key, request=asked
         )
         return key
 
     def _abandon(self, proc: AgentProcess, prior: dict[str, Any]) -> None:
         """The agent went live and asked for something else: the call stays unknown."""
         self.store.settle_intent(prior["id"])
+        if self.couriers is not None:
+            self.couriers.fate(prior["id"])  # unclaimed, it now never will be
         self._log(
             proc.pid, "recover",
             f"in-flight {prior['target']} #{prior['req_id']} was never asked "
             "for again; its outcome stays unknown",
+        )
+
+    def _diverged(self, proc: AgentProcess, call: Syscall, target: str) -> None:
+        """The restarted agent asked for something else at this point. What was
+        recorded answers another request, so it is dropped and this one made."""
+        self.publish(
+            "ReplayDiverged", source_pid=proc.pid, pid=proc.pid,
+            target=target, req_id=call.req_id,
+        )
+        self._log(
+            proc.pid, "recover",
+            f"{target} #{call.req_id} differs from the request on record; the "
+            "recorded reply answers that one, so this is a new call",
         )
 
     def _replay_entry(self, proc: AgentProcess, call: Syscall) -> dict[str, Any] | None:
@@ -249,6 +292,12 @@ class Kernel:
                 f"{entry['op']!r}#{entry['req_id']}, agent asked {call.op!r}; going live",
             )
             del self._journals[proc.pid]
+            self.store.truncate_journal(proc.pid, call.req_id)
+            return None
+        if differs(entry.get("request"), fingerprint(call)):
+            self._diverged(proc, call, call.op)
+            del self._journals[proc.pid]
+            self.store.truncate_journal(proc.pid, call.req_id)
             return None
         entries.pop(0)
         if not entries:
@@ -548,6 +597,9 @@ class Kernel:
             proc.inbox.put_nowait(Reply(req_id=call.req_id, value=value))
             return
         proc.current_op = call.op
+        request = fingerprint(call)
+        if request is not None:
+            self._asked[(proc.pid, call.req_id)] = request
         getattr(self, f"_sys_{call.op}")(proc, call, **call.args)
 
     def _sys_spawn(
@@ -1148,7 +1200,7 @@ class Kernel:
             return None
         flight = {
             "req_id": call.req_id, "op": call.op, "target": target,
-            "dep": dep, "intent": proc.intent,
+            "dep": dep, "intent": proc.intent, "request": fingerprint(call),
         }
         self._inflight[proc.pid] = flight
         return flight
@@ -1163,6 +1215,10 @@ class Kernel:
             return False
         if (flight["req_id"], flight["op"], flight["target"]) != (call.req_id, call.op, target):
             flight["abandoned"] = True  # asked for something else: not this call
+            return False
+        if differs(flight.get("request"), fingerprint(call)):
+            flight["abandoned"] = True  # same place, another request: not this call
+            self._diverged(proc, call, target)
             return False
         proc.intent = flight["intent"]  # settled when the reply is journaled
         self._yield_slot(proc, AgentState.WAITING, waiting_on=waiting_on)
@@ -1208,12 +1264,14 @@ class Kernel:
             return
         value = _shape({flight["dep"]: result})
         self.store.append_journal(
-            proc.pid, req_id, flight["op"], value, None, intent=flight["intent"]
+            proc.pid, req_id, flight["op"], value, None, intent=flight["intent"],
+            request=flight.get("request"),
         )
         proc.checkpoint += 1
         self.store.publish(proc.row())
         self._journals.setdefault(proc.pid, []).append(
-            {"req_id": req_id, "op": flight["op"], "value": value, "error": None}
+            {"req_id": req_id, "op": flight["op"], "value": value, "error": None,
+             "request": flight.get("request")}
         )
         self._log(
             proc.pid, "recover",
@@ -1245,6 +1303,8 @@ class Kernel:
         prior = self._ambiguous.get(proc.pid)
         if prior is None or (prior["req_id"], prior["target"]) != (call.req_id, target):
             return None
+        if differs(prior.get("request"), fingerprint(call)):
+            return None  # another request in the same place: _intend abandons it
         fate, row = self.couriers.fate(prior["id"])
         if fate == "lost":
             return None

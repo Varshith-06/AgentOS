@@ -71,12 +71,12 @@ class CourierLost(Exception):
     """The courier died mid-call: the call may or may not have taken effect."""
 
 
-def _connect(path: Path | str) -> sqlite3.Connection:
+def _connect(path: Path | str, durable: bool = False) -> sqlite3.Connection:
     db = sqlite3.connect(path, isolation_level=None, timeout=30.0)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     # As in the store: a killed process cannot lose a committed row.
-    db.execute("PRAGMA synchronous=NORMAL")
+    db.execute(f"PRAGMA synchronous={'FULL' if durable else 'NORMAL'}")
     db.executescript(SCHEMA)
     return db
 
@@ -111,12 +111,14 @@ class Couriers:
     """The runtime's side: dispatch couriers, wait for them, and after a crash
     say what became of the call each one carried."""
 
-    def __init__(self, dirpath: Path | str, log: Callable[[str], None] | None = None):
+    def __init__(self, dirpath: Path | str, log: Callable[[str], None] | None = None,
+                 durable: bool = False):
         root = Path(dirpath)
         self.dir = root / "couriers"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.path = root / "couriers.db"
-        self.db = _connect(self.path)
+        self.durable = durable
+        self.db = _connect(self.path, durable)
         self._log = log or (lambda message: None)
         self.detach = os.environ.get("AGENTOS_COURIER_DETACH", "1") != "0"
         self._contained = False  # said once: they cannot leave this job
@@ -181,7 +183,15 @@ class Couriers:
             (key, intent, target, json.dumps(meta) if meta else None, time.time()),
         )
         child = await self._spawn(key, target, args)
-        return await self.wait(key, child)
+        try:
+            return await self.wait(key, child)
+        except CourierError:
+            if self.row(key)["state"] != "dispatched":
+                raise  # it ran, and failed
+        # It exited without claiming the call, so the call was never made and
+        # nobody else can claim it now: sending it again cannot bill it twice.
+        self._log(f"courier {key} exited before claiming its call; starting another")
+        return await self.wait(key, await self._spawn(key, target, args))
 
     async def wait(self, key: str, child: Any = None) -> Any:
         """The reply, once the courier has it.
@@ -252,7 +262,7 @@ class Couriers:
     async def _spawn(self, key: str, target: str, args: dict[str, Any]) -> Any:
         request = json.dumps(
             {"db": str(self.path), "dir": str(self.dir), "key": key,
-             "target": target, "args": args}
+             "target": target, "args": args, "durable": self.durable}
         ).encode("utf-8")
         child, self._spare = self._spare, None
         for _ in range(2):
@@ -315,7 +325,7 @@ def main() -> int:
     req = json.loads(raw)
     key = req["key"]
     sys.stderr = open(Path(req["dir"]) / f"{key}.err", "w", encoding="utf-8")
-    db = _connect(req["db"])
+    db = _connect(req["db"], req.get("durable", False))
     lock = _lock(Path(req["dir"]) / f"{key}.lock")
     if lock is None:
         return 1  # another courier holds this call

@@ -9,6 +9,8 @@ import re
 import time
 from typing import Any, Callable
 
+from ..runtime.courier import CourierLost
+
 _JSON_TYPES = {"str": "string", "int": "integer", "float": "number", "bool": "boolean",
                "list": "array", "dict": "object"}
 
@@ -170,8 +172,8 @@ class ToolDriver:
                         f"{self.name}.{op} failed after {attempt} attempt(s): {exc}"
                     ) from exc
                 self._log(f"{self.name}.{op} attempt {attempt} failed: {exc}; retrying")
-            except ToolError:
-                raise
+            except (ToolError, CourierLost):
+                raise  # a lost courier is the kernel's to flag, not one more tool failure
             except TypeError as exc:
                 raise ToolError(f"{self.name}.{op} bad arguments: {exc}") from exc
             except Exception as exc:

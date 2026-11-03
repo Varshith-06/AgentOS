@@ -10,6 +10,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from ..runtime.courier import CourierLost
+
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_MAX_TOKENS = 1024
@@ -152,6 +154,8 @@ class ModelManager:
                     cand.get("timeout", DEFAULT_TIMEOUT),
                 )
                 return self.result(cand, raw, loop.time() - started)
+            except CourierLost:
+                raise  # it may have been billed: the kernel flags it, no quiet next candidate
             except Exception as exc:
                 failures.append(f"{label}: {type(exc).__name__}: {exc}")
                 self._log(f"{label} failed, trying next candidate: {exc}")

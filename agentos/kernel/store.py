@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS journal (
     req_id INTEGER NOT NULL,
     op     TEXT    NOT NULL,
     value  TEXT    NOT NULL,
-    error  TEXT
+    error  TEXT,
+    request TEXT   -- fingerprint of the model or tool request this answers
 );
 -- Written before a side-effecting call is dispatched and settled in the same
 -- transaction as its journal entry, so an unsettled row after a crash is a call
@@ -95,7 +96,8 @@ CREATE TABLE IF NOT EXISTS intents (
     op      TEXT    NOT NULL,
     target  TEXT    NOT NULL,
     key     TEXT    NOT NULL,
-    settled INTEGER NOT NULL DEFAULT 0
+    settled INTEGER NOT NULL DEFAULT 0,
+    request TEXT    -- fingerprint of the request: a reply answers this and no other
 );
 CREATE TABLE IF NOT EXISTS consumptions (
     pid    INTEGER NOT NULL,
@@ -176,8 +178,9 @@ class Store:
     index is rebuilt from it at every runtime start.
     """
 
-    def __init__(self, dirpath: Path | str = DEFAULT_DIR) -> None:
+    def __init__(self, dirpath: Path | str = DEFAULT_DIR, durable: bool = False) -> None:
         self.dir = Path(dirpath)
+        self.durable = durable
         self.dir.mkdir(parents=True, exist_ok=True)
         self.path = self.dir / "runtime.db"
         self.db = sqlite3.connect(self.path, isolation_level=None, timeout=5.0)
@@ -185,8 +188,14 @@ class Store:
         self.db.execute("PRAGMA journal_mode=WAL")  # concurrent CLI reads
         # WAL + NORMAL fsyncs at checkpoints rather than per commit: a killed
         # process still cannot lose committed data, and 400 writes save ~273ms.
-        self.db.execute("PRAGMA synchronous=NORMAL")
+        # A machine that dies can lose those commits, intents among them, and a
+        # lost intent is a repeat nobody can flag. durable=True fsyncs each one.
+        self.db.execute(f"PRAGMA synchronous={'FULL' if durable else 'NORMAL'}")
         self.db.executescript(SCHEMA)
+        for table in ("journal", "intents"):  # stores from before fingerprints
+            if not any(c["name"] == "request"
+                       for c in self.db.execute(f"PRAGMA table_info({table})")):
+                self.db.execute(f"ALTER TABLE {table} ADD COLUMN request TEXT")
         self.vec = self._load_vec()
 
     def _load_vec(self) -> bool:
@@ -420,15 +429,15 @@ class Store:
 
     def append_journal(
         self, pid: int, req_id: int, op: str, value: Any, error: str | None,
-        intent: int | None = None,
+        intent: int | None = None, request: str | None = None,
     ) -> None:
         """Record a reply, settling the intent it answers in the same commit."""
         self.db.execute("BEGIN")
         try:
             self.db.execute(
-                "INSERT INTO journal (ts, pid, req_id, op, value, error)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (time.time(), pid, req_id, op, json.dumps(value), error),
+                "INSERT INTO journal (ts, pid, req_id, op, value, error, request)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (time.time(), pid, req_id, op, json.dumps(value), error, request),
             )
             if intent is not None:
                 self.db.execute("UPDATE intents SET settled = 1 WHERE id = ?", (intent,))
@@ -438,17 +447,23 @@ class Store:
             raise
 
     def append_intent(
-        self, pid: int, req_id: int, op: str, target: str, key: str
+        self, pid: int, req_id: int, op: str, target: str, key: str,
+        request: str | None = None,
     ) -> int:
         cur = self.db.execute(
-            "INSERT INTO intents (ts, pid, req_id, op, target, key)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (time.time(), pid, req_id, op, target, key),
+            "INSERT INTO intents (ts, pid, req_id, op, target, key, request)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (time.time(), pid, req_id, op, target, key, request),
         )
         return int(cur.lastrowid)
 
     def settle_intent(self, intent: int) -> None:
         self.db.execute("UPDATE intents SET settled = 1 WHERE id = ?", (intent,))
+
+    def truncate_journal(self, pid: int, req_id: int) -> None:
+        """The agent went another way at `req_id`: what the journal holds from
+        there on is no longer this agent's history, and must not replay later."""
+        self.db.execute("DELETE FROM journal WHERE pid = ? AND req_id >= ?", (pid, req_id))
 
     def open_intents(self) -> dict[int, dict[str, Any]]:
         """pid -> the call it had in flight when the runtime died, if any."""
@@ -467,6 +482,7 @@ class Store:
                     "op": r["op"],
                     "value": json.loads(r["value"]),
                     "error": r["error"],
+                    "request": r["request"],
                 }
             )
         return out

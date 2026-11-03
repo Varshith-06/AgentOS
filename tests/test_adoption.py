@@ -61,6 +61,10 @@ class Biller(Agent):
         flag.write_text("1")
         if second and self.params.get("dawdle"):
             await asyncio.sleep(self.params["dawdle"])  # not a syscall: no journal
+        if second and self.params.get("reask"):  # same place, another request
+            out = await ctx.request_tool(
+                "billed", "charge", n=8, db=self.params["db"], gate=self.params["gate"])
+            return out["charged"]
         if second and self.params.get("change"):
             await ctx.log("decided otherwise")
             out = await ctx.request_tool(
@@ -74,6 +78,36 @@ class Biller(Agent):
 class Asker(Agent):
     async def run(self, ctx):
         out = await ctx.request_model("fast", "say something")
+        return out["text"]
+
+
+class Drifter(Agent):
+    """Each life builds its prompt anew, as one holding a timestamp would."""
+
+    retries = 1
+
+    async def run(self, ctx):
+        Path(self.params["pidfile"]).write_text(str(os.getpid()))
+        flag = Path(self.params["pidfile"] + ".lived")
+        life = 2 if flag.exists() else 1
+        flag.write_text("1")
+        first = await ctx.request_model("fast", f"asked in life {life}")
+        if self.params.get("then_die") and life == 1:
+            raise RuntimeError("dies with its first call journaled")
+        if self.params.get("then_die"):
+            second = await ctx.request_model("fast", "the same in every life")
+            return [first["text"], second["text"]]
+        return first["text"]
+
+
+class Steady(Agent):
+    """The same prompt in every life."""
+
+    retries = 1
+
+    async def run(self, ctx):
+        Path(self.params["pidfile"]).write_text(str(os.getpid()))
+        out = await ctx.request_model("fast", "the same in every life")
         return out["text"]
 
 
@@ -148,6 +182,9 @@ class AdoptionTest(unittest.IsolatedAsyncioTestCase):
     def said(self, pid: int) -> list[str]:
         return [r["message"] for r in self.store.logs(pid=pid)]
 
+    def diverged(self, k: Kernel) -> list:
+        return [e for e in k.bus.history if e.type == "ReplayDiverged"]
+
     def flagged(self, k: Kernel) -> list:
         return [e for e in k.bus.history if e.type == "OutcomeAmbiguous"]
 
@@ -206,6 +243,28 @@ class AdoptionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sorted(self.charges()), [7, 8])
         self.assertTrue(any("never asked for again" in m for m in self.said(pid)),
                         self.said(pid))
+        self.assertEqual(self.store.open_intents(), {})
+
+    async def test_the_same_place_with_another_request_is_a_new_call(self):
+        k = self.kernel()
+        pid, run = await self.agent_dies_mid_call(k, self.biller(reask=True))
+        await self.until(lambda: self.diverged(k))
+        Path(self.gate).touch()
+        await asyncio.wait_for(run, timeout=LIMIT)
+        self.assertEqual(k.table.get(pid).result, 8, "the new request's reply")
+        self.assertEqual(sorted(self.charges()), [7, 8])
+        self.assertEqual(self.store.open_intents(), {})
+
+    async def test_another_request_with_the_old_reply_already_in_is_a_new_call(self):
+        k = self.kernel()
+        pid, run = await self.agent_dies_mid_call(
+            k, self.biller(reask=True, dawdle=1.5))
+        await self.until(lambda: any("still in flight" in m for m in self.said(pid)))
+        Path(self.gate).touch()  # journaled before the restart asks
+        await asyncio.wait_for(run, timeout=LIMIT)
+        self.assertTrue(self.diverged(k))
+        self.assertEqual(k.table.get(pid).result, 8, "not the journaled reply to n=7")
+        self.assertEqual(sorted(self.charges()), [7, 8])
         self.assertEqual(self.store.open_intents(), {})
 
     # -- the runtime dies; a courier carried the call -------------------------
@@ -270,6 +329,55 @@ class AdoptionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.charges(), [7, 7], "nobody could account for it")
         self.assertEqual(len(self.flagged(k2)), 1, "and the repeat is on the record")
 
+    async def test_a_courier_killed_alone_is_flagged(self):
+        """The runtime lives and only the courier dies: nobody can say whether the
+        call happened, so the repeat must be on the record here as after a crash."""
+        k = self.kernel(courier=True)
+        pid = k.spawn(self.biller())
+        run = asyncio.create_task(k.run())
+        await self.until(lambda: len(self.charges()) == 1)
+        os.kill(self.courier_row()["pid"], signal.SIGTERM)
+        await self.until(lambda: self.flagged(k))
+        Path(self.gate).touch()
+        await asyncio.wait_for(run, timeout=LIMIT)
+        self.assertEqual(len(self.flagged(k)), 1)
+        self.assertEqual(k.table.get(pid).result, 7, "its retry answered")
+        self.assertEqual(self.charges(), [7, 7], "billed twice, and flagged")
+
+    async def test_a_model_courier_killed_alone_is_flagged(self):
+        Model.received, Model.gate = [], threading.Event()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Model)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(Model.gate.set)
+        models = {"classes": {"fast": [{
+            "provider": "openai", "model": "m", "api_key_env": None,
+            "base_url": f"http://127.0.0.1:{server.server_address[1]}/v1",
+            "cost_per_mtok": [1.0, 1.0]}]}}
+        k = self.kernel(courier=True, models=models)
+        k.spawn(Asker())
+        run = asyncio.create_task(k.run())
+        await self.until(lambda: len(Model.received) == 1)
+        os.kill(self.courier_row()["pid"], signal.SIGTERM)
+        await self.until(lambda: self.flagged(k))
+        Model.gate.set()
+        await asyncio.wait_for(run, timeout=LIMIT)
+        self.assertEqual(len(self.flagged(k)), 1)
+
+    async def test_a_spare_that_exits_unclaimed_is_replaced(self):
+        Path(self.gate).touch()
+        c = Couriers(self.store.dir)
+        self.couriers.append(c)
+        c._spare = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", "import sys; sys.stdin.buffer.read()",  # takes it, then leaves
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        out = await c.call(9, 1, "tests._paid:bill", {"n": 9, "db": self.bills, "gate": self.gate})
+        self.assertEqual(self.charges(), [9], "made once, by the second courier")
+        self.assertEqual(c.row("9.1")["state"], "done")
+        self.assertIsNotNone(out)
+
     async def test_a_courier_that_never_claimed_its_call_never_makes_it(self):
         c = Couriers(self.store.dir)
         self.couriers.append(c)
@@ -314,6 +422,83 @@ class AdoptionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.flagged(k2), [])
         cost = self.store.model_costs()[pid]["cost"]
         self.assertAlmostEqual(cost, 5 / 1e6, msg="priced from the adopted reply")
+
+    # -- a restart that asks for something else gets an answer to that -------
+
+    def model_server(self) -> dict:
+        Model.received, Model.gate = [], threading.Event()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Model)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(Model.gate.set)
+        return {"classes": {"fast": [{
+            "provider": "openai", "model": "m", "api_key_env": None,
+            "base_url": f"http://127.0.0.1:{server.server_address[1]}/v1",
+            "cost_per_mtok": [1.0, 1.0]}]}}
+
+    def prompts(self) -> list[str]:
+        return [m["content"] for b in Model.received for m in b["messages"]
+                if m["role"] == "user"]
+
+    async def test_a_runtime_crash_never_answers_a_changed_prompt_with_the_old_reply(self):
+        models = self.model_server()
+        k1 = self.kernel(courier=True, models=models)
+        pid = k1.spawn(Drifter(pidfile=self.pidfile))
+        run1 = asyncio.create_task(k1.run())
+        await self.until(lambda: len(Model.received) == 1)
+        await self.crash(k1, run1)
+
+        k2 = self.kernel(courier=True, models=models, recover=True)
+        run2 = asyncio.create_task(k2.run())
+        await self.until(lambda: self.diverged(k2))
+        Model.gate.set()
+        await asyncio.wait_for(run2, timeout=LIMIT)
+        self.assertEqual(k2.table.get(pid).result, "reply 2", "the new prompt's reply")
+        await self.until(lambda: not k2.couriers.alive("1.1"))  # the old call's courier
+        self.assertEqual(self.prompts(), ["asked in life 1", "asked in life 2"])
+        self.assertEqual(self.store.open_intents(), {})
+
+    async def test_an_agent_crash_never_answers_a_changed_prompt_with_the_old_reply(self):
+        models = self.model_server()
+        k = self.kernel(models=models)
+        pid = k.spawn(Drifter(pidfile=self.pidfile))
+        run = asyncio.create_task(k.run())
+        await self.until(lambda: len(Model.received) == 1)
+        os.kill(int(Path(self.pidfile).read_text()), signal.SIGTERM)
+        await self.until(lambda: self.diverged(k))
+        Model.gate.set()
+        await asyncio.wait_for(run, timeout=LIMIT)
+        self.assertEqual(k.table.get(pid).result, "reply 2")
+        self.assertEqual(self.prompts(), ["asked in life 1", "asked in life 2"])
+
+    async def test_the_same_prompt_still_gets_the_first_reply(self):
+        models = self.model_server()
+        k = self.kernel(models=models)
+        pid = k.spawn(Steady(pidfile=self.pidfile))
+        run = asyncio.create_task(k.run())
+        await self.until(lambda: len(Model.received) == 1)
+        os.kill(int(Path(self.pidfile).read_text()), signal.SIGTERM)
+        await self.until(lambda: any("still in flight" in m for m in self.said(pid)))
+        Model.gate.set()
+        await asyncio.wait_for(run, timeout=LIMIT)
+        self.assertEqual(k.table.get(pid).result, "reply 1")
+        self.assertEqual(len(Model.received), 1)
+        self.assertEqual(self.diverged(k), [])
+
+    async def test_a_replay_that_changes_an_earlier_prompt_goes_live_from_there(self):
+        models = self.model_server()
+        Model.gate.set()
+        k = self.kernel(models=models)
+        pid = k.spawn(Drifter(pidfile=self.pidfile, then_die=True))
+        await asyncio.wait_for(k.run(), timeout=LIMIT)
+        self.assertEqual(k.table.get(pid).result, ["reply 2", "reply 3"],
+                         "life 1's journaled reply answered another prompt")
+        self.assertEqual(self.prompts(), ["asked in life 1", "asked in life 2",
+                                          "the same in every life"])
+        self.assertTrue(self.diverged(k))
+        kept = [e for e in self.store.load_journals()[pid] if e["op"] == "request_model"]
+        self.assertEqual(len(kept), 2, "the abandoned entry is gone from the journal")
 
 
 if __name__ == "__main__":

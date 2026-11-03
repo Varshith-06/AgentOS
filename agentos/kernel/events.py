@@ -17,6 +17,7 @@ KERNEL_EVENTS: frozenset[str] = frozenset(
         "TimerExpired",
         "FileCreated",
         "OutcomeAmbiguous",
+        "ReplayDiverged",
     }
 )
 
