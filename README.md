@@ -442,7 +442,8 @@ intent is re-issued under its *original* key if the driver deduplicates (the
 `sql` driver commits the statement and the key together, which is exactly-once
 for real). Otherwise it is re-issued with an `OutcomeAmbiguous` event on the
 record, or refused under `on_ambiguous="fail"`, so the agent can check first.
-A duplicate is never silent.
+A duplicate is silent only when a target is treated as idempotent and the provider
+does not in fact deduplicate, as the keyed runs on Groq show.
 
 ### When the provider won't help
 
@@ -464,7 +465,7 @@ nothing asked of the provider. AgentOS keeps it in two places:
   mid-call leaves a call nobody can account for, and that one is flagged as
   before. Tools opt in per op (`ToolDriver.courier`); model calls over HTTP
   always can. A courier outlives the runtime, not the machine: a container or
-  host restart still ends in a flagged repeat, and a service manager that kills a
+  host restart still ends in a flagged repeat if the store survives, and a service manager that kills a
   whole control group would probably kill it too, which we did not test.
 
 Under the same harness, with a provider that ignores keys, the agent and

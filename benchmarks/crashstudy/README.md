@@ -79,9 +79,10 @@ Each row also keeps `signals`: what the framework told the re-executed call
 about itself. That's the attempt number Temporal and DBOS hand to an activity
 or step (recorded via `client.note`), and AgentOS's `OutcomeAmbiguous`
 events. `analyze.py` prints, per framework, how many duplicates came with a
-signal and how many signals came without one. LangGraph, CrewAI, Prefect and
-AutoGen document no per-call signal that would distinguish a re-execution after
-a crash.
+signal and how many signals came without one. CrewAI and AutoGen document no
+such signal that we found. LangGraph documents a node attempt number and Prefect
+a run count, which the adapters did not read, and we did not test whether either
+changes across a crash.
 Rows written before signals were recorded were backfilled from the run
 directories where those still existed (AgentOS rows); Temporal's and DBOS's
 signals come from the dedicated `detect.jsonl` run.
@@ -141,6 +142,11 @@ with the runtime as they would on a host crash, which is the control.
 `--gateway` puts `agent gateway` between the frameworks and the provider. The
 commands are at the bottom of `reproduce.sh`.
 
+The recorded gateway arms ran under `--on-drift replay`, which was the gateway's default
+then and is still the default of `run.py`, so the commands here reproduce them as they ran.
+`agent gateway` itself now defaults to `reissue`. None of the 3,512 requests in those arms
+changed its body, so the counts do not depend on the policy.
+
 ## A real task
 
 `CS_TASK=1` replaces "reply with the number" with a code review of eight AgentOS
@@ -160,7 +166,8 @@ The prompt hashes in those arms' `calls.jsonl` show this.
 
 ## Studies and experiment labels
 
-The paper names seven studies. File names and script output here still use the older labels:
+"Re-billed" in file names and script output means admitted or sent again: no bill
+was observed. The paper names seven studies. File names and script output here still use the older labels:
 
 | Study in the paper | Labels here |
 |---|---|

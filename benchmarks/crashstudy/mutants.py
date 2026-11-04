@@ -3,7 +3,7 @@
     python3 -m benchmarks.crashstudy.mutants --trials 10 --out results/v2/mutants
 
 Each mutant is a small edit to a throwaway copy of AgentOS: three reinstate bugs
-this study really found, and the rest are bugs a recovery path could plausibly
+found during this work, and the rest are bugs a recovery path could plausibly
 have. The same battery of crashes runs against the clean copy and every mutant.
 The bugs and the battery were written together, and two real bugs can fire only in
 the changed-prompt and courier-alone arms, so the counts show that some bugs need a
