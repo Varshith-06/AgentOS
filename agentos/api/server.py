@@ -164,6 +164,11 @@ def make_server(daemon, host: str, port: int) -> ThreadingHTTPServer:
             # Says a token is needed, and nothing about the one that was sent.
             body = json.dumps({"error": "unauthorized: a bearer token is required"})
             raw = body.encode("utf-8")
+            try:
+                # Refused either way; read it so the client gets the 401, not a reset.
+                self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 1 << 20))
+            except (OSError, ValueError):
+                pass
             self.send_response(401)
             self.send_header("WWW-Authenticate", 'Bearer realm="agentos"')
             self.send_header("Content-Type", "application/json")

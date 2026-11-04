@@ -62,8 +62,8 @@ class Biller(Agent):
         if second and self.params.get("dawdle"):
             await asyncio.sleep(self.params["dawdle"])  # not a syscall: no journal
         if second and self.params.get("reask"):  # same place, another request
-            out = await ctx.request_tool(
-                "billed", "charge", n=8, db=self.params["db"], gate=self.params["gate"])
+            gate = self.params.get("second_gate", self.params["gate"])
+            out = await ctx.request_tool("billed", "charge", n=8, db=self.params["db"], gate=gate)
             return out["charged"]
         if second and self.params.get("change"):
             await ctx.log("decided otherwise")
@@ -138,7 +138,7 @@ class Model(BaseHTTPRequestHandler):
 
 class AdoptionTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.dir = Path(self.tmp.name)
         self.store = Store(self.dir / "store")
         self.bills = str(self.dir / "bills.db")
@@ -254,6 +254,21 @@ class AdoptionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(k.table.get(pid).result, 8, "the new request's reply")
         self.assertEqual(sorted(self.charges()), [7, 8])
         self.assertEqual(self.store.open_intents(), {})
+
+    async def test_a_run_that_ends_before_the_abandoned_call_leaves_no_open_intent(self):
+        """The new request's reply comes first and the agent finishes. The old call
+        is still out, and nobody will ever ask for it."""
+        k = self.kernel()
+        pid, run = await self.agent_dies_mid_call(
+            k, self.biller(reask=True, second_gate=self.gate + ".second"))
+        await self.until(lambda: self.diverged(k))
+        Path(self.gate + ".second").touch()  # only the new call may answer
+        await asyncio.wait_for(run, timeout=LIMIT)
+        self.assertEqual(k.table.get(pid).result, 8)
+        self.assertEqual(self.store.open_intents(), {})
+        self.assertTrue(any("never asked for again" in m for m in self.said(pid)),
+                        self.said(pid))
+        Path(self.gate).touch()  # let the old call's thread go
 
     async def test_another_request_with_the_old_reply_already_in_is_a_new_call(self):
         k = self.kernel()

@@ -130,6 +130,9 @@ class Kernel:
         # of making it again. False restores re-issue-and-flag.
         self.adopt = adopt
         self._inflight: dict[int, dict[str, Any]] = {}
+        # Calls still out that no agent will ask for again. A newer call takes the
+        # abandoned one's place in _inflight, so they are kept here until they end.
+        self._abandoned: list[tuple[int, dict[str, Any]]] = []
         # Couriers carry calls in processes of their own, so a reply outlives
         # even the runtime (agentos.runtime.courier).
         self.couriers = (
@@ -430,6 +433,7 @@ class Kernel:
             task.cancel()
         if self._io_tasks:
             await asyncio.gather(*self._io_tasks, return_exceptions=True)
+        self._drop_orphans()
         close = getattr(self.executor, "aclose", None)
         if close is not None:
             await close()
@@ -590,7 +594,7 @@ class Kernel:
         ):
             # The restarted agent went another way: its old call's reply has
             # nobody to go to.
-            flight["abandoned"] = True
+            self._abandon_flight(proc, flight)
         if call.op in NONBLOCKING:
             value = getattr(self, f"_sys_{call.op}")(proc, **call.args)
             self._journal(proc, call.req_id, call.op, value, None)
@@ -1205,6 +1209,10 @@ class Kernel:
         self._inflight[proc.pid] = flight
         return flight
 
+    def _abandon_flight(self, proc: AgentProcess, flight: dict[str, Any]) -> None:
+        flight["abandoned"] = True
+        self._abandoned.append((proc.pid, flight))
+
     def _attach(
         self, proc: AgentProcess, call: Syscall, target: str, dep: str, waiting_on: str
     ) -> bool:
@@ -1214,10 +1222,10 @@ class Kernel:
         if flight is None or not flight.get("orphan") or flight.get("abandoned"):
             return False
         if (flight["req_id"], flight["op"], flight["target"]) != (call.req_id, call.op, target):
-            flight["abandoned"] = True  # asked for something else: not this call
+            self._abandon_flight(proc, flight)  # asked for something else: not this call
             return False
         if differs(flight.get("request"), fingerprint(call)):
-            flight["abandoned"] = True  # same place, another request: not this call
+            self._abandon_flight(proc, flight)  # same place, another request: not this call
             self._diverged(proc, call, target)
             return False
         proc.intent = flight["intent"]  # settled when the reply is journaled
@@ -1239,6 +1247,7 @@ class Kernel:
             del self._inflight[proc.pid]
         if flight is not None and flight.get("abandoned"):
             # Its dependency key may now name a different call: wake nobody.
+            self._abandoned = [(p, f) for p, f in self._abandoned if f is not flight]
             self._orphaned(proc, flight, result)
             return
         woken = self.deps.resolve(dep, result)
@@ -1278,6 +1287,26 @@ class Kernel:
             f"{target} #{req_id} finished after its agent died; its reply is "
             "journaled for the restarted agent, so the call is not made again",
         )
+
+    def _drop_orphans(self) -> None:
+        """A clean exit, with calls still out that no agent will ever ask for: an
+        agent that asked for something else, or one that is gone. Their intents
+        would otherwise stay open. A crash never comes here, so an intent a
+        recovery needs is never settled by this."""
+        gone = list(self._abandoned)
+        self._abandoned = []
+        for pid, flight in list(self._inflight.items()):
+            if flight.get("orphan") and not flight.get("abandoned") and not self.table.get(pid).alive:
+                del self._inflight[pid]
+                gone.append((pid, flight))
+        for pid, flight in gone:
+            if flight["intent"] is not None:
+                self.store.settle_intent(flight["intent"])
+            self._log(
+                pid, "recover",
+                f"{flight['target']} #{flight['req_id']} was still out when the run "
+                "ended, and was never asked for again; its reply is dropped",
+            )
 
     def _courier(self, proc: AgentProcess) -> Any:
         """send(target, args, meta) for `proc`'s current call, if couriers are on."""

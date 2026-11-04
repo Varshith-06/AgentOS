@@ -1,6 +1,6 @@
 # What a crash costs
 
-One workload, seven agent frameworks, each recovered its own documented way,
+One workload, six agent frameworks and AgentOS, each recovered its own documented way,
 killed at random moments, with charges counted by a provider none of them can
 touch.
 

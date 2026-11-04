@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+FILE_LIMIT = float(os.environ.get("AGENTOS_TEST_FILE_LIMIT", "480"))
 RAN = re.compile(r"Ran (\d+) tests? in ([\d.]+)s")
 WHICH = re.compile(r"^(?:FAIL|ERROR): (\w+)", re.M)
 WHY = re.compile(r"^(\w*(?:Error|Exception|Failure)):?(.*)$", re.M)
@@ -44,14 +45,21 @@ def annotate(failed: list) -> None:
 def run_file(path: Path) -> tuple[str, bool, int, float, str]:
     """(name, ok, tests, seconds, output) for one test file."""
     t0 = time.perf_counter()
-    proc = subprocess.run(
-        [sys.executable, "-X", "utf8", "-m", "unittest", f"tests.{path.stem}"],
-        cwd=HERE.parent,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-X", "utf8", "-m", "unittest", f"tests.{path.stem}"],
+            cwd=HERE.parent,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=FILE_LIMIT,
+        )
+    except subprocess.TimeoutExpired as exc:
+        partial = exc.stdout or b""
+        partial = partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial
+        return (path.stem, False, 0, time.perf_counter() - t0,
+                f"TimeoutError: {path.name} still running after {FILE_LIMIT:.0f}s\n{partial}")
     wall = time.perf_counter() - t0
     output = (proc.stdout or "") + (proc.stderr or "")
     match = RAN.search(output)

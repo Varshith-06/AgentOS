@@ -3,7 +3,7 @@
 [![CI](https://github.com/Varshith-06/AgentOS/actions/workflows/ci.yml/badge.svg)](https://github.com/Varshith-06/AgentOS/actions/workflows/ci.yml)
 ![Python 3.11 – 3.14](https://img.shields.io/badge/python-3.11%20%E2%80%93%203.14-blue)
 ![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-brightgreen)
-![Tests: 272 passing](https://img.shields.io/badge/tests-272%20passing-brightgreen)
+![Tests: 286 passing](https://img.shields.io/badge/tests-286%20passing-brightgreen)
 ![Model: gpt--oss--120b](https://img.shields.io/badge/default%20model-gpt--oss--120b-orange)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -15,7 +15,7 @@ boundary, is permission-checked, journaled, and billed. `kill -9` the runtime
 mid-task and it resumes from its last completed call. The one call that was
 *in flight* is the exception, for AgentOS and for every framework we measured:
 it gets re-issued under its original idempotency key when the tool honours
-one, and otherwise it is re-issued **and flagged**, never silently repeated.
+one, and otherwise it is re-issued **and flagged**.
 See [what a crash costs](#what-a-crash-costs) for ten configurations of six
 frameworks and AgentOS, killed at random moments.
 
@@ -68,7 +68,7 @@ config at a real one and the same code runs live.
 | **MCP, both ways** | any MCP server mounts as a capability (`mcp:github`), checked, attenuated, journaled, and pinned against rug pulls; AgentOS is itself an MCP server, so Claude Code can run teams on it |
 | **Spending** | per-task budget the kernel enforces, metered across the whole tree |
 | **Auth** | bearer token on every route; refuses to bind non-loopback without one |
-| **Test suite** | 272 tests, zero dependencies, fully offline |
+| **Test suite** | 286 tests, zero dependencies, fully offline |
 | **Verified** | the correctness claims above are re-checked on every push — Linux, macOS, Windows × Python 3.11–3.14. Timings are reported, never asserted |
 
 ---
@@ -1028,7 +1028,7 @@ benchmarks/   bench.py             # recovery, approval latency, multi-app cost
               crashstudy/          # what a crash costs, per framework; results/ and reproduce.sh
 docs/         manual.py            # the text of AgentOS.pdf
               build_manual.py      # renders it; run after changing the system
-tests/        272 of them          # including what the API and kernel refuse
+tests/        286 of them          # including what the API and kernel refuse
               fake_mcp_server.py   # a scriptable MCP server, both protocol eras
               run.py               # parallel runner: one interpreter per file
 .github/      workflows/ci.yml     # the suite on 3 OSes, plus the claim gates
