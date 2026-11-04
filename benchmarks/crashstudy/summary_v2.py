@@ -12,6 +12,7 @@ import argparse
 import collections
 import json
 import math
+import sqlite3
 import statistics
 from pathlib import Path
 
@@ -157,7 +158,38 @@ def testing() -> None:
             found = r.get("found_by") or {}
             out[r["mutant"]] = {"real": r["real"], "found_by": sorted(k for k, v in found.items() if v)}
             print(f"  {r['mutant']:36} real={str(r['real']):5} {out[r['mutant']]['found_by']}")
+            for arm, a in r["arms"].items():
+                print(f"      {arm:26} crashes={a['n']:<3} dup={a['dup']:<3} silent={a['silent']:<3} "
+                      f"missing={a['missing']:<3} wrong={a['wrong']}")
+            if r.get("tests"):
+                print(f"      tests: {r['tests'].get('summary', '')}")
     OUT["mutants"] = out
+    long_calls()
+
+
+def long_calls() -> None:
+    """The follow-up arm: how far into its call each kill landed, from the ledger."""
+    path = V2 / "mutants" / "long-calls.jsonl"
+    if not path.exists():
+        return
+    print("\n== Seeded bugs, follow-up arm at L=3 s: seconds into the call at each kill, and duplicates")
+    out = {}
+    for m in rows(path):
+        name = m["mutant"]
+        arm = V2 / "mutants" / name / "couriers-long-calls.jsonl"
+        kills = []
+        for r in rows(arm):
+            if r.get("status") != "ok":
+                continue
+            db = sqlite3.connect(f"file:{(arm.parent / r['ledger']).as_posix()}?mode=ro&immutable=1", uri=True)
+            ts = [t for (t,) in db.execute("SELECT ts FROM charges WHERE run = ? ORDER BY id", (r["run"],))]
+            db.close()
+            done = r.get("charged_before_kill") or 0
+            into = ts[0] + r["killed_after"] - ts[done - 1] if ts and done else None
+            kills.append((None if into is None else round(into, 2), r.get("duplicates", 0)))
+        out[name] = kills
+        print(f"  {name:36} {kills}")
+    OUT["long-calls"] = out
 
 
 def model_fit() -> None:

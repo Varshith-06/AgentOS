@@ -4,14 +4,16 @@
 
 Each mutant is a small edit to a throwaway copy of AgentOS: three reinstate bugs
 this study really found, and the rest are bugs a recovery path could plausibly
-have. The same battery of crashes runs against the clean copy and every mutant,
-with no arm chosen for any one bug. POSIX only. The checks:
+have. The same battery of crashes runs against the clean copy and every mutant.
+The bugs and the battery were written together, and two real bugs can fire only in
+the changed-prompt and courier-alone arms, so the counts show that some bugs need a
+given check, not how strong it is. POSIX only. The checks:
 
     duplicate   a crash repeated a call in an arm that should not repeat one
     missing     a run ended without making or answering all its calls
     reply       a reply failed the reply check (it answered another request)
     flag        a call was repeated with no flag, where a flag is the contract
-    tests       the unit tests fail
+    tests       the test modules that script crashes fail
 
 Three kinds of crash are in the battery on purpose, and a mutant is reported as
 found by a check only if that check fires where it stays quiet on the clean copy.

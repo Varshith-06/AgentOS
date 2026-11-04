@@ -160,7 +160,7 @@ The prompt hashes in those arms' `calls.jsonl` show this.
 
 ## Studies and experiment labels
 
-The paper names five studies. File names and script output here still use the older labels:
+The paper names seven studies. File names and script output here still use the older labels:
 
 | Study in the paper | Labels here |
 |---|---|
@@ -169,6 +169,23 @@ The paper names five studies. File names and script output here still use the ol
 | Provider probes | E5 |
 | Mechanism evaluation | E6, E7 |
 | Limits | the rest of E11, E9, E10, E13, E14, the kernel model route, with E8 (gateway) and E12 (costs) |
+| Step kills | `barriers.py` |
+| Seeded bugs | `mutants.py` |
+
+## Testing the harness
+
+`barriers.py` kills a run at a named protocol step, through hooks in the harness, at 22
+combinations of step, victim, and mechanism setting. Each row in its `STEPS` holds the
+repeat and flag the design predicts. `mutants.py` seeds ten recovery bugs in throwaway
+copies of AgentOS and runs one battery against each and a clean copy, recording which check
+fires: duplicate, completeness, reply, flag, or the test modules that script crashes. The
+bugs are hand-written and the battery was built knowing them, so the counts show that some
+bugs need a given check, not how strong it is. `summary_v2` reports both from
+`results/v2/barriers/` and `results/v2/mutants/`. Both need Linux and no API key.
+
+`couriers-long-calls` in `long-calls.jsonl` was added after the battery. All its copies use
+one seed, so its kills fall at the same moments, and the duplicate in two of them is the
+same kill, about 0.3 s into its call against at least 1.9 s for the other nine.
 
 ## The kernel model route
 
