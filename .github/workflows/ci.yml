@@ -38,8 +38,10 @@ jobs:
       - name: Show interpreter
         run: python -VV
 
+      # Inside the job's limit: a job that is cancelled at its limit keeps no logs.
       - name: Run the suite
-        run: python tests/run.py
+        timeout-minutes: 12
+        run: python -u tests/run.py
 
   benchmarks:
     name: benchmark claims

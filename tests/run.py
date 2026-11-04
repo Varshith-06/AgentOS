@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-FILE_LIMIT = float(os.environ.get("AGENTOS_TEST_FILE_LIMIT", "480"))
+FILE_LIMIT = float(os.environ.get("AGENTOS_TEST_FILE_LIMIT", "300"))
 RAN = re.compile(r"Ran (\d+) tests? in ([\d.]+)s")
 WHICH = re.compile(r"^(?:FAIL|ERROR): (\w+)", re.M)
 WHY = re.compile(r"^(\w*(?:Error|Exception|Failure)):?(.*)$", re.M)
@@ -45,26 +47,38 @@ def annotate(failed: list) -> None:
 def run_file(path: Path) -> tuple[str, bool, int, float, str]:
     """(name, ok, tests, seconds, output) for one test file."""
     t0 = time.perf_counter()
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-X", "utf8", "-m", "unittest", f"tests.{path.stem}"],
-            cwd=HERE.parent,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=FILE_LIMIT,
-        )
-    except subprocess.TimeoutExpired as exc:
-        partial = exc.stdout or b""
-        partial = partial.decode("utf-8", "replace") if isinstance(partial, bytes) else partial
-        return (path.stem, False, 0, time.perf_counter() - t0,
-                f"TimeoutError: {path.name} still running after {FILE_LIMIT:.0f}s\n{partial}")
+    cmd = [sys.executable, "-X", "utf8", "-X", "faulthandler", "-m", "unittest", f"tests.{path.stem}"]
+    hung = False
+    # A file, not a pipe: a child that outlives the test must not keep this waiting.
+    with tempfile.TemporaryFile() as log:
+        proc = subprocess.Popen(cmd, cwd=HERE.parent, stdout=log, stderr=subprocess.STDOUT,
+                                start_new_session=os.name != "nt")
+        try:
+            proc.wait(FILE_LIMIT)
+        except subprocess.TimeoutExpired:
+            hung = True
+            if os.name != "nt":
+                # faulthandler writes every thread's stack, which says where it hung.
+                os.kill(proc.pid, signal.SIGABRT)
+                try:
+                    proc.wait(10)
+                except subprocess.TimeoutExpired:
+                    pass
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+            proc.kill()
+            proc.wait()
+        log.seek(0)
+        output = log.read().decode("utf-8", "replace")
     wall = time.perf_counter() - t0
-    output = (proc.stdout or "") + (proc.stderr or "")
+    if hung:
+        output = f"TimeoutError: {path.name} still running after {FILE_LIMIT:.0f}s\n{output}"
     match = RAN.search(output)
     tests = int(match.group(1)) if match else 0
-    return path.stem, proc.returncode == 0, tests, wall, output
+    print(f"  finished {path.stem} in {wall:.1f}s", flush=True)
+    return path.stem, proc.returncode == 0 and not hung, tests, wall, output
 
 
 def main() -> int:
