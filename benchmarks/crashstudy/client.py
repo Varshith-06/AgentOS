@@ -190,6 +190,33 @@ def _groq(i: int, key: str | None, q: str) -> dict:
     raise RuntimeError("rate-limited five times running")
 
 
+def barrier(step: str) -> None:
+    """Die here, if this is the step and the call this run was told to die at.
+
+    CS_BARRIER names the step, CS_BARRIER_AT which hit of it, and CS_BARRIER_KILL
+    what dies. Once per run: a resumed run passes the same steps again. See barriers.py.
+    """
+    if os.environ.get("CS_BARRIER") != step:
+        return
+    rundir = Path(os.environ["CS_DIR"])
+    with open(rundir / "barrier.hits", "ab") as fh:
+        fh.write(b"x")
+    if (rundir / "barrier.hits").stat().st_size != int(os.environ["CS_BARRIER_AT"]):
+        return
+    try:
+        os.close(os.open(rundir / "barrier.fired", os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        return
+    kill = os.environ["CS_BARRIER_KILL"]
+    if kill == "agent":
+        os.kill(int((rundir / "agent.pid").read_text()), 9)
+    if kill in ("runtime", "both"):
+        # In a courier this leaves the courier alive until the line below.
+        os.killpg(int(os.environ["CS_RUNTIME_PGID"]), 9)
+    if kill in ("courier", "both"):
+        os.kill(os.getpid(), 9)
+
+
 def model_path() -> bool:
     """CS_MODEL_PATH=1: the agent asks the kernel's model routing, not a tool driver."""
     return os.environ.get("CS_MODEL_PATH") == "1"

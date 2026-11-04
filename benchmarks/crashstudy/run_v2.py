@@ -253,6 +253,23 @@ cp $O/*.jsonl $D/
 """
 
 
+LINUX_TESTING = r"""set -e
+cd ~/aos
+rm -rf agentos tests
+cp -r @ROOT@/agentos @ROOT@/tests .
+cp @ROOT@/benchmarks/crashstudy/*.py benchmarks/crashstudy/
+find . -name __pycache__ -type d -prune -exec rm -rf {} +
+python3 -m benchmarks.crashstudy.barriers --trials 15 --seed 601 --out v2-barriers
+python3 -m benchmarks.crashstudy.mutants --trials 10 --seed 701 --out v2-mutants
+python3 -m benchmarks.crashstudy.mutants --trials 10 --seed 751 --out v2-mutants \
+    --long-calls clean,running-courier-taken-as-unsent,courier-lock-not-held
+D=@ROOT@/benchmarks/crashstudy/results/v2
+mkdir -p $D/barriers $D/mutants
+cp v2-barriers/*.jsonl $D/barriers/
+cp v2-mutants/summary.jsonl v2-mutants/long-calls.jsonl $D/mutants/
+"""
+
+
 def plan() -> list[tuple[str, dict[str, list[tuple]]]]:
     return [
         ("stand-in", {"stand-in": stand_in()}),
@@ -275,6 +292,7 @@ def plan() -> list[tuple[str, dict[str, list[tuple]]]]:
         ("model", {"model": model_route()}),
         ("model-linux", {"model-linux": [("LINUX_MODEL", {})]}),
         ("model-real", {"model-real": model_route_real()}),
+        ("testing", {"testing": [("LINUX_TESTING", {})]}),
     ]
 
 
@@ -317,8 +335,8 @@ def main() -> int:
                 say(f"{name} {n + 1}/{len(cmds)} start: {cmd[:150]}")
                 t0 = time.time()
                 with open(log, "a", encoding="utf-8") as fh:
-                    if cmd in ("LINUX", "LINUX_MODEL"):
-                        script = LINUX if cmd == "LINUX" else LINUX_MODEL
+                    if cmd in ("LINUX", "LINUX_MODEL", "LINUX_TESTING"):
+                        script = {"LINUX": LINUX, "LINUX_MODEL": LINUX_MODEL, "LINUX_TESTING": LINUX_TESTING}[cmd]
                         rc = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "bash", "-lc",
                                              script.replace("@ROOT@", wsl_path(ROOT))],
                                             stdout=fh, stderr=fh).returncode

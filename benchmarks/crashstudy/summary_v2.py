@@ -133,6 +133,33 @@ def model_route() -> None:
     section("Model route, allam, exact counts", V2 / "model" / "allam")
 
 
+def testing() -> None:
+    """Kills at named protocol steps, and the seeded bugs each check found."""
+    print("\n== Kills at protocol steps (Linux, stand-in)")
+    res = {}
+    for f in sorted((V2 / "barriers").glob("*.jsonl")):
+        rs = rows(f)
+        v = [r for r in rs if r["status"] in ("ok", "failed")]
+        d = sum(r.get("duplicates", 0) > 0 for r in v)
+        fl = sum((r.get("signals") or {}).get("announced", 0) > 0 for r in v)
+        res[f.stem] = {"n": len(v), "dup": d, "flag": fl, "want_dup": v[0]["want_dup"] if v else None,
+                       "want_flag": v[0]["want_flag"] if v else None,
+                       "missing": sum(r.get("missing", 0) > 0 for r in v),
+                       "wrong": sum(r.get("wrong_replies", 0) > 0 for r in v),
+                       "failed": sum(r["status"] == "failed" for r in v)}
+        print(f"  {f.stem:50} {res[f.stem]}")
+    OUT["barriers"] = res
+    print("\n== Seeded bugs: which check fires beyond the clean copy")
+    path = V2 / "mutants" / "summary.jsonl"
+    out = {}
+    if path.exists():
+        for r in rows(path):
+            found = r.get("found_by") or {}
+            out[r["mutant"]] = {"real": r["real"], "found_by": sorted(k for k, v in found.items() if v)}
+            print(f"  {r['mutant']:36} real={str(r['real']):5} {out[r['mutant']]['found_by']}")
+    OUT["mutants"] = out
+
+
 def model_fit() -> None:
     print("\n== E-latency: rate against the model NL/H, stand-in, by framework")
     res = {}
@@ -244,6 +271,7 @@ def main() -> int:
             [p.stem for p in sorted((w / "latency").glob("L*-*.jsonl"))])
     real_task()
     model_route()
+    testing()
     model_fit()
     section("Recovery killed too", w / "double", ["courier-off", "courier-on", "adopt"])
     by_framework("Recovery killed too, others", w / "double" / "others.jsonl")

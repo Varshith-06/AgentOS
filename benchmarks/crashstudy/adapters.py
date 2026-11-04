@@ -22,7 +22,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from .client import calls, charge, keyed, model_candidate, model_path, note, think
+from .client import barrier, calls, charge, keyed, model_candidate, model_path, note, think
 
 RUN = os.environ.get("CS_RUN", "run")
 DIR = Path(os.environ.get("CS_DIR", "."))
@@ -32,7 +32,36 @@ DIR = Path(os.environ.get("CS_DIR", "."))
 
 def courier_charge(i: int, q: str | None = None, idempotency_key: str | None = None) -> dict:
     """The same call, as an AgentOS courier makes it: in a process of its own."""
-    return charge(i, idempotency_key, q)
+    barrier("call-starting")
+    reply = charge(i, idempotency_key, q)
+    barrier("reply-received")
+    return reply
+
+
+def _install_barriers() -> None:
+    """Steps of the protocol inside the kernel, for barriers.py. Harness only."""
+    from agentos.kernel.store import Store
+    from agentos.runtime.courier import Couriers
+
+    os.environ["CS_RUNTIME_PGID"] = str(os.getpgrp())
+    append_intent, append_journal, spawn = Store.append_intent, Store.append_journal, Couriers._spawn
+
+    def intent(self, *a, **k):
+        out = append_intent(self, *a, **k)
+        barrier("intent-written")
+        return out
+
+    def journal(self, *a, **k):
+        barrier("before-journal")
+        out = append_journal(self, *a, **k)
+        barrier("journaled")
+        return out
+
+    async def hand_off(self, *a, **k):
+        barrier("dispatched")
+        return await spawn(self, *a, **k)
+
+    Store.append_intent, Store.append_journal, Couriers._spawn = intent, journal, hand_off
 
 
 def agentos(phase: str) -> None:
@@ -54,9 +83,14 @@ def agentos(phase: str) -> None:
 
         async def op_charge(self, i: int, q: str | None = None,
                             idempotency_key: str | None = None):
-            return await asyncio.to_thread(charge, i, idempotency_key, q)
+            barrier("call-starting")
+            reply = await asyncio.to_thread(charge, i, idempotency_key, q)
+            barrier("reply-received")
+            return reply
 
     REGISTRY["paidapi"] = PaidAPI
+    if os.environ.get("CS_BARRIER"):
+        _install_barriers()
     agents = int(os.environ.get("CS_AGENTS", "1"))
     k = Kernel(
         store=Store(DIR / "agentos", durable=os.environ.get("CS_DURABLE") == "1"),
