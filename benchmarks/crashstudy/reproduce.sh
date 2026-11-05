@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Table II and Fig. 3 of the paper, and the numbers behind its other results, from the committed results.
+# Table III and Fig. 3 of the paper, and the numbers behind its other results, from the committed results.
 #   sh benchmarks/crashstudy/reproduce.sh [out-dir]
 # Run from the repository root. Nothing here calls a provider; the commands
 # that re-run the experiments themselves are at the bottom. It needs Python 3.11 or
@@ -13,7 +13,7 @@ PY=${PYTHON:-python}
 A="$PY -m benchmarks.crashstudy.analyze"
 mkdir -p "$OUT"
 
-echo "== Framework survey, stand-in: in-flight window, visibility (Table II's left half)"
+echo "== Framework survey, stand-in: in-flight window, visibility (Table III's left half)"
 $A $S/main.jsonl --ledger $S/main-ledger.db
 
 echo "== Window sweep: Fig. 3, with the real-model points overlaid"
@@ -31,11 +31,14 @@ $A $S/crewai-1.15.2.jsonl | tail -n 2
 echo "== Provider probes: Groq"
 $PY -m benchmarks.crashstudy.realprovider summary
 
-echo "== Framework survey on real models, provider probes, the gateway (Table II)"
+echo "== Framework survey on real models, provider probes, the gateway (Table III)"
 $PY -m benchmarks.crashstudy.summary --latex "$OUT/results-table.tex"
 
-echo "== Mechanism evaluation and limits (Tables III and IV, gateway, costs)"
+echo "== Mechanism evaluation and limits (Tables V and VI, gateway, costs)"
 $PY -m benchmarks.crashstudy.summary_v2 --json "$OUT/v2-summary.json"
+
+echo "== Signals, changed prompts, long calls, a service manager, the kernel alone, the baseline"
+$PY -m benchmarks.crashstudy.summary_v3
 
 echo "== The numbers the paper states only in its text"
 $PY -m benchmarks.crashstudy.claims

@@ -1,0 +1,7 @@
+{"t": 1793893416.079824, "what": "send", "i": 0, "h": "e368427865c3"}
+{"t": 1793893430.2113082, "what": "reply", "i": 0, "usage": {"prompt_tokens": 28, "completion_tokens": 921, "total_tokens": 949, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793893430.430333, "what": "send", "i": 1, "h": "ffd35d53070d"}
+{"t": 1793893441.2412887, "what": "reply", "i": 1, "usage": {"prompt_tokens": 28, "completion_tokens": 738, "total_tokens": 766, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}
+{"t": 1793893441.4582813, "what": "send", "i": 2, "h": "e34919abf357"}
+{"t": 1793893446.3868046, "what": "send", "i": 2, "h": "e34919abf357"}
+{"t": 1793893459.802314, "what": "reply", "i": 2, "usage": {"prompt_tokens": 28, "completion_tokens": 892, "total_tokens": 920, "prompt_tokens_details": {"cached_tokens": 0, "audio_tokens": 0}, "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0}}}

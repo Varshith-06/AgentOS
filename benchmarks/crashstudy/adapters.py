@@ -22,7 +22,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from .client import barrier, calls, charge, keyed, model_candidate, model_path, note, think
+from .client import (barrier, calls, charge, check, keyed, model_candidate, model_path, note, note_fields,
+                     question, signalling, think)
 
 RUN = os.environ.get("CS_RUN", "run")
 DIR = Path(os.environ.get("CS_DIR", "."))
@@ -62,6 +63,21 @@ def _install_barriers() -> None:
         return await spawn(self, *a, **k)
 
     Store.append_intent, Store.append_journal, Couriers._spawn = intent, journal, hand_off
+
+
+def _log_fates() -> None:
+    """What recovery found for each call in flight. Harness only."""
+    from agentos.runtime.courier import Couriers
+
+    fate = Couriers.fate
+
+    def logged(self, intent):
+        out = fate(self, intent)
+        with open(DIR / "fates.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"intent": intent, "fate": out[0]}) + "\n")
+        return out
+
+    Couriers.fate = logged
 
 
 def agentos(phase: str) -> None:
@@ -107,6 +123,8 @@ def agentos(phase: str) -> None:
     if phase == "start":
         for a in range(agents):
             k.spawn(Caller(calls=calls(), base=a * calls()))
+    if os.environ.get("CS_LOG_FATE") == "1":
+        _log_fates()
     asyncio.run(k.run())
 
 
@@ -131,6 +149,16 @@ def _langgraph(phase: str, per_call: bool) -> None:
                 think()
                 charge(i, key(i))
                 return {"done": i + 1}
+
+            if signalling():
+                from langgraph.runtime import Runtime
+
+                def node(state: S, runtime: Runtime) -> S:  # noqa: F811
+                    info = runtime.execution_info
+                    note_fields(i, attempt=info.node_attempt, first=info.node_first_attempt_time)
+                    think()
+                    charge(i, key(i))
+                    return {"done": i + 1}
             return node
         prev = START
         for i in range(calls()):
@@ -164,7 +192,51 @@ def langgraph_loop(phase: str) -> None:
     _langgraph(phase, per_call=False)
 
 
+def langgraph_func(phase: str) -> None:
+    """LangGraph's functional API: the entrypoint builds each prompt and passes it to
+    a task. The documented resume re-runs the entrypoint with recorded task results."""
+    from langgraph.checkpoint.sqlite import SqliteSaver
+    from langgraph.func import entrypoint, task
+
+    @task
+    def billable(i: int, q: str) -> dict:
+        think()
+        return charge(i, None, q)
+
+    conn = sqlite3.connect(DIR / "lg.db", check_same_thread=False)
+
+    @entrypoint(checkpointer=SqliteSaver(conn))
+    def work(n: int) -> str:
+        for i in range(calls()):
+            asked = question(i)
+            check(i, asked, billable(i, asked).result())
+        return "done"
+
+    work.invoke(calls() if phase == "start" else None,
+                {"configurable": {"thread_id": RUN}, "recursion_limit": 100})
+    conn.close()
+
+
 # -------------------------------------------------------------------------- temporal
+
+def temporal_arg(phase: str) -> None:
+    """The workflow builds each prompt and passes it to an activity as its input."""
+    from temporalio.client import Client
+    from temporalio.worker import Worker
+
+    from . import temporal_defs as td
+
+    async def go() -> None:
+        client = await Client.connect(os.environ["CS_TEMPORAL"])
+        if phase == "start":
+            await client.start_workflow(td.CallsArg.run, calls(), id=RUN, task_queue=RUN)
+        async with Worker(client, task_queue=RUN, workflows=[td.CallsArg],
+                          activities=[td.billable_arg]):
+            for i, asked, reply in await client.get_workflow_handle(RUN).result():
+                check(i, asked, reply)
+
+    asyncio.run(go())
+
 
 def temporal(phase: str) -> None:
     from temporalio.client import Client
@@ -254,6 +326,9 @@ def dbos(phase: str) -> None:
     def billable(i: int) -> dict:
         status = DBOS.step_status
         note(i, attempt=getattr(status, "current_attempt", None))
+        if signalling():
+            note_fields(i, attempt=getattr(status, "current_attempt", None),
+                        recovery=DBOS.get_workflow_status(DBOS.workflow_id).recovery_attempts)
         think()
         k = f"{DBOS.workflow_id}:{DBOS.step_id}" if keyed() else None
         return charge(i, k)
@@ -266,6 +341,38 @@ def dbos(phase: str) -> None:
 
     # DBOS's documented recovery: launch() resumes this executor's pending
     # workflows on its own.
+    DBOS.launch()
+    if phase == "start":
+        with SetWorkflowID(RUN):
+            work(calls())
+    else:
+        DBOS.retrieve_workflow(RUN).get_result()
+    DBOS.destroy()
+
+
+def dbos_arg(phase: str) -> None:
+    """The workflow builds each prompt and passes it to a step as its argument."""
+    from dbos import DBOS, DBOSConfig, SetWorkflowID
+
+    config: DBOSConfig = {
+        "name": "crashstudy",
+        "system_database_url": f"sqlite:///{(DIR / 'dbos.sqlite').as_posix()}",
+        "run_admin_server": False,
+    }
+    DBOS(config=config)
+
+    @DBOS.step()
+    def billable(i: int, q: str) -> dict:
+        think()
+        return charge(i, None, q)
+
+    @DBOS.workflow()
+    def work(n: int) -> str:
+        for i in range(n):
+            asked = question(i)
+            check(i, asked, billable(i, asked))
+        return "done"
+
     DBOS.launch()
     if phase == "start":
         with SetWorkflowID(RUN):
@@ -372,6 +479,10 @@ def prefect(phase: str) -> None:
 
     @task(cache_policy=INPUTS, persist_result=True)
     def billable(run: str, i: int) -> dict:
+        if signalling():
+            from prefect.runtime import flow_run, task_run
+
+            note_fields(i, attempt=task_run.run_count, flow=flow_run.run_count)
         think()
         return charge(i, f"{run}:pf:{i}" if keyed() else None)
 
@@ -379,6 +490,26 @@ def prefect(phase: str) -> None:
     def work(run: str, n: int) -> str:
         for i in range(n):
             billable(run, i)
+        return "done"
+
+    work(RUN, calls())
+
+
+def prefect_arg(phase: str) -> None:
+    """The flow builds each prompt and passes it to a task, whose cache key includes it."""
+    from prefect import flow, task
+    from prefect.cache_policies import INPUTS
+
+    @task(cache_policy=INPUTS, persist_result=True)
+    def billable(run: str, i: int, q: str) -> dict:
+        think()
+        return charge(i, None, q)
+
+    @flow(persist_result=True)
+    def work(run: str, n: int) -> str:
+        for i in range(n):
+            asked = question(i)
+            check(i, asked, billable(run, i, asked))
         return "done"
 
     work(RUN, calls())
@@ -409,6 +540,10 @@ FRAMEWORKS = {
     "agentos": agentos,
     "langgraph-node": langgraph_node,
     "langgraph-loop": langgraph_loop,
+    "langgraph-func": langgraph_func,
+    "temporal-arg": temporal_arg,
+    "dbos-arg": dbos_arg,
+    "prefect-arg": prefect_arg,
     "temporal": temporal,
     "temporal-split": temporal_split,
     "temporal-split-worker": temporal_split_worker,

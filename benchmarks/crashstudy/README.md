@@ -27,6 +27,8 @@ dependencies have no wheels for Python 3.14; the published results use 3.13.
 | `realmain.py` | the whole main run again with every call a real Groq completion, one process per model, waiting out the daily quota |
 | `otherproviders.py` | the provider probes on OpenRouter (generation records say whether a request was cancelled) and Google Gemini (response ids) |
 | `khan_crewai_probe.py` | an in-process copy of a published CrewAI `from_checkpoint` case, to check it against our two-process result |
+| `cacheproxy.py` | the simple baseline: a response cache outside the crash, keyed on a hash of the request |
+| `summary_v3.py` | signals, changed prompts, long calls, a service manager, the kernel alone, and the baseline |
 | `summary.py` | every number the paper quotes from the real-model runs, the fix, and the gateway, and the main results table |
 | `reproduce.sh` | runs all of the analyses above on the committed results and lists the commands that re-run the experiments |
 
@@ -39,6 +41,9 @@ dependencies have no wheels for Python 3.14; the published results use 3.13.
 | `results/v2/` | what the paper reports for AgentOS, re-run after three recovery fixes: the mechanisms (`windows/fix`, `linux`, `real`, `multi`), changed prompts, harder crashes, costs, the eight-file review (`task`), the kernel model route (`model`), a stopped VM (`host`), and a killed PID namespace (`namespace`). `summary_v2` reads these |
 | `results/agentos-fix/` | superseded October runs of the same mechanisms, kept for the record |
 | `results/gateway/` | the other frameworks with keys, without (`gateway-none.jsonl`, `real-gw-allam-off.jsonl`) and with the gateway (`gateway.jsonl`, `real-gw-allam-on.jsonl`) |
+
+The Linux stand-in rows in `results/v2/linux` and `results/v2/model/linux` have their ledgers
+beside them, and all 540 kept rows recount the same from those ledgers.
 
 Each `.jsonl` row is one crash. A row names its ledger, and a real run keeps a
 folder per trial (`<file>/<framework>/<run>/calls.jsonl`: every send and
@@ -80,14 +85,56 @@ about itself. That's the attempt number Temporal and DBOS hand to an activity
 or step (recorded via `client.note`), and AgentOS's `OutcomeAmbiguous`
 events. `analyze.py` prints, per framework, how many duplicates came with a
 signal and how many signals came without one. CrewAI and AutoGen document no
-such signal that we found. LangGraph documents a node attempt number and Prefect
-a run count, which the adapters did not read, and we did not test whether either
-changes across a crash.
+such signal that we found.
+
+With `CS_SIGNALS=1` the adapters also read every field the other frameworks
+document (`results/v2/signals`). LangGraph's `node_attempt` and Prefect's `run_count`
+stayed at 1 on every re-executed call. DBOS's `recovery_attempts` rose on every
+one, and on the calls after them too: it says the workflow recovered, not which
+call ran twice.
+
+## A recorded reply and a changed prompt
+
+`--drift all` changes every prompt after a restart (`results/v2/drift-frameworks`,
+with the same crashes and unchanged prompts in `unchanged.jsonl` as the control). The
+`temporal-arg`, `dbos-arg`, `prefect-arg` and `langgraph-func` adapters build the
+prompt outside the durable unit and pass it in, and check each reply where it lands.
+`in-unit.jsonl` has Temporal and DBOS with the prompt built inside the unit, where a
+completed call is skipped, so a zero holds by construction. Temporal's documentation
+lists an Activity's input among the changes that are safe to make, DBOS asks a workflow to
+invoke the same steps with the same inputs, and LangGraph asks that values that change
+between attempts stay inside tasks. What the run measures is that none of them reports a
+mismatch. In `temporal-arg` the prompt comes from a module passed through the workflow
+sandbox.
+
+`--drift all` is the worst case: every prompt differs in each life, from a number unique
+to the process. Kill times come from uncrashed runs, except in the earliest stand-in runs
+and the VM and namespace runs, which use the run's nominal length. `results/gateway/` also
+holds 138 `never-started` CrewAI rows that failed at start-up, before any kill.
+
+## Long calls, service managers, the kernel alone, and the baseline
+
+- `results/v2/long`: 10 and 30 s calls, three to a run, with `fates` on each row saying
+  what recovery found (`running` is the wait for a courier still at work). The arms
+  ran side by side, since long calls are almost all waiting.
+- `results/v2/long/real`: long replies on free tiers, three calls to a run, counted as sends.
+  On Cohere's `command-r7b` the calls took a median of 13 s; its trial key's monthly limit of
+  1,000 calls ended the contained arm at 6 crashes, before the adoption arms ran. Two copies of
+  the run overlapped after a restart, each writing its own trials. Gemini's long requests
+  returned server errors throughout, so none was kept and that set is not relied on.
+- `results/v2/service`: `hostcrash.py --kill service` runs AgentOS as a systemd user
+  service and kills its main process. systemd's default kills the rest of the control
+  group, couriers included. Couriers survive under `KillMode=process`, which systemd's
+  documentation discourages; otherwise keep the reply in a gateway outside the service.
+- `results/v2/kernel-kill`: `--crash kernel` kills the kernel's process alone.
+- `results/v2/cache`: `--cache-proxy plain|coalesce` puts a response cache outside the
+  crash, with no key and no courier. It merges every identical request, including one
+  the caller meant to make twice. Coalescing makes a repeat wait for a call still out.
 Rows written before signals were recorded were backfilled from the run
 directories where those still existed (AgentOS rows); Temporal's and DBOS's
 signals come from the dedicated `detect.jsonl` run.
 
-`reproduce.sh` regenerates Table II and Fig. 3 of the paper from the committed
+`reproduce.sh` regenerates Table III and Fig. 3 of the paper from the committed
 results, prints the counts behind its other results, and lists the commands that
 re-run the experiments. Pooled figures in the paper are sums of those counts. Run
 it from the repository root.
@@ -208,7 +255,7 @@ It needs Python 3.11 or later and matplotlib (`pip install matplotlib`), and non
 Some result paths are long, so on Windows clone to a short path:
 `git clone -c core.longpaths=true https://github.com/Varshith-06/AgentOS.git C:\agentos`.
 
-`reproduce.sh` regenerates Table II and Fig. 3, prints the counts behind Tables III and IV, the step kills and
+`reproduce.sh` regenerates Table III and Fig. 3, prints the counts behind Tables IV to VI, the step kills and
 the seeded bugs, and ends with `claims.py`, which recomputes the numbers the paper states only in its text
 and exits non-zero if any differ. It calls no provider. Exact reruns of the experiments differ, since kills
 are random and calls take real time; the commands are at the bottom of `reproduce.sh`.

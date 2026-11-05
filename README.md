@@ -14,8 +14,9 @@ scheduler. Every tool call, model call, and message crosses a syscall
 boundary, is permission-checked, journaled, and billed. `kill -9` the runtime
 mid-task and it resumes from its last completed call. The one call that was
 *in flight* is the exception, for AgentOS and for every framework we measured:
-it gets re-issued under its original idempotency key when the tool honours
-one, and otherwise it is re-issued **and flagged**.
+by default it gets re-issued under its original idempotency key when the tool
+honours one, and otherwise it is re-issued **and flagged**. Adoption and couriers
+(`Kernel(courier=True)`) keep its reply instead, so it is not re-issued at all.
 See [what a crash costs](#what-a-crash-costs) for ten configurations of six
 frameworks and AgentOS, killed at random moments.
 
@@ -465,8 +466,9 @@ nothing asked of the provider. AgentOS keeps it in two places:
   mid-call leaves a call nobody can account for, and that one is flagged as
   before. Tools opt in per op (`ToolDriver.courier`); model calls over HTTP
   always can. A courier outlives the runtime, not the machine: a container or
-  host restart still ends in a flagged repeat if the store survives, and a service manager that kills a
-  whole control group would probably kill it too, which we did not test.
+  host restart still ends in a flagged repeat if the store survives, and systemd's default kill of a
+  service's control group takes it too (`KillMode=process` spares it, though systemd's
+  documentation discourages that setting; a gateway outside the service is the alternative).
 
 Under the same harness, with a provider that ignores keys, the agent and
 runtime crashes that re-billed a call went from 287 of 380 to 0 of 380, on

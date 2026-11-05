@@ -261,6 +261,17 @@ def note(i: int, **signal) -> None:
         fh.write(json.dumps({"t": time.time(), "pid": os.getpid(), "i": i, **signal}) + "\n")
 
 
+def signalling() -> bool:
+    """CS_SIGNALS=1: read the attempt fields each framework documents."""
+    return os.environ.get("CS_SIGNALS") == "1"
+
+
+def note_fields(i: int, **fields) -> None:
+    """Every documented field a re-executed call could read, as `note` keeps one."""
+    with open(os.path.join(os.environ["CS_DIR"], "notes.jsonl"), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"t": time.time(), "pid": os.getpid(), "i": i, "fields": fields}) + "\n")
+
+
 def think() -> None:
     """Local work between calls: parsing a reply, deciding the next step."""
     t = float(os.environ.get("CS_THINK", "0"))

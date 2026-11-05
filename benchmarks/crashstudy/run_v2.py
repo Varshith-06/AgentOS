@@ -207,6 +207,81 @@ def model_route_real() -> list[tuple]:
             (f"{REAL} {m} --courier contained --out {o}/courier-contained.jsonl", env)]
 
 
+def signals_study() -> list[tuple]:
+    """Do the attempt fields each framework documents change for a re-executed call?"""
+    return [(f"{RUN} --frameworks temporal,dbos,langgraph-node,prefect --ignore-keys --keyed no --trials 30 "
+             f"--calibrate 3 --seed 1001 --out {V2}/signals/standin.jsonl", {"CS_SIGNALS": "1"})]
+
+
+def drift_frameworks() -> list[tuple]:
+    """Every prompt changes after a restart: does a recorded reply answer the new one?
+    The -arg adapters pass the prompt into the durable unit; the others build it there."""
+    fws = "temporal-arg,dbos-arg,prefect-arg,langgraph-func,langgraph-node,crewai,crewai-checkpoint,autogen"
+    d = f"{V2}/drift-frameworks"
+    return [(f"{RUN} --frameworks {fws} --ignore-keys --keyed no --trials 20 --calibrate 3 --drift all "
+             f"--seed 1011 --out {d}/frameworks.jsonl", {}),
+            (f"{RUN} --frameworks agentos --ignore-keys --keyed no --trials 20 --calibrate 3 --drift all "
+             f"--courier on --no-fingerprint --seed 1012 --out {d}/agentos-nofp.jsonl", {}),
+            (f"{RUN} --frameworks agentos --ignore-keys --keyed no --trials 20 --calibrate 3 --drift all "
+             f"--courier on --seed 1013 --out {d}/agentos.jsonl", {}),
+            # The control: the same adapters, the same crashes, the prompt unchanged.
+            (f"{RUN} --frameworks temporal-arg,dbos-arg,prefect-arg,langgraph-func --ignore-keys --keyed no "
+             f"--trials 20 --calibrate 3 --seed 1014 --out {d}/unchanged.jsonl", {}),
+            # The same engines with the prompt built inside the durable unit.
+            (f"{RUN} --frameworks temporal,dbos --ignore-keys --keyed no --trials 20 --calibrate 3 --drift all "
+             f"--seed 1015 --out {d}/in-unit.jsonl", {})]
+
+
+def long_calls(L: str, seed: int) -> list[tuple]:
+    """Calls long enough that recovery usually finds the courier still at work."""
+    o = f"{V2}/long/L{L}"
+    r = (f"{RUN} --frameworks agentos --ignore-keys --keyed no --calls 3 --think 0.2 --latency {L} --calibrate 3 "
+         f"--timeout 600")
+    env = {"CS_TOOL_TIMEOUT": "300"}
+    return [(f"{r} --trials 40 --courier on --seed {seed} --out {o}/courier-on.jsonl", env),
+            (f"{r} --trials 20 --courier off --seed {seed + 1} --out {o}/courier-off.jsonl", env),
+            (f"{r} --trials 20 --courier contained --seed {seed + 2} --out {o}/courier-contained.jsonl", env),
+            (f"{r} --trials 40 --crash agent --adopt yes --seed {seed + 3} --out {o}/agent-adopt-yes.jsonl", env),
+            (f"{r} --trials 20 --crash agent --adopt no --seed {seed + 4} --out {o}/agent-adopt-no.jsonl", env)]
+
+
+def cache_baseline(mode: str, L: str, seed: int) -> list[tuple]:
+    """The simple baseline: a response cache outside the crash, no key and no courier."""
+    fws = "agentos,langgraph-node,dbos" if L == "3" else "agentos,langgraph-node,temporal,dbos,prefect,autogen"
+    extra = {"CS_ACTIVITY_TIMEOUT": "30"} if L == "3" else {}
+    return [(f"{RUN} --frameworks {fws} --ignore-keys --keyed no --trials 20 --calibrate 3 --latency {L} "
+             f"--cache-proxy {mode} --seed {seed} --out {V2}/cache/{mode}-L{L}.jsonl", extra)]
+
+
+def real_long(via: str, model: str, slug: str, words: int) -> list[tuple]:
+    """Real calls of ten seconds or more, on free tiers: sends, the mechanisms and their baselines."""
+    o, m = f"{V2}/long/real/{slug}", (f"--via {via} --model {model} --calls 3 --think 0.2 --words {words} "
+                                      f"--max-tokens {words * 3} --calibrate 2 --gap 4")
+    return [(f"{MULTI} {m} --trials 15 --framework agentos --courier on --seed 1101 --out {o}/courier-on.jsonl", {}),
+            (f"{MULTI} {m} --trials 10 --framework agentos --courier off --seed 1102 --out {o}/courier-off.jsonl", {}),
+            (f"{MULTI} {m} --trials 10 --framework agentos --courier contained --seed 1103 --out {o}/courier-contained.jsonl", {}),
+            (f"{MULTI} {m} --trials 15 --framework agentos --crash agent --adopt yes --seed 1104 --out {o}/agent-adopt-yes.jsonl", {}),
+            (f"{MULTI} {m} --trials 10 --framework agentos --crash agent --adopt no --seed 1105 --out {o}/agent-adopt-no.jsonl", {})]
+
+
+def service() -> list[tuple]:
+    """AgentOS as a systemd service, its main process killed."""
+    o = f"{V2}/service"
+    c = "-m benchmarks.crashstudy.hostcrash --kill service --latency 3 --think 0.2 --trials 20"
+    return [(f"{c} --courier on --kill-mode control-group --seed 1041 --out {o}/control-group-courier.jsonl", {}),
+            (f"{c} --courier off --kill-mode control-group --seed 1042 --out {o}/control-group-no-courier.jsonl", {}),
+            (f"{c} --courier on --kill-mode mixed --seed 1043 --out {o}/mixed-courier.jsonl", {}),
+            (f"{c} --courier on --kill-mode process --seed 1044 --out {o}/process-courier.jsonl", {})]
+
+
+def kernel_kill() -> list[tuple]:
+    """The kernel's process alone dies, as in an out-of-memory kill."""
+    o = f"{V2}/kernel-kill"
+    r = f"{RUN} --frameworks agentos --ignore-keys --keyed no --crash kernel --trials 30 --calibrate 3"
+    return [(f"{r} --courier on --seed 1051 --out {o}/courier-on.jsonl", {}),
+            (f"{r} --courier off --seed 1052 --out {o}/courier-off.jsonl", {})]
+
+
 def wsl_path(p: Path) -> str:
     """This checkout as WSL sees it, for the Linux stage."""
     return f"/mnt/{p.drive[0].lower()}{p.as_posix()[2:]}"
@@ -274,8 +349,57 @@ cp v2-mutants/summary.jsonl v2-mutants/long-calls.jsonl $D/mutants/
 """
 
 
+LINUX_V9 = r"""set -e
+cd ~/aos
+rm -rf agentos tests
+cp -r @ROOT@/agentos @ROOT@/tests .
+cp @ROOT@/benchmarks/crashstudy/*.py benchmarks/crashstudy/
+find . -name __pycache__ -type d -prune -exec rm -rf {} +
+D=@ROOT@/benchmarks/crashstudy/results/v2
+run() { python3 -m benchmarks.crashstudy.run --frameworks agentos --ignore-keys --keyed no "$@"; }
+mkdir -p v9/long v9/kernel-kill
+for L in 10 30; do
+  r="--calls 3 --think 0.2 --latency $L --calibrate 3 --timeout 600"
+  CS_TOOL_TIMEOUT=300 run $r --trials 40 --courier on --seed 11$L --out v9/long/L$L-courier-on.jsonl &
+  CS_TOOL_TIMEOUT=300 run $r --trials 20 --courier contained --seed 12$L --out v9/long/L$L-courier-contained.jsonl &
+  CS_TOOL_TIMEOUT=300 run $r --trials 40 --crash agent --adopt yes --seed 13$L --out v9/long/L$L-agent-adopt-yes.jsonl &
+done
+wait
+for c in on off; do
+  run --crash kernel --trials 30 --calibrate 3 --courier $c --seed 1061 --out v9/kernel-kill/courier-$c.jsonl
+done
+mkdir -p $D/long/linux $D/kernel-kill/linux
+cp v9/long/* $D/long/linux/
+cp v9/kernel-kill/* $D/kernel-kill/linux/
+"""
+
+LINUX_MUTANTS = r"""set -e
+cd ~/aos
+rm -rf agentos tests
+cp -r @ROOT@/agentos @ROOT@/tests .
+cp @ROOT@/benchmarks/crashstudy/*.py benchmarks/crashstudy/
+find . -name __pycache__ -type d -prune -exec rm -rf {} +
+python3 -m benchmarks.crashstudy.mutants --trials 10 --seed 771 --out v2-mutants --longer \
+    --long-calls clean,running-courier-taken-as-unsent,courier-lock-not-held
+cp v2-mutants/longer-calls.jsonl @ROOT@/benchmarks/crashstudy/results/v2/mutants/
+"""
+
+
 def plan() -> list[tuple[str, dict[str, list[tuple]]]]:
     return [
+        ("signals", {"signals": signals_study()}),
+        ("drift-frameworks", {"drift-frameworks": drift_frameworks()}),
+        # Long calls are almost all waiting, so the arms run side by side.
+        ("long", {f"L{L}-{n}": [c] for L, seed in (("10", 1021), ("30", 1031))
+                  for n, c in enumerate(long_calls(L, seed))}),
+        ("kernel-kill", {"kernel-kill": kernel_kill()}),
+        ("real-long", {"gemini": real_long("google", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", 1500),
+                       "cohere": real_long("cohere", "command-r7b-12-2024", "cohere-command-r7b", 700)}),
+        ("cache", {f"{m}-{L}": cache_baseline(m, L, seed) for m, L, seed in
+                   (("plain", "0.3", 1071), ("coalesce", "0.3", 1072), ("plain", "3", 1073), ("coalesce", "3", 1074))}),
+        ("linux-v9", {"linux-v9": [("LINUX_V9", {})]}),
+        ("service", {"service": service()}),
+        ("mutants-long", {"mutants-long": [("LINUX_MUTANTS", {})]}),
         ("stand-in", {"stand-in": stand_in()}),
         ("models", {
             "allam": groq_allam(),
@@ -339,8 +463,9 @@ def main() -> int:
                 say(f"{name} {n + 1}/{len(cmds)} start: {cmd[:150]}")
                 t0 = time.time()
                 with open(log, "a", encoding="utf-8") as fh:
-                    if cmd in ("LINUX", "LINUX_MODEL", "LINUX_TESTING"):
-                        script = {"LINUX": LINUX, "LINUX_MODEL": LINUX_MODEL, "LINUX_TESTING": LINUX_TESTING}[cmd]
+                    if cmd in ("LINUX", "LINUX_MODEL", "LINUX_TESTING", "LINUX_V9", "LINUX_MUTANTS"):
+                        script = {"LINUX": LINUX, "LINUX_MODEL": LINUX_MODEL, "LINUX_TESTING": LINUX_TESTING,
+                                  "LINUX_V9": LINUX_V9, "LINUX_MUTANTS": LINUX_MUTANTS}[cmd]
                         rc = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "bash", "-lc",
                                              script.replace("@ROOT@", wsl_path(ROOT))],
                                             stdout=fh, stderr=fh).returncode

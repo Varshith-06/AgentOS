@@ -109,6 +109,9 @@ ARMS = [
 # Added after the first battery: calls long enough that recovery starts while a courier
 # is still at work, which 0.3 s calls almost never reach. Reported apart from it.
 LONG_ARM = ("couriers-long-calls", ["--courier", "on", "--latency", "3", "--think", "0.2"], False, True)
+# Longer still, where recovery usually finds the courier at work.
+LONGER_ARM = ("couriers-longer-calls", ["--courier", "on", "--latency", "10", "--think", "0.2",
+                                        "--calls", "3"], False, True)
 TESTS = ["tests.test_adoption", "tests.test_recovery", "tests.test_inflight", "tests.test_orphans"]
 
 
@@ -195,6 +198,7 @@ def main() -> int:
     ap.add_argument("--python", default=sys.executable)
     ap.add_argument("--only", help="comma-separated mutant names, or 'clean'")
     ap.add_argument("--long-calls", help="comma-separated mutants, or clean: the long-call arm alone")
+    ap.add_argument("--longer", action="store_true", help="with --long-calls: 10 s calls, not 3 s")
     ap.add_argument("--dry-run", action="store_true", help="check that every mutant applies, and stop")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
@@ -211,15 +215,16 @@ def main() -> int:
             print("applies:", name, flush=True)
         return 0
     if args.long_calls:
-        args.arm_timeout = max(args.arm_timeout, 900)
+        args.arm_timeout = max(args.arm_timeout, 2400 if args.longer else 900)
+        long_arm = LONGER_ARM if args.longer else LONG_ARM
         for name in args.long_calls.split(","):
             dest = work / name
             copy_tree(dest)
             for mutant, _real, path, old, new in MUTANTS:
                 if mutant == name:
                     apply(dest, path, old, new)
-            arm = battery(dest, out / name, args, [LONG_ARM])[LONG_ARM[0]]
-            with open(out / "long-calls.jsonl", "a", encoding="utf-8") as fh:
+            arm = battery(dest, out / name, args, [long_arm])[long_arm[0]]
+            with open(out / ("longer-calls.jsonl" if args.longer else "long-calls.jsonl"), "a", encoding="utf-8") as fh:
                 fh.write(json.dumps({"mutant": name, **arm}) + "\n")
             print(name, json.dumps(arm), flush=True)
             shutil.rmtree(dest, ignore_errors=True)

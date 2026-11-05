@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import json
 import statistics
+from collections import Counter
 import sys
 from math import comb
 from pathlib import Path
 
 from .analyze import load, overhead, predict, wilson
 from .summary import valid
+from . import summary_v3
 
 R = Path(__file__).resolve().parent / "results"
 S = R / "standin"
@@ -116,8 +118,96 @@ def main() -> int:
     show("namespace killed, keys and no gateway", frac(keys), "19/20")
     show("  of those repeats, flagged", sum(bool(r["state"].get("announced")) for r in keys if r["duplicates"] > 0), 0)
 
+    print("== RQ1: kills in flight, and silent repeats")
+    v3 = summary_v3.collect()
+    show("Groq survey, per-call kills with a call outstanding", frac(out), "286/377")
+    for m, want in zip(MODELS, (75, 50, 39)):
+        rs = [r for r in survey[m] if not r["keyed"] and r["framework"] not in WHOLE and r["framework"] != "agentos"]
+        print(f"      {m}: six frameworks, per call, no key {frac(rs)}")
+    six = [[r for r in survey[m] if not r["keyed"] and r["framework"] not in WHOLE and r["framework"] != "agentos"] for m in MODELS]
+    rates = [round(100 * sum(r["duplicates"] > 0 for r in rs) / len(rs)) for rs in six]
+    show("six frameworks, per call, range across models (%)", f"{min(rates)} to {max(rates)}", "39 to 75")
+    sig = v3["signals"]
+    show("Temporal's attempt, repeats told", f"{sig['temporal']['repeats_told']}/{sig['temporal']['repeats']}", "23/23")
+    show("DBOS's recovery count, repeats told", f"{sig['dbos']['repeats_told']}/{sig['dbos']['repeats']}", "24/24")
+    show("DBOS's recovery count, other calls marked", sig["dbos"]["other_calls_marked"], 79)
+    quiet = sig["langgraph-node"]["repeats_told"] + sig["prefect"]["repeats_told"]
+    show("LangGraph and Prefect, repeats told", f"{quiet}/{sig['langgraph-node']['repeats'] + sig['prefect']['repeats']}", "0/52")
+    told = [r for r in every if not r["keyed"] and r["framework"] in ("temporal", "dbos") and r["duplicates"] > 0]
+    others = [r for r in every if not r["keyed"] and r["framework"] != "agentos" and r["duplicates"] > 0]
+    show("repeats on real models, no key, no signal", f"{len(others) - len(told)}/{len(others)}", "155/189")
+    per = [r for r in others if r["framework"] not in WHOLE]
+    per_told = [r for r in per if r["framework"] in ("temporal", "dbos")]
+    show("per-call repeats, no key, silent", f"{len(per) - len(per_told)}/{len(per)}", "94/128")
+
+    print("== RQ3: every prompt changed after a restart")
+    ch = v3["changed_prompts"]["changed"]
+    want = {"temporal-arg": 20, "dbos-arg": 17, "langgraph-func": 17, "prefect-arg": 0, "langgraph-node": 0, "crewai": 0,
+            "crewai-checkpoint": 0, "autogen": 0, "agentos, no fingerprint": 20, "agentos": 0}
+    for fw, n in want.items():
+        show(f"{fw}, crashes with a wrong reply", f"{ch[fw]['wrong']}/{ch[fw]['crashes']}", f"{n}/20")
+    for fw in ("temporal", "dbos"):
+        show(f"{fw}, prompt built in the unit, wrong replies", f"{ch[fw]['wrong']}/{ch[fw]['crashes']}", "0/20")
+    un = v3["changed_prompts"]["unchanged"]
+    show("control, prompts unchanged, wrong replies", f"{sum(s['wrong'] for s in un.values())}/{sum(s['crashes'] for s in un.values())}", "0/80")
+    show("Prefect, calls repeated per crash", ch["prefect-arg"]["calls_repeated"] / ch["prefect-arg"]["crashes"], 3.65)
+
+    print("== RQ4: long calls, on both systems")
+    lc = v3["long_calls"]
+    def total(tag: str) -> str:
+        v = [s["repeated"].split("/") for k, s in lc.items() if k.endswith(tag)]
+        return f"{sum(int(a) for a, _ in v)}/{sum(int(b) for _, b in v)}"
+    show("couriers", total("courier-on"), "0/160")
+    show("adoption", total("agent-adopt-yes"), "0/160")
+    show("no courier", total("courier-off"), "40/40")
+    show("no adoption", total("agent-adopt-no"), "40/40")
+    show("contained", total("courier-contained"), "79/80")
+    fates = Counter()
+    for k, s in lc.items():
+        if k.endswith("courier-on"):
+            fates.update(s["fates"])
+    show("recovery found the courier running", f"{fates['running']}/{sum(fates.values())}", "149/159")
+
+    rl = v3["real_long"]
+    show("command-r7b, couriers", rl["cohere-command-r7b courier-on"]["repeated"], "0/15")
+    show("command-r7b, no courier", rl["cohere-command-r7b courier-off"]["repeated"], "10/10")
+    show("command-r7b, contained", rl["cohere-command-r7b courier-contained"]["repeated"], "6/6")
+    show("command-r7b, median call (s)", round(rl["cohere-command-r7b courier-off"]["median_call"]), 13)
+    f = rl["cohere-command-r7b courier-on"]["fates"]
+    show("command-r7b, recovery found the courier running", f"{f['running']}/{sum(f.values())}", "13/14")
+
+    print("== RQ4: a crash that reaches the courier, and the kernel alone")
+    sv = v3["service"]
+    show("systemd control-group, couriers", sv["control-group-courier.jsonl agentos"]["repeated"], "20/20")
+    show("systemd mixed, couriers", sv["mixed-courier.jsonl agentos"]["repeated"], "20/20")
+    show("systemd control-group, no courier", sv["control-group-no-courier.jsonl agentos"]["repeated"], "20/20")
+    show("systemd process, couriers", sv["process-courier.jsonl agentos"]["repeated"], "0/20")
+    kk = v3["kernel_kill"]
+    show("kernel alone, couriers, Windows", kk["courier-on.jsonl agentos"]["repeated"], "0/30")
+    show("kernel alone, couriers, Linux", kk["linux/courier-on.jsonl agentos"]["repeated"], "0/30")
+    show("kernel alone, no courier, Windows", kk["courier-off.jsonl agentos"]["repeated"], "25/30")
+    show("kernel alone, no courier, Linux", kk["linux/courier-off.jsonl agentos"]["repeated"], "20/30")
+
+    print("== RQ4: a response cache outside the crash")
+    def cached(prefix: str) -> str:
+        v = [s["repeated"].split("/") for k, s in v3["cache"].items() if k.startswith(prefix)]
+        return f"{sum(int(x) for x, _ in v)}/{sum(int(y) for _, y in v)}"
+    show("merging, 0.3 and 3 s", f"{int(cached('coalesce').split('/')[0])}/{cached('coalesce').split('/')[1]}", "0/180")
+    show("no merging, 0.3 s", cached("plain-L0.3"), "0/120")
+    show("no merging, 3 s", cached("plain-L3"), "22/60")
+
+    print("== RQ5: bugs that need a courier still at work, at 10 s calls")
+    longer = {r["mutant"]: r for r in v3["seeded_longer"]}
+    show("clean copy, repeats", longer["clean"]["dup"], 0)
+    show("running courier taken as unsent, repeats", longer["running-courier-taken-as-unsent"]["dup"], 9)
+    show("courier lock not held, repeats", longer["courier-lock-not-held"]["dup"], 8)
+
+    print("== Threats: trials left out")
+    show("of those, provider errors", v3["exclusions"]["provider-error"], 34)
+    show("trials not counted, outside the seeded bugs", sum(v3["exclusions"].values()), 77)
+
     print("== Bounds on the zeros (95% Wilson, upper)")
-    for n, want in ((380, 0.010), (190, 0.020), (263, 0.014), (140, 0.027), (40, 0.088), (15, 0.204)):
+    for n, want in ((380, 0.010), (320, 0.012), (190, 0.020), (263, 0.014), (140, 0.027), (40, 0.088), (15, 0.204)):
         show(f"0 of {n}", round(wilson(0, n)[1], 3), want)
     print(f"\n{'all claims match' if not bad else str(bad) + ' claims differ'}")
     return 1 if bad else 0

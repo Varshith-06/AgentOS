@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT))
 
 from benchmarks.crashstudy import paidapi  # noqa: E402
 
-NEEDS_TEMPORAL = {"temporal", "temporal-split"}
+NEEDS_TEMPORAL = {"temporal", "temporal-split", "temporal-arg"}
 # Drawn again: the crash under study never happened.
 REDRAW = {"late", "never-started", "finished-before-kill", "no-agent", "no-courier"}
 # A kill this far past its drawn time is a host stall, not a sample (seconds).
@@ -198,7 +198,12 @@ def signals(rundir: Path) -> dict:
     if notes.exists():
         from benchmarks.crashstudy.client import read_lines
 
-        out["attempts"] = [[n["i"], n.get("attempt")] for n in read_lines([notes])]
+        rows = read_lines([notes])
+        out["attempts"] = [[n["i"], n.get("attempt")] for n in rows if "fields" not in n]
+        # CS_SIGNALS: every field the framework documents, in the order they were read.
+        fields = [{"i": n["i"], "pid": n["pid"], **n["fields"]} for n in rows if "fields" in n]
+        if fields:
+            out["notes"] = fields
     db = rundir / "agentos" / "runtime.db"
     if db.exists():
         conn = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
@@ -219,6 +224,14 @@ def replies(rundir: Path) -> dict:
     return {"wrong_replies": sum(r["ok"] is False for r in rows),
             "checked_replies": sum(r["ok"] is not None for r in rows),
             "answered": len({r["i"] for r in rows})}
+
+
+def fates(rundir: Path) -> list[str]:
+    """What recovery found for each call in flight (CS_LOG_FATE): unsent, done,
+    failed, running or lost. `running` is the wait for a courier still at work."""
+    from benchmarks.crashstudy.client import read_lines
+
+    return [r["fate"] for r in read_lines([rundir / "fates.jsonl"])]
 
 
 def courier_pid(rundir: Path) -> int | None:
@@ -285,6 +298,7 @@ def run_env(fw: str, run: str, rundir: Path, args, port: int, temporal: str | No
         **({"CS_DRIFT": args.drift} if args.drift else {}),
         **({"CS_NOFP": "1"} if args.no_fingerprint else {}),
         **({"CS_DURABLE": "1"} if args.durable else {}),
+        **({"CS_LOG_FATE": "1"} if args.courier != "off" else {}),
     )
 
 
@@ -367,7 +381,15 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
         if args.kill_gateway:
             # The gateway's machine goes too: the control for its zeros.
             args.gw["proc"].kill()
-        killed = kill_tree(p)
+        if args.crash == "kernel":
+            # The kernel's process alone, as an out-of-memory kill would take it.
+            # Whatever it leaves running goes when the trial ends.
+            killed = time.time()
+            p.kill()
+            p.wait(timeout=30)
+            rec["pgid"] = p.pid
+        else:
+            killed = kill_tree(p)
         before = len(charge_times(ledger, run))
         if args.kill_gateway:
             args.gw["proc"], _ = start_gateway(args.gw["upstream"], args.gw["db"], args.gw["port"],
@@ -390,12 +412,15 @@ def trial(fw: str, n: int, args, port: int, ledger: str, temporal: str | None,
         except subprocess.TimeoutExpired:
             rc, err = "timeout", ""
     recovery = time.perf_counter() - r0
+    if args.crash == "kernel":
+        kill_tree(p)
     if args.courier != "off":
         time.sleep(args.settle)  # a courier still at work when the run ended
 
     times = charge_times(ledger, run)
     idx = paidapi.charges(ledger, run)
     rec["signals"] = signals(rundir)
+    rec["fates"] = fates(rundir)
     in_call = any(t <= killed < t + args.latency for t in times[:before])
     status = "ok" if rc == 0 and set(idx) == set(range(total)) else "failed"
     rec.update(replies(rundir))
@@ -480,11 +505,11 @@ def main() -> int:
                     help="the provider charges every request, key or not, as real ones do")
     ap.add_argument("--gateway", action="store_true",
                     help="put an AgentOS gateway between the runs and the provider")
-    ap.add_argument("--crash", choices=["runtime", "agent", "activity", "courier"],
+    ap.add_argument("--crash", choices=["runtime", "agent", "activity", "courier", "kernel"],
                     default="runtime",
                     help="kill the whole process tree, or only the agent's process (AgentOS, "
-                         "or Temporal's workflow worker), Temporal's activity worker, or "
-                         "AgentOS's courier")
+                         "or Temporal's workflow worker), Temporal's activity worker, "
+                         "AgentOS's courier, or AgentOS's kernel process alone")
     ap.add_argument("--double", type=float, default=0,
                     help="kill recovery as well, within this many seconds of its start")
     ap.add_argument("--kill-gateway", action="store_true",
@@ -498,6 +523,8 @@ def main() -> int:
                     help="AgentOS: call through the kernel's model routing, not a tool driver")
     ap.add_argument("--agents", type=int, default=1,
                     help="AgentOS: this many agents side by side, each making --calls calls")
+    ap.add_argument("--cache-proxy", choices=["plain", "coalesce"],
+                    help="a response cache keyed on the request's hash, outside the crash: the simple baseline")
     ap.add_argument("--on-drift", choices=["replay", "reject", "reissue"], default="replay",
                     help="the gateway's answer to a changed body under a known key")
     ap.add_argument("--adopt", choices=["yes", "no"], default="yes",
@@ -547,6 +574,14 @@ def main() -> int:
         gateway_proc, url = start_gateway(upstream, gw_db, on_drift=args.on_drift)
         port = int(url.rsplit(":", 1)[1])  # the runs talk to the gateway
         args.gw = {"proc": gateway_proc, "upstream": upstream, "db": gw_db, "port": port}
+    cache_proc = None
+    if args.cache_proxy:
+        cache_proc = subprocess.Popen(
+            [sys.executable, "-m", "benchmarks.crashstudy.cacheproxy", "--upstream", f"http://127.0.0.1:{port}"]
+            + (["--coalesce"] if args.cache_proxy == "coalesce" else []),
+            cwd=ROOT, stdout=subprocess.PIPE, env=dict(os.environ, PYTHONPATH=str(ROOT)))
+        port = int(cache_proc.stdout.readline())
+        drain(cache_proc.stdout)
     temporal_proc, temporal = None, None
     if NEEDS_TEMPORAL & set(fws):
         temporal_proc, temporal = start_temporal(args.python)
@@ -578,6 +613,7 @@ def main() -> int:
                     rec["calibrated"] = bool(args.calibrate)
                     rec["drift"], rec["fingerprint"] = args.drift, not args.no_fingerprint
                     rec["agents"], rec["durable"] = args.agents, args.durable
+                    rec["cache_proxy"] = args.cache_proxy
                     rows.append(rec)
                     out.write(json.dumps(rec) + "\n")
                     out.flush()
@@ -589,6 +625,8 @@ def main() -> int:
                           f"t={rec.get('killed_after', 0):.2f}", flush=True)
     finally:
         api.kill()
+        if cache_proc is not None:
+            cache_proc.kill()
         if gateway_proc is not None:
             args.gw["proc"].kill()
         if temporal_proc is not None:

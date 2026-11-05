@@ -18,6 +18,11 @@ is what stopping a container does to its processes, so a courier in its own
 session dies too. The VM, and the store's files, carry on: a container with a
 volume, without Docker's own machinery.
 
+--kill service runs AgentOS as a systemd user service and kills its main process,
+as an out-of-memory kill or a crash would; systemd then deals with the rest of the
+service's control group as --kill-mode says. The default, control-group, kills
+everything left in the group, including a process in its own session.
+
 --keyed has AgentOS send its own idempotency key with each call. --gateway puts an
 AgentOS gateway on Windows, outside the namespace and in front of a provider that
 ignores keys, which is where a reply must be kept when the container stops. With
@@ -67,6 +72,11 @@ def command(phase: str, run: str, port: int, args, ip: str) -> str:
     if args.durable:
         env["CS_DURABLE"] = "1"
     pairs = " ".join(f'{k}="{v}"' for k, v in env.items())
+    if args.kill == "service":
+        unit = f"cs-{run}-{phase}"
+        return (f"mkdir -p ~/hc/{run} && exec systemd-run --user --wait --quiet --collect --unit={unit} "
+                f"-p KillMode={args.kill_mode} --working-directory=$HOME/aos /usr/bin/env {pairs} "
+                f"python3 -m benchmarks.crashstudy.adapters agentos {phase}")
     if args.kill == "namespace":
         return (f"mkdir -p ~/hc/{run} && cd ~/aos && echo $$ > ~/hc/{run}/ns.pid && exec unshare "
                 f"--user --map-root-user --pid --fork --kill-child --mount-proc env {pairs} "
@@ -107,6 +117,7 @@ def trial(n: int, args, port: int, ledger: str, rng: random.Random, horizon: flo
         t0 = times[0] if times else None
         time.sleep(0.005)
     rec = {"trial": n, "run": run, "courier": args.courier, "durable": args.durable,
+           "kill": args.kill, "kill_mode": args.kill_mode if args.kill == "service" else None,
            "keyed": args.keyed, "gateway": args.gateway,
            "calls": args.calls, "latency": args.latency, "think": args.think,
            "horizon": horizon}
@@ -124,6 +135,8 @@ def trial(n: int, args, port: int, ledger: str, rng: random.Random, horizon: flo
     killed = time.time()
     if args.kill == "namespace":
         wsl(f"kill -9 $(cat ~/hc/{run}/ns.pid)", timeout=60)
+    elif args.kill == "service":
+        wsl(f"systemctl --user kill --kill-whom=main --signal=SIGKILL cs-{run}-start", timeout=60)
     else:
         subprocess.run(["wsl", "--shutdown"], timeout=120, capture_output=True)
     rec["shutdown_s"] = time.time() - killed
@@ -155,7 +168,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--courier", choices=["on", "off"], default="on")
     ap.add_argument("--durable", action="store_true")
-    ap.add_argument("--kill", choices=["vm", "namespace"], default="vm")
+    ap.add_argument("--kill", choices=["vm", "namespace", "service"], default="vm")
+    ap.add_argument("--kill-mode", choices=["control-group", "mixed", "process"], default="control-group")
     ap.add_argument("--keyed", action="store_true", help="AgentOS sends its own keys")
     ap.add_argument("--gateway", action="store_true", help="a gateway outside the crash")
     ap.add_argument("--trials", type=int, default=20)

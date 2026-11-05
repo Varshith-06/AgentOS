@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from benchmarks.crashstudy.realprovider import _calls_log, _outstanding  # noqa: E402
-from benchmarks.crashstudy.run import (LATE, NEEDS_TEMPORAL, agent_kill, kill_tree,  # noqa: E402
+from benchmarks.crashstudy.run import (LATE, NEEDS_TEMPORAL, agent_kill, fates, kill_tree,  # noqa: E402
                                        popen, replies, signals, start_temporal)
 
 VIA = {  # name: (OpenAI-compatible base URL, key variable)
@@ -106,6 +106,8 @@ def main() -> int:
                    CS_RETRIES="3" if args.crash == "agent" else "0")
         if args.reasoning:
             env["CS_REASONING"] = args.reasoning
+        if args.courier != "off":
+            env["CS_LOG_FATE"] = "1"
         if args.drift:
             env["CS_DRIFT"] = args.drift
         if args.task:
@@ -214,7 +216,7 @@ def main() -> int:
                        "rc": res.returncode, "recovery_s": recovery,
                        "err": errs.read_bytes()[-300:].decode("utf-8", "replace") if res.returncode else "",
                        "outstanding_at_kill": _outstanding(log, killed) if killed else None,
-                       "signals": signals(d), **t, **replies(d)}
+                       "signals": signals(d), "fates": fates(d), **t, **replies(d)}
                 sink.write(json.dumps(rec) + "\n")
                 sink.flush()
                 n += status in ("ok", "failed")

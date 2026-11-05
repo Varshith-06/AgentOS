@@ -66,7 +66,7 @@ def main_table(latex: str | None) -> None:
              r"& \multicolumn{2}{c}{stand-in, no key} & \multicolumn{2}{c}{real models} \\",
              r"\cmidrule(lr){2-3}\cmidrule(l){4-5}",
              r"Configuration & $P$ & 95\% CI & no key & key \\", r"\midrule"]
-    print("== Table II: stand-in (keyless) beside real models (pooled)")
+    print("== Table III: stand-in (keyless) beside real models (pooled)")
     for x in t:
         fw = x["framework"]
         cells = []
