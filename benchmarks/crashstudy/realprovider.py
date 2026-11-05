@@ -32,7 +32,10 @@ import time
 import uuid
 from pathlib import Path
 
-import httpx
+try:
+    import httpx
+except ImportError:  # `summary` reads recorded results and needs no client
+    httpx = None
 
 API = "https://api.groq.com/openai/v1/chat/completions"
 HERE = Path(__file__).resolve().parent

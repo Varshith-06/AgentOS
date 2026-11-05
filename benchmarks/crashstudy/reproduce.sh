@@ -2,7 +2,9 @@
 # Table II and Fig. 3 of the paper, and the numbers behind its other results, from the committed results.
 #   sh benchmarks/crashstudy/reproduce.sh [out-dir]
 # Run from the repository root. Nothing here calls a provider; the commands
-# that re-run the experiments themselves are at the bottom.
+# that re-run the experiments themselves are at the bottom. It needs Python 3.11 or
+# later and matplotlib (pip install matplotlib), and none of the frameworks.
+# On Windows, clone to a short path with: git clone -c core.longpaths=true <url> C:\\agentos
 set -e
 OUT=${1:-paper}
 R=benchmarks/crashstudy/results

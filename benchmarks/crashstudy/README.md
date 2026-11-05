@@ -204,6 +204,10 @@ does not read the attempt count in its workflow status, as the paper says.
 
 ## Checking the paper's numbers
 
+It needs Python 3.11 or later and matplotlib (`pip install matplotlib`), and none of the frameworks.
+Some result paths are long, so on Windows clone to a short path:
+`git clone -c core.longpaths=true https://github.com/Varshith-06/AgentOS.git C:\agentos`.
+
 `reproduce.sh` regenerates Table II and Fig. 3, prints the counts behind Tables III and IV, the step kills and
 the seeded bugs, and ends with `claims.py`, which recomputes the numbers the paper states only in its text
 and exits non-zero if any differ. It calls no provider. Exact reruns of the experiments differ, since kills
