@@ -87,7 +87,7 @@ Rows written before signals were recorded were backfilled from the run
 directories where those still existed (AgentOS rows); Temporal's and DBOS's
 signals come from the dedicated `detect.jsonl` run.
 
-`reproduce.sh` regenerates Table III and Fig. 3 of the paper from the committed
+`reproduce.sh` regenerates Table II and Fig. 3 of the paper from the committed
 results, prints the counts behind its other results, and lists the commands that
 re-run the experiments. Pooled figures in the paper are sums of those counts. Run
 it from the repository root.
@@ -144,7 +144,8 @@ commands are at the bottom of `reproduce.sh`.
 
 The recorded gateway arms ran under `--on-drift replay`, which was the gateway's default
 then and is still the default of `run.py`, so the commands here reproduce them as they ran.
-`agent gateway` itself now defaults to `reissue`. None of the 3,512 requests in those arms
+The gateway-outside-a-namespace arms (`--kill namespace --keyed --gateway` in `hostcrash.py`) use
+`agent gateway` directly, under its current default. `agent gateway` itself now defaults to `reissue`. None of the 3,512 requests in those arms
 changed its body, so the counts do not depend on the policy.
 
 ## A real task
@@ -178,6 +179,35 @@ was observed. The paper names seven studies. File names and script output here s
 | Limits | the rest of E11, E9, E10, E13, E14, the kernel model route, with E8 (gateway) and E12 (costs) |
 | Step kills | `barriers.py` |
 | Seeded bugs | `mutants.py` |
+
+## The adapters, and why each is built this way
+
+All of them are in `adapters.py`, with `temporal_defs.py` and `autogen_defs.py`, about 500 lines
+together. Each uses the recovery mechanism its framework documents, at the finest unit the framework
+offers, since a coarser unit only repeats more. If you think one is unfair, this is the place to look.
+
+| Configuration | Function | Unit and mechanism | Resume | Why, and what it follows |
+|---|---|---|---|---|
+| LangGraph, node per call | `langgraph_node` | One node per call, `SqliteSaver` | `invoke(None)` on the same thread | The finest unit, and the [documented](https://docs.langchain.com/oss/python/langgraph/persistence) resume |
+| LangGraph, loop in one node | `langgraph_loop` | One node holding the loop | Same | Deliberately coarse: what a whole-run unit costs |
+| Temporal, activity per call | `temporal` | One activity per call, retried by the server; timeout set by `CS_ACTIVITY_TIMEOUT` | A new worker | The [documented](https://docs.temporal.io/activity-definition) unit. The timeout is sized to the slowest call, so slow replies are not retried |
+| Temporal, split workers | `temporal_split` | Workflow and activity on separate workers | Workers restarted | A common deployment; Section V-C of the paper |
+| DBOS, step per call | `dbos` | `@DBOS.step`, no automatic retries, SQLite system database | `DBOS.launch()` | The [documented](https://docs.dbos.dev/architecture) recovery. `current_attempt` applies only to [steps with automatic retries](https://docs.dbos.dev/python/reference/contexts), so it stays empty here |
+| CrewAI Flow + `@persist` | `crewai` | `@persist` on a flow | `kickoff(inputs={"id": ...})` | [Documented](https://docs.crewai.com/en/concepts/flows); it re-runs from `@start`, so it is a whole-run unit |
+| CrewAI, guarded steps | `crewai_guarded` | The same, each step skipping itself if restored state shows it done | Same | Our variant: the least a developer can add to get a per-call unit |
+| CrewAI, `CheckpointConfig` | `crewai_checkpoint` | A [checkpoint](https://docs.crewai.com/en/concepts/checkpointing) after each method | `Flow.from_checkpoint` | The other documented mechanism |
+| Prefect, cached tasks | `prefect` | `INPUTS` [cache policy](https://docs.prefect.io/v3/concepts/caching), [persisted results](https://docs.prefect.io/v3/advanced/results) | Re-run the flow | Completed tasks return from the cache |
+| AutoGen, `save_state` per call | `autogen` | `save_state` after each call | `load_state`, continue | AutoGen has no durable execution; this is its [documented state API](https://microsoft.github.io/autogen/stable/reference/python/autogen_core.html) |
+
+Adapters for LangGraph and Prefect do not read those frameworks' attempt counters, and the DBOS adapter
+does not read the attempt count in its workflow status, as the paper says.
+
+## Checking the paper's numbers
+
+`reproduce.sh` regenerates Table II and Fig. 3, prints the counts behind Tables III and IV, the step kills and
+the seeded bugs, and ends with `claims.py`, which recomputes the numbers the paper states only in its text
+and exits non-zero if any differ. It calls no provider. Exact reruns of the experiments differ, since kills
+are random and calls take real time; the commands are at the bottom of `reproduce.sh`.
 
 ## Testing the harness
 

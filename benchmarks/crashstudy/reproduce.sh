@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Table III and Fig. 3 of the paper, and the numbers behind its other results, from the committed results.
+# Table II and Fig. 3 of the paper, and the numbers behind its other results, from the committed results.
 #   sh benchmarks/crashstudy/reproduce.sh [out-dir]
 # Run from the repository root. Nothing here calls a provider; the commands
 # that re-run the experiments themselves are at the bottom.
@@ -11,7 +11,7 @@ PY=${PYTHON:-python}
 A="$PY -m benchmarks.crashstudy.analyze"
 mkdir -p "$OUT"
 
-echo "== Framework survey, stand-in: in-flight window, visibility (Table III's left half)"
+echo "== Framework survey, stand-in: in-flight window, visibility (Table II's left half)"
 $A $S/main.jsonl --ledger $S/main-ledger.db
 
 echo "== Window sweep: Fig. 3, with the real-model points overlaid"
@@ -29,11 +29,14 @@ $A $S/crewai-1.15.2.jsonl | tail -n 2
 echo "== Provider probes: Groq"
 $PY -m benchmarks.crashstudy.realprovider summary
 
-echo "== Framework survey on real models, provider probes, the gateway (Table III)"
+echo "== Framework survey on real models, provider probes, the gateway (Table II)"
 $PY -m benchmarks.crashstudy.summary --latex "$OUT/results-table.tex"
 
-echo "== Mechanism evaluation and limits (Tables IV and V, gateway, costs)"
+echo "== Mechanism evaluation and limits (Tables III and IV, gateway, costs)"
 $PY -m benchmarks.crashstudy.summary_v2 --json "$OUT/v2-summary.json"
+
+echo "== The numbers the paper states only in its text"
+$PY -m benchmarks.crashstudy.claims
 
 # Everything behind summary_v2, resumable, keys read from a file outside the repo:
 #   $PY -m benchmarks.crashstudy.run_v2 --python $PY --keys ~/.agentos-keys.env --state v2state

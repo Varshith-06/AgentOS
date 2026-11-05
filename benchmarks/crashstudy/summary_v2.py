@@ -247,6 +247,7 @@ def crashes(title: str, folder: str) -> None:
         lost = [r for r in v if r.get("missing", 0) > 0]
         nostore = [r for r in v if not (r.get("state") or {}).get("store")]
         res[f.stem] = {"n": len(v), "dup": len(d), "silent": len(silent), "lost_calls": len(lost),
+                       "wrong": sum((r.get("state") or {}).get("wrong_replies", 0) > 0 for r in v),
                        "no_store": len(nostore), "rows": len(rs), "extra": sum(r.get("duplicates", 0) for r in v)}
         print(f"  {f.stem:18} {res[f.stem]}")
     OUT[folder] = res

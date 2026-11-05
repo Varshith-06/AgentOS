@@ -176,7 +176,11 @@ def namespace() -> list[tuple]:
     o = f"{V2}/namespace"
     c = "-m benchmarks.crashstudy.hostcrash --kill namespace --latency 3 --think 0.2 --trials 20"
     return [(f"{c} --courier on --seed 511 --out {o}/courier.jsonl", {}),
-            (f"{c} --courier off --seed 512 --out {o}/no-courier.jsonl", {})]
+            (f"{c} --courier off --seed 512 --out {o}/no-courier.jsonl", {}),
+            # The reply kept outside the container, with the runtime's own keys.
+            (f"{c} --courier off --keyed --seed 513 --out {o}/keys-no-gateway.jsonl", {}),
+            (f"{c} --courier off --keyed --gateway --seed 514 --out {o}/gateway-no-courier.jsonl", {}),
+            (f"{c} --courier on --keyed --gateway --seed 515 --out {o}/gateway-courier.jsonl", {})]
 
 
 def model_route() -> list[tuple]:

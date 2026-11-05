@@ -17,6 +17,11 @@ process is killed. The kernel then kills everything else in the namespace, which
 is what stopping a container does to its processes, so a courier in its own
 session dies too. The VM, and the store's files, carry on: a container with a
 volume, without Docker's own machinery.
+
+--keyed has AgentOS send its own idempotency key with each call. --gateway puts an
+AgentOS gateway on Windows, outside the namespace and in front of a provider that
+ignores keys, which is where a reply must be kept when the container stops. With
+--keyed and no --gateway the keys reach that provider and are ignored: the control.
 """
 
 from __future__ import annotations
@@ -57,7 +62,7 @@ def host_ip() -> str:
 def command(phase: str, run: str, port: int, args, ip: str) -> str:
     env = {"PYTHONPATH": ".", "PYTHONUTF8": "1", "CS_RUN": run, "CS_HOST": ip,
            "CS_PORT": str(port), "CS_DIR": f"$HOME/hc/{run}", "CS_CALLS": str(args.calls),
-           "CS_THINK": str(args.think), "CS_KEYED": "0", "CS_ADOPT": "1",
+           "CS_THINK": str(args.think), "CS_KEYED": "1" if args.keyed else "0", "CS_ADOPT": "1",
            "CS_COURIER": "1" if args.courier == "on" else "0", "CS_RETRIES": "0"}
     if args.durable:
         env["CS_DURABLE"] = "1"
@@ -71,7 +76,7 @@ def command(phase: str, run: str, port: int, args, ip: str) -> str:
 
 
 READ = r"""
-import json, os, sqlite3, sys
+import glob, json, os, sqlite3, sys
 d = os.path.expanduser(sys.argv[1])
 db = os.path.join(d, "agentos", "runtime.db")
 out = {"store": os.path.exists(db)}
@@ -81,6 +86,11 @@ if out["store"]:
     out["processes"] = c.execute("SELECT COUNT(*) FROM processes").fetchone()[0]
     out["journal"] = c.execute("SELECT COUNT(*) FROM journal").fetchone()[0]
     out["intents"] = c.execute("SELECT COUNT(*) FROM intents").fetchone()[0]
+rows = []
+for name in glob.glob(os.path.join(d, "replies.*.jsonl")):
+    rows += [json.loads(l) for l in open(name) if l.strip()]
+out["wrong_replies"] = sum(r["ok"] is False for r in rows)
+out["checked_replies"] = sum(r["ok"] is not None for r in rows)
 print(json.dumps(out))
 """
 
@@ -97,6 +107,7 @@ def trial(n: int, args, port: int, ledger: str, rng: random.Random, horizon: flo
         t0 = times[0] if times else None
         time.sleep(0.005)
     rec = {"trial": n, "run": run, "courier": args.courier, "durable": args.durable,
+           "keyed": args.keyed, "gateway": args.gateway,
            "calls": args.calls, "latency": args.latency, "think": args.think,
            "horizon": horizon}
     if t0 is None:
@@ -145,6 +156,8 @@ def main() -> int:
     ap.add_argument("--courier", choices=["on", "off"], default="on")
     ap.add_argument("--durable", action="store_true")
     ap.add_argument("--kill", choices=["vm", "namespace"], default="vm")
+    ap.add_argument("--keyed", action="store_true", help="AgentOS sends its own keys")
+    ap.add_argument("--gateway", action="store_true", help="a gateway outside the crash")
     ap.add_argument("--trials", type=int, default=20)
     ap.add_argument("--calls", type=int, default=6)
     ap.add_argument("--latency", type=float, default=0.3)
@@ -152,6 +165,8 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
+    if args.gateway and not (args.keyed and args.kill == "namespace"):
+        ap.error("--gateway needs --keyed and --kill namespace")
     done = 0
     if Path(args.out).exists():
         done = sum(json.loads(l).get("status") in ("ok", "failed")
@@ -167,6 +182,18 @@ def main() -> int:
         env={**__import__("os").environ, "PYTHONPATH": str(ROOT)})
     port = int(api.stdout.readline())
     drain(api.stdout)
+    gateway = None
+    if args.gateway:
+        # Its own process on Windows, as the stand-in is: the namespace cannot reach it.
+        gw_db = scratch / "gateway.db"
+        gateway = subprocess.Popen(
+            [sys.executable, "-m", "agentos.cli", "--dir", str(gw_db.with_suffix("")), "gateway",
+             "--upstream", f"http://127.0.0.1:{port}", "--host", "0.0.0.0", "--port", "0",
+             "--db", str(gw_db), "--log", str(Path(args.out).with_suffix(".gateway.log"))],
+            cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            env={**__import__("os").environ, "PYTHONPATH": str(ROOT)})
+        port = int(gateway.stdout.readline())
+        drain(gateway.stdout)
     horizon = args.latency + (args.calls - 1) * (args.think + args.latency + 0.03)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -183,6 +210,8 @@ def main() -> int:
                 n += rec["status"] in ("ok", "failed")
     finally:
         api.kill()
+        if gateway is not None:
+            gateway.kill()
     return 0
 
 
